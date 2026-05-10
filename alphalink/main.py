@@ -18,6 +18,7 @@ from alphalink.adapter.manifest import Manifest
 from alphalink.adapter.normalize import normalize
 from alphalink.adapter.window import build_input
 from alphalink.broker.instrument_map import InstrumentMap
+from alphalink.broker.oco_monitor import monitor_oco
 from alphalink.broker.orders import submit_order
 from alphalink.broker.t212_client import T212Client
 from alphalink.config import Settings
@@ -291,6 +292,26 @@ async def run(settings: Settings) -> None:
                                 avg_entry=current_price,
                                 last_signal_ts=datetime.utcnow(),
                             ))
+                            entry_price = float(resp.get("fillPrice") or 0) or current_price
+                            sl_price = entry_price * (1 - settings.defaults.stop_loss_pct)
+                            tp_price = entry_price * (1 + settings.defaults.take_profit_pct)
+                            try:
+                                stop_resp = t212.place_stop_order(t212_ticker, qty, sl_price)
+                                limit_resp = t212.place_limit_order(t212_ticker, qty, tp_price)
+                                asyncio.create_task(monitor_oco(
+                                    t212=t212,
+                                    t212_ticker=t212_ticker,
+                                    stop_order_id=str(stop_resp["id"]),
+                                    limit_order_id=str(limit_resp["id"]),
+                                    engine=engine,
+                                    cooldown_td=cooldown_td,
+                                ))
+                                log.info(
+                                    "OCO submitted for %s: SL=%.4f TP=%.4f",
+                                    t212_ticker, sl_price, tp_price,
+                                )
+                            except Exception as exc:
+                                log.error("OCO setup failed for %s: %s", t212_ticker, exc)
                         elif signal == "SELL":
                             pos_repo.remove(t212_ticker)
                             pos_repo.upsert(Position(

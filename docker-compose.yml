@@ -1,0 +1,16 @@
+services:
+  alphalink:
+    build: .
+    env_file: .env
+    environment:
+      - T212_ENV=${T212_ENV:-demo}
+      - DATA_PROVIDER=${DATA_PROVIDER:-yfinance}
+      - MODELS_DIR=/app/models
+      - STATE_DB_PATH=/app/state.db
+    volumes:
+      - ./models:/app/models:ro
+      - ./state.db:/app/state.db
+      - ./overrides.yaml:/app/overrides.yaml:ro
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

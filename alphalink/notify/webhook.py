@@ -11,6 +11,7 @@ _rate_limits: dict[str, float] = {}
 _RATE_WINDOW = 30.0
 
 log = logging.getLogger(__name__)
+log.propagate = False
 
 
 def configure(webhook_url: str) -> None:

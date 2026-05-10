@@ -104,7 +104,7 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
                 wh.notify(
                     "WARNING",
                     f"Reconcile: removing stale position {local_pos.t212_ticker} (not in T212 portfolio)",
-                    category=f"reconcile-divergence-{local_pos.t212_ticker}",
+                    category="reconcile-divergence",
                 )
                 repo.remove(local_pos.t212_ticker)
 

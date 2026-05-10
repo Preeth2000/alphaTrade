@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     defaults: Defaults = Defaults()
     risk: RiskConfig = RiskConfig()
     model_overrides: dict[str, ModelOverride] = {}
+
+    @field_validator("webhook_level")
+    @classmethod
+    def _valid_webhook_level(cls, v: str) -> str:
+        import logging as _logging
+        if v.upper() not in _logging._nameToLevel:
+            raise ValueError(f"webhook_level must be a valid log level name, got {v!r}")
+        return v.upper()
 
     @model_validator(mode="after")
     def _load_overrides(self) -> "Settings":

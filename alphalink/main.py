@@ -127,6 +127,7 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
 
 async def run(settings: Settings) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    _oco_tasks: set[asyncio.Task] = set()
     if settings.webhook_url:
         wh.configure(settings.webhook_url)
         _wh = wh.WebhookHandler()
@@ -292,13 +293,15 @@ async def run(settings: Settings) -> None:
                                 avg_entry=current_price,
                                 last_signal_ts=datetime.utcnow(),
                             ))
-                            entry_price = float(resp.get("fillPrice") or 0) or current_price
+                            raw_fill = resp.get("fillPrice")
+                            entry_price = float(raw_fill) if raw_fill else current_price
                             sl_price = entry_price * (1 - settings.defaults.stop_loss_pct)
                             tp_price = entry_price * (1 + settings.defaults.take_profit_pct)
+                            stop_resp = None
                             try:
                                 stop_resp = t212.place_stop_order(t212_ticker, qty, sl_price)
                                 limit_resp = t212.place_limit_order(t212_ticker, qty, tp_price)
-                                asyncio.create_task(monitor_oco(
+                                _task = asyncio.create_task(monitor_oco(
                                     t212=t212,
                                     t212_ticker=t212_ticker,
                                     stop_order_id=str(stop_resp["id"]),
@@ -306,12 +309,20 @@ async def run(settings: Settings) -> None:
                                     engine=engine,
                                     cooldown_td=cooldown_td,
                                 ))
+                                _oco_tasks.add(_task)
+                                _task.add_done_callback(_oco_tasks.discard)
                                 log.info(
                                     "OCO submitted for %s: SL=%.4f TP=%.4f",
                                     t212_ticker, sl_price, tp_price,
                                 )
                             except Exception as exc:
                                 log.error("OCO setup failed for %s: %s", t212_ticker, exc)
+                                if stop_resp is not None:
+                                    try:
+                                        t212.cancel_order(str(stop_resp["id"]))
+                                        log.info("Cancelled orphaned stop leg %s for %s", stop_resp["id"], t212_ticker)
+                                    except Exception as cancel_exc:
+                                        log.warning("Could not cancel orphaned stop leg for %s: %s", t212_ticker, cancel_exc)
                         elif signal == "SELL":
                             pos_repo.remove(t212_ticker)
                             pos_repo.upsert(Position(

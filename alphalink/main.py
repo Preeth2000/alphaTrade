@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import signal
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from alphalink.data.provider import DataProvider
 from alphalink.notify import webhook as wh
 from alphalink.risk.gates import GateResult, run_gates
 from alphalink.risk.sizing import compute_quantity
+from alphalink.kill_switch import is_halted
 from alphalink.scheduler.bar_close import schedule_bar_close
 from alphalink.store.db import get_engine
 from alphalink.store.repos import (
@@ -128,6 +130,10 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
 async def run(settings: Settings) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     _oco_tasks: set[asyncio.Task] = set()
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop_event.set)
     if settings.webhook_url:
         wh.configure(settings.webhook_url)
         _wh = wh.WebhookHandler()
@@ -185,6 +191,9 @@ async def run(settings: Settings) -> None:
                     log.error("Inference error for %s: %s", manifest.run_name, exc)
 
             signals = consensus_by_ticker(ticker_logits)
+            kill_switch_active = is_halted()
+            if kill_switch_active:
+                log.warning("Kill switch active — signals will be logged but orders skipped")
 
             # Fresh session per tick — no long-lived session across bar closes
             with Session(engine) as session:
@@ -232,6 +241,10 @@ async def run(settings: Settings) -> None:
                     )
                     signal_repo.save(sig_rec)
                     log.info("Signal %s → %s", yf_ticker, signal)
+
+                    if kill_switch_active:
+                        log.info("Kill switch: order skipped for %s %s", signal, yf_ticker)
+                        continue
 
                     gate: GateResult = run_gates(
                         signal=signal,
@@ -340,9 +353,21 @@ async def run(settings: Settings) -> None:
 
     tasks = [
         asyncio.create_task(
-            schedule_bar_close(interval, make_tick(interval, interval_models))
+            schedule_bar_close(
+                interval,
+                make_tick(interval, interval_models),
+                stop_event,
+                extended_hours=settings.defaults.extended_hours,
+            )
         )
         for interval, interval_models in by_interval.items()
     ]
     log.info("Scheduler running. Intervals: %s", list(by_interval.keys()))
     await asyncio.gather(*tasks)
+
+    # Drain OCO monitor tasks before exit
+    for task in list(_oco_tasks):
+        task.cancel()
+    if _oco_tasks:
+        await asyncio.gather(*_oco_tasks, return_exceptions=True)
+    log.info("Graceful shutdown complete.")

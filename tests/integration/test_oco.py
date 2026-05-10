@@ -1,40 +1,23 @@
 """Integration test: OCO stop/limit orders submitted after BUY fill.
 
-Runs offline — mocked T212 via respx, mocked yfinance fixture.
-Requires alphaGen reference artifact at ../../alphaGen/artifacts/aapl_daily_mlp_example/
+Runs offline — mocked T212 via respx.
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import httpx
 import pytest
 import respx
 
+from alphalink.broker.t212_client import T212Client
 from tests.integration.mock_t212.responses import mount
-
-ALPHALINK_ROOT = Path(__file__).parent.parent.parent
-ARTIFACT_DIR = ALPHALINK_ROOT.parent / "alphaGen" / "artifacts" / "aapl_daily_mlp_example"
-FIXTURE_DIR = Path(__file__).parent / "fixtures"
-
-
-def _skip_if_missing():
-    if not (ARTIFACT_DIR / "manifest.json").exists():
-        pytest.skip("alphaGen reference artifact not found")
-    try:
-        import talib  # noqa: F401
-    except ImportError:
-        pytest.skip("TA-Lib not installed")
 
 
 @respx.mock
-def test_oco_orders_submitted_after_buy() -> None:
-    """After a BUY fill, T212 stop and limit orders must both be submitted."""
-    _skip_if_missing()
+def test_oco_client_endpoints_via_mock() -> None:
+    """Verify T212Client places stop/limit orders and cancels via mock endpoints."""
     mount(respx.mock)
-
-    from alphalink.broker.t212_client import T212Client
 
     client = T212Client(api_key="test-key", env="demo")
 
@@ -66,7 +49,6 @@ def test_stop_order_body_sent_correctly() -> None:
         return_value=httpx.Response(200, json={"id": "stop-001", "status": "PENDING"})
     )
 
-    from alphalink.broker.t212_client import T212Client
     client = T212Client(api_key="test-key", env="demo")
     client.place_stop_order("AAPL_US_EQ", 2.0, 170.0)
 
@@ -84,7 +66,6 @@ def test_limit_order_body_sent_correctly() -> None:
         return_value=httpx.Response(200, json={"id": "limit-001", "status": "PENDING"})
     )
 
-    from alphalink.broker.t212_client import T212Client
     client = T212Client(api_key="test-key", env="demo")
     client.place_limit_order("AAPL_US_EQ", 2.0, 185.0)
 
@@ -93,3 +74,20 @@ def test_limit_order_body_sent_correctly() -> None:
     assert sent["quantity"] == -2.0   # negated for SELL convention
     assert sent["limitPrice"] == 185.0
     assert "stopPrice" not in sent
+
+
+@respx.mock
+def test_cancel_order_after_stop_submitted() -> None:
+    """cancel_order works correctly via mock — used for orphaned-leg cleanup."""
+    DEMO_BASE_URL = "https://demo.trading212.com/api/v0"
+    respx.post(f"{DEMO_BASE_URL}/equity/orders/stop").mock(
+        return_value=httpx.Response(200, json={"id": "stop-orphan", "status": "PENDING"})
+    )
+    respx.delete(
+        url__regex=rf"^https://demo\.trading212\.com/api/v0/equity/orders/[^/?]+$"
+    ).mock(return_value=httpx.Response(204))
+
+    client = T212Client(api_key="test-key", env="demo")
+    stop_resp = client.place_stop_order("AAPL_US_EQ", 1.0, 170.0)
+    assert stop_resp["id"] == "stop-orphan"
+    client.cancel_order(stop_resp["id"])  # must not raise — cleanup of orphaned leg

@@ -1,6 +1,8 @@
 """respx mock handlers for Trading212 API endpoints."""
 from __future__ import annotations
 
+import re
+
 import respx
 import httpx
 
@@ -68,6 +70,6 @@ def mount(router: respx.MockRouter) -> None:
     router.get(f"{DEMO_BASE}/equity/orders/limit-001").mock(
         return_value=httpx.Response(200, json=ORDER_STATUS_PENDING)
     )
-    router.delete(url__regex=f"{DEMO_BASE}/equity/orders/.*").mock(
+    router.delete(url__regex=rf"^{re.escape(DEMO_BASE)}/equity/orders/[^/?]+$").mock(
         return_value=httpx.Response(204)
     )

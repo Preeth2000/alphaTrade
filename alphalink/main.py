@@ -198,12 +198,12 @@ async def run(settings: Settings) -> None:
         async def tick() -> None:
             bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             await registry.refresh(settings.models_dir, settings.model_overrides)
+            snap = registry.snapshot_by_interval()
+            interval_models = snap.get(interval, [])
             health_state.models_loaded = bool(registry.by_run_name)
             health_state.longest_interval_seconds = max(
-                (_INTERVAL_SECONDS.get(i, 3600) for i in registry.snapshot_by_interval()),
-                default=3600,
+                (_INTERVAL_SECONDS.get(i, 3600) for i in snap), default=3600,
             )
-            interval_models = registry.snapshot_by_interval().get(interval, [])
             if not interval_models:
                 log.debug("No active models for interval %s this tick", interval)
                 return
@@ -244,6 +244,7 @@ async def run(settings: Settings) -> None:
                 except Exception as exc:
                     log.error("Cannot fetch equity: %s. Skipping tick.", exc)
                     health_state.t212_ok = False
+                    health_state.last_tick_at = datetime.now(timezone.utc)
                     return
                 eq_repo.record(equity)
 

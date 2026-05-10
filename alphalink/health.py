@@ -52,7 +52,7 @@ async def start_health_server(state: HealthState, port: int = 8080) -> web.AppRu
     try:
         await site.start()
     except Exception:
-        log.error("Health server failed to bind on :%d", port)
+        await runner.cleanup()
         raise
     log.info("Health server listening on :%d", port)
     return runner

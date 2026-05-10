@@ -11,6 +11,12 @@ from alphalink.broker.oco_monitor import monitor_oco
 from alphalink.store.repos import Position, PositionRepo
 
 
+@pytest.fixture(autouse=True)
+def _patch_wh():
+    with patch("alphalink.broker.oco_monitor.wh"):
+        yield
+
+
 def _make_engine():
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
@@ -42,16 +48,15 @@ async def test_stop_fills_cancels_limit_and_closes_position() -> None:
     _seed_position(engine)
     t212 = _make_t212(stop_statuses=["FILLED"], limit_statuses=["PENDING"])
 
-    with patch("alphalink.broker.oco_monitor.wh"):
-        await monitor_oco(
-            t212=t212,
-            t212_ticker="AAPL_US_EQ",
-            stop_order_id="stop-001",
-            limit_order_id="limit-001",
-            engine=engine,
-            cooldown_td=timedelta(hours=1),
-            poll_interval_s=0,
-        )
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
 
     t212.cancel_order.assert_called_once_with("limit-001")
 
@@ -67,16 +72,15 @@ async def test_limit_fills_cancels_stop_and_closes_position() -> None:
     _seed_position(engine)
     t212 = _make_t212(stop_statuses=["PENDING"], limit_statuses=["FILLED"])
 
-    with patch("alphalink.broker.oco_monitor.wh"):
-        await monitor_oco(
-            t212=t212,
-            t212_ticker="AAPL_US_EQ",
-            stop_order_id="stop-001",
-            limit_order_id="limit-001",
-            engine=engine,
-            cooldown_td=timedelta(hours=1),
-            poll_interval_s=0,
-        )
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
 
     t212.cancel_order.assert_called_once_with("stop-001")
 
@@ -87,20 +91,27 @@ async def test_limit_fills_cancels_stop_and_closes_position() -> None:
 
 async def test_both_cancelled_externally_exits_loop() -> None:
     engine = _make_engine()
+    _seed_position(engine)
     t212 = _make_t212(stop_statuses=["CANCELLED"], limit_statuses=["CANCELLED"])
 
-    with patch("alphalink.broker.oco_monitor.wh"):
-        await monitor_oco(
-            t212=t212,
-            t212_ticker="AAPL_US_EQ",
-            stop_order_id="stop-001",
-            limit_order_id="limit-001",
-            engine=engine,
-            cooldown_td=timedelta(hours=1),
-            poll_interval_s=0,
-        )
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
 
-    t212.cancel_order.assert_not_called()
+    # When stop leg dies, limit leg gets cancelled as protective measure
+    t212.cancel_order.assert_called_once_with("limit-001")
+
+    # Position should still be open (no fill, so no close)
+    with Session(engine) as s:
+        pos = PositionRepo(s).get("AAPL_US_EQ")
+    assert pos is not None
+    assert pos.quantity == 1.0
 
 
 async def test_poll_error_continues_loop_then_fills() -> None:
@@ -122,16 +133,15 @@ async def test_poll_error_continues_loop_then_fills() -> None:
 
     t212.get_order.side_effect = _get_order
 
-    with patch("alphalink.broker.oco_monitor.wh"):
-        await monitor_oco(
-            t212=t212,
-            t212_ticker="AAPL_US_EQ",
-            stop_order_id="stop-001",
-            limit_order_id="limit-001",
-            engine=engine,
-            cooldown_td=timedelta(hours=1),
-            poll_interval_s=0,
-        )
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
 
     with Session(engine) as s:
         pos = PositionRepo(s).get("AAPL_US_EQ")
@@ -145,17 +155,42 @@ async def test_cancel_failure_still_closes_position() -> None:
     t212 = _make_t212(stop_statuses=["FILLED"], limit_statuses=["PENDING"])
     t212.cancel_order.side_effect = RuntimeError("cancel failed")
 
-    with patch("alphalink.broker.oco_monitor.wh"):
-        await monitor_oco(
-            t212=t212,
-            t212_ticker="AAPL_US_EQ",
-            stop_order_id="stop-001",
-            limit_order_id="limit-001",
-            engine=engine,
-            cooldown_td=timedelta(hours=1),
-            poll_interval_s=0,
-        )
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
 
     with Session(engine) as s:
         pos = PositionRepo(s).get("AAPL_US_EQ")
     assert pos.quantity == 0
+
+
+async def test_stop_cancelled_cancels_limit_leg() -> None:
+    """One leg dies without filling — surviving leg gets cancelled, position stays open."""
+    engine = _make_engine()
+    _seed_position(engine)
+    t212 = _make_t212(stop_statuses=["CANCELLED"], limit_statuses=["PENDING"])
+
+    await monitor_oco(
+        t212=t212,
+        t212_ticker="AAPL_US_EQ",
+        stop_order_id="stop-001",
+        limit_order_id="limit-001",
+        engine=engine,
+        cooldown_td=timedelta(hours=1),
+        poll_interval_s=0,
+    )
+
+    # Limit leg should be cancelled since stop died
+    t212.cancel_order.assert_called_once_with("limit-001")
+
+    # Position stays open (no fill happened)
+    with Session(engine) as s:
+        pos = PositionRepo(s).get("AAPL_US_EQ")
+    assert pos is not None
+    assert pos.quantity == 1.0

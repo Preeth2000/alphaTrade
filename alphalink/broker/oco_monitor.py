@@ -5,6 +5,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 
+from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 from alphalink.broker.t212_client import T212Client
@@ -21,7 +22,7 @@ async def monitor_oco(
     t212_ticker: str,
     stop_order_id: str,
     limit_order_id: str,
-    engine,
+    engine: Engine,
     cooldown_td: timedelta,
     poll_interval_s: float = 10.0,
 ) -> None:
@@ -36,17 +37,25 @@ async def monitor_oco(
             continue
 
         if stop_status == "FILLED":
-            _cancel_leg(t212, limit_order_id, t212_ticker)
             _close_position(engine, t212_ticker, cooldown_td, "stop_loss")
+            _cancel_leg(t212, limit_order_id, t212_ticker)
             break
 
         if limit_status == "FILLED":
-            _cancel_leg(t212, stop_order_id, t212_ticker)
             _close_position(engine, t212_ticker, cooldown_td, "take_profit")
+            _cancel_leg(t212, stop_order_id, t212_ticker)
             break
 
-        if stop_status in _TERMINAL and limit_status in _TERMINAL:
-            log.warning("Both OCO legs for %s externally cancelled/rejected", t212_ticker)
+        if stop_status in _TERMINAL and stop_status != "FILLED":
+            log.warning("Stop leg %s for %s reached %s without fill — cancelling limit leg", stop_order_id, t212_ticker, stop_status)
+            _cancel_leg(t212, limit_order_id, t212_ticker)
+            wh.notify("WARNING", f"OCO stop leg cancelled/rejected for {t212_ticker} — limit leg cancelled", category="oco")
+            break
+
+        if limit_status in _TERMINAL and limit_status != "FILLED":
+            log.warning("Limit leg %s for %s reached %s without fill — cancelling stop leg", limit_order_id, t212_ticker, limit_status)
+            _cancel_leg(t212, stop_order_id, t212_ticker)
+            wh.notify("WARNING", f"OCO limit leg cancelled/rejected for {t212_ticker} — stop leg cancelled", category="oco")
             break
 
 
@@ -57,7 +66,7 @@ def _cancel_leg(t212: T212Client, order_id: str, t212_ticker: str) -> None:
         log.warning("Failed to cancel OCO leg %s for %s: %s", order_id, t212_ticker, exc)
 
 
-def _close_position(engine, t212_ticker: str, cooldown_td: timedelta, exit_reason: str) -> None:
+def _close_position(engine: Engine, t212_ticker: str, cooldown_td: timedelta, exit_reason: str) -> None:
     with Session(engine) as session:
         repo = PositionRepo(session)
         repo.remove(t212_ticker)

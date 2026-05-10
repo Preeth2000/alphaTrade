@@ -41,6 +41,7 @@ from alphalink.store.repos import (
     Signal,
     SignalRepo,
 )
+from alphalink.health import HealthState, start_health_server
 
 log = logging.getLogger(__name__)
 
@@ -146,12 +147,26 @@ async def run(settings: Settings) -> None:
     provider = _build_data_provider(settings)
     t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)
 
+    health_state = HealthState()
+    try:
+        await asyncio.to_thread(t212.get_total_equity)
+        health_state.t212_ok = True
+    except Exception as exc:
+        log.warning("T212 startup probe failed: %s", exc)
+        health_state.t212_ok = False
+
     from alphalink.model_registry import ModelRegistry
     registry = ModelRegistry()
     await registry.refresh(settings.models_dir, settings.model_overrides)
     if not registry.by_run_name:
         log.error("No models loaded from %s. Exiting.", settings.models_dir)
         return
+
+    health_state.models_loaded = bool(registry.by_run_name)
+    health_state.longest_interval_seconds = max(
+        (_INTERVAL_SECONDS.get(i, 3600) for i in registry.snapshot_by_interval()),
+        default=3600,
+    )
 
     # Reconcile positions with T212 before first tick
     reconcile_positions(t212, settings)
@@ -173,10 +188,17 @@ async def run(settings: Settings) -> None:
     # Models introducing a new interval require restart.
     by_interval = registry.snapshot_by_interval()
 
+    health_runner = None
+    try:
+        health_runner = await start_health_server(health_state)
+    except Exception as exc:
+        log.error("Health server failed to start on :8080: %s", exc)
+
     def make_tick(interval: str, interval_models: list[tuple[Manifest, OnnxModel]] | None = None):
         async def tick() -> None:
             bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             await registry.refresh(settings.models_dir, settings.model_overrides)
+            health_state.models_loaded = bool(registry.by_run_name)
             interval_models = registry.snapshot_by_interval().get(interval, [])
             if not interval_models:
                 log.debug("No active models for interval %s this tick", interval)
@@ -214,8 +236,10 @@ async def run(settings: Settings) -> None:
 
                 try:
                     equity = t212.get_total_equity()
+                    health_state.t212_ok = True
                 except Exception as exc:
                     log.error("Cannot fetch equity: %s. Skipping tick.", exc)
+                    health_state.t212_ok = False
                     return
                 eq_repo.record(equity)
 
@@ -360,6 +384,8 @@ async def run(settings: Settings) -> None:
                             order_repo.update_fill(err_rec.id, "error", None, "")
                         log.error("Order failed for %s: %s", t212_ticker, exc)
 
+            health_state.last_tick_at = datetime.now(timezone.utc)
+
         return tick
 
     tasks = [
@@ -381,4 +407,6 @@ async def run(settings: Settings) -> None:
         task.cancel()
     if _oco_tasks:
         await asyncio.gather(*_oco_tasks, return_exceptions=True)
+    if health_runner is not None:
+        await health_runner.cleanup()
     log.info("Graceful shutdown complete.")

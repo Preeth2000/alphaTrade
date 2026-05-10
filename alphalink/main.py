@@ -146,8 +146,10 @@ async def run(settings: Settings) -> None:
     provider = _build_data_provider(settings)
     t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)
 
-    models = scan_models(settings.models_dir)
-    if not models:
+    from alphalink.model_registry import ModelRegistry
+    registry = ModelRegistry()
+    await registry.refresh(settings.models_dir, settings.model_overrides)
+    if not registry.by_run_name:
         log.error("No models loaded from %s. Exiting.", settings.models_dir)
         return
 
@@ -158,23 +160,28 @@ async def run(settings: Settings) -> None:
     static_map: dict[str, str] = {}
     for run_name, override in settings.model_overrides.items():
         if override.t212_ticker:
-            manifest_match = next((m for m, _ in models if m.run_name == run_name), None)
+            manifest_match = next(
+                (m for m, _ in registry.by_run_name.values() if m.run_name == run_name), None
+            )
             if manifest_match:
                 static_map[manifest_match.ticker] = override.t212_ticker
 
     engine = get_engine(settings.state_db_path)
 
-    # Group models by interval for co-scheduling
-    by_interval: dict[str, list[tuple[Manifest, OnnxModel]]] = defaultdict(list)
-    for manifest, model in models:
-        override = settings.model_overrides.get(manifest.run_name)
-        if override and not override.enabled:
-            continue
-        by_interval[manifest.interval].append((manifest, model))
+    # Snapshot initial intervals to determine which scheduler tasks to spawn.
+    # New models on existing intervals are hot-reloaded each tick.
+    # Models introducing a new interval require restart.
+    by_interval = registry.snapshot_by_interval()
 
-    def make_tick(interval: str, interval_models: list[tuple[Manifest, OnnxModel]]):
+    def make_tick(interval: str, interval_models: list[tuple[Manifest, OnnxModel]] | None = None):
         async def tick() -> None:
             bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            await registry.refresh(settings.models_dir, settings.model_overrides)
+            interval_models = registry.snapshot_by_interval().get(interval, [])
+            if not interval_models:
+                log.debug("No active models for interval %s this tick", interval)
+                return
+
             ticker_logits: dict[str, list] = defaultdict(list)
             ticker_manifest: dict[str, Manifest] = {}
 
@@ -359,7 +366,7 @@ async def run(settings: Settings) -> None:
         asyncio.create_task(
             schedule_bar_close(
                 interval,
-                make_tick(interval, interval_models),
+                make_tick(interval),
                 stop_event,
                 extended_hours=settings.defaults.extended_hours,
             )

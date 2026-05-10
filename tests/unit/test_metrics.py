@@ -1,13 +1,22 @@
 """Smoke tests for alphalink.metrics — validates metric definitions parse correctly."""
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+import numpy as np
+import pandas as pd
 import pytest
 import prometheus_client
 import respx
 import httpx
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from sqlmodel import SQLModel, create_engine
 
 from alphalink.broker.t212_client import T212Client
+from alphalink.config import Settings
+from alphalink.health import HealthState
+from alphalink.main import make_tick
+from alphalink.store.repos import Position
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
 
@@ -146,3 +155,124 @@ class TestT212ClientMetrics:
         assert mock_counter.labels.call_count == 3
         for call in mock_counter.labels.call_args_list:
             assert call.kwargs["status"] == "error"
+
+
+_BUY_DF = pd.DataFrame({
+    "Open": [150.0], "High": [155.0], "Low": [148.0],
+    "Close": [152.0], "Volume": [1_000_000],
+})
+
+
+def _engine():
+    eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(eng)
+    return eng
+
+
+def _settings(tmp_path: Path) -> Settings:
+    return Settings(
+        t212_api_key="test-key",
+        state_db_path=tmp_path / "state.db",
+        models_dir=tmp_path / "models",
+        overrides_path=tmp_path / "overrides.yaml",
+    )
+
+
+def _manifest(ticker="AAPL", run_name="run_a", interval="1d"):
+    m = MagicMock()
+    m.ticker = ticker
+    m.run_name = run_name
+    m.interval = interval
+    m.window = 20
+    m.feature_names = ["Close"]
+    m.normalize_mean = {}
+    m.normalize_std = {}
+    return m
+
+
+def _registry_with_signal(manifest, signal_output):
+    model = MagicMock()
+    model.run.return_value = signal_output
+    reg = MagicMock()
+    reg.refresh = AsyncMock()
+    reg.snapshot_by_interval.return_value = {"1d": [(manifest, model)]}
+    reg.by_run_name = {manifest.run_name: (manifest, model)}
+    return reg
+
+
+class TestTickMetrics:
+    @pytest.mark.asyncio
+    async def test_signals_total_incremented_on_signal(self, tmp_path):
+        manifest = _manifest()
+        # HOLD signal (argmax=2 → "HOLD")
+        registry = _registry_with_signal(manifest, np.array([-1.0, -1.0, 2.0]))
+        t212 = MagicMock()
+        t212.get_total_equity.return_value = 10_000.0
+        provider = MagicMock()
+        provider.fetch_ohlcv.return_value = _BUY_DF
+
+        mock_signals_total = MagicMock()
+        mock_equity_total = MagicMock()
+        mock_open_positions = MagicMock()
+        mock_daily_pnl_pct = MagicMock()
+
+        tick = make_tick(
+            "1d",
+            registry=registry,
+            settings=_settings(tmp_path),
+            engine=_engine(),
+            t212=t212,
+            provider=provider,
+            health_state=HealthState(),
+            oco_tasks=set(),
+            static_map={"AAPL": "AAPL_US_EQ"},
+        )
+
+        with (
+            patch("alphalink.main.compute_features", return_value=_BUY_DF),
+            patch("alphalink.main.normalize", return_value=_BUY_DF),
+            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphalink.main.signals_total", mock_signals_total),
+            patch("alphalink.main.metric_equity_total", mock_equity_total),
+            patch("alphalink.main.metric_open_positions", mock_open_positions),
+            patch("alphalink.main.metric_daily_pnl_pct", mock_daily_pnl_pct),
+        ):
+            await tick()
+
+        mock_signals_total.labels.assert_called_once_with(ticker="AAPL", signal="HOLD")
+        mock_signals_total.labels.return_value.inc.assert_called_once()
+        mock_equity_total.set.assert_called_once_with(10_000.0)
+        mock_daily_pnl_pct.set.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_inference_errors_total_on_exception(self, tmp_path):
+        manifest = _manifest()
+        registry = _registry_with_signal(manifest, np.array([-1.0, -1.0, 2.0]))
+        t212 = MagicMock()
+        t212.get_total_equity.return_value = 10_000.0
+        provider = MagicMock()
+        provider.fetch_ohlcv.return_value = _BUY_DF
+
+        mock_inference_errors = MagicMock()
+
+        tick = make_tick(
+            "1d",
+            registry=registry,
+            settings=_settings(tmp_path),
+            engine=_engine(),
+            t212=t212,
+            provider=provider,
+            health_state=HealthState(),
+            oco_tasks=set(),
+            static_map={"AAPL": "AAPL_US_EQ"},
+        )
+
+        with (
+            patch("alphalink.main.compute_features", side_effect=ValueError("bad features")),
+            patch("alphalink.main.inference_errors_total", mock_inference_errors),
+        ):
+            await tick()
+
+        mock_inference_errors.labels.assert_called_once_with(run_name="run_a")
+        mock_inference_errors.labels.return_value.inc.assert_called_once()

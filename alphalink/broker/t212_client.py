@@ -35,80 +35,89 @@ class T212Client:
         self._base = _BASE_URLS[env]
         self._headers = {"Authorization": api_key}
 
-    def _get(self, path: str, **params: Any) -> Any:
+    def _get(self, path: str, *, route: str | None = None, **params: Any) -> Any:
         url = f"{self._base}{path}"
+        _route = route or path
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
                 r = httpx.get(url, headers=self._headers, params=params, timeout=30)
                 if r.status_code == 429:
+                    t212_requests_total.labels(endpoint=_route, status="429").inc()
+                    t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                     _handle_429(r, attempt)
                     continue
                 r.raise_for_status()
-                t212_requests_total.labels(endpoint=path, status=str(r.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(r.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 return r.json()
             except httpx.HTTPStatusError as exc:
-                t212_requests_total.labels(endpoint=path, status=str(exc.response.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(exc.response.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
             except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
-                t212_requests_total.labels(endpoint=path, status="error").inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status="error").inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
 
-    def _post(self, path: str, body: dict[str, Any]) -> Any:
+    def _post(self, path: str, body: dict[str, Any], *, route: str | None = None) -> Any:
         url = f"{self._base}{path}"
+        _route = route or path
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
                 r = httpx.post(url, headers=self._headers, json=body, timeout=30)
                 if r.status_code == 429:
+                    t212_requests_total.labels(endpoint=_route, status="429").inc()
+                    t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                     _handle_429(r, attempt)
                     continue
                 r.raise_for_status()
-                t212_requests_total.labels(endpoint=path, status=str(r.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(r.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 return r.json()
             except httpx.HTTPStatusError as exc:
-                t212_requests_total.labels(endpoint=path, status=str(exc.response.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(exc.response.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
             except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
-                t212_requests_total.labels(endpoint=path, status="error").inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status="error").inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
 
-    def _delete(self, path: str) -> None:
+    def _delete(self, path: str, *, route: str | None = None) -> None:
         url = f"{self._base}{path}"
+        _route = route or path
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
                 r = httpx.delete(url, headers=self._headers, timeout=30)
                 if r.status_code == 429:
+                    t212_requests_total.labels(endpoint=_route, status="429").inc()
+                    t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                     _handle_429(r, attempt)
                     continue
                 r.raise_for_status()
-                t212_requests_total.labels(endpoint=path, status=str(r.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(r.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 return
             except httpx.HTTPStatusError as exc:
-                t212_requests_total.labels(endpoint=path, status=str(exc.response.status_code)).inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status=str(exc.response.status_code)).inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
             except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
-                t212_requests_total.labels(endpoint=path, status="error").inc()
-                t212_request_latency_seconds.labels(endpoint=path).observe(time.perf_counter() - _t0)
+                t212_requests_total.labels(endpoint=_route, status="error").inc()
+                t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
                 if attempt == _MAX_RETRIES:
                     raise
                 time.sleep(min(2 ** attempt, 10))
@@ -171,8 +180,8 @@ class T212Client:
 
     def get_order(self, order_id: str) -> dict[str, Any]:
         """Fetch order status by T212 order ID."""
-        return self._get(f"/equity/orders/{order_id}")
+        return self._get(f"/equity/orders/{order_id}", route="/equity/orders/{id}")
 
     def cancel_order(self, order_id: str) -> None:
         """Cancel an open order by ID. Raises HTTPStatusError on failure."""
-        self._delete(f"/equity/orders/{order_id}")
+        self._delete(f"/equity/orders/{order_id}", route="/equity/orders/{id}")

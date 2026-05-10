@@ -3,6 +3,13 @@ from __future__ import annotations
 
 import pytest
 import prometheus_client
+import respx
+import httpx
+from unittest.mock import MagicMock, patch
+
+from alphalink.broker.t212_client import T212Client
+
+DEMO_BASE = "https://demo.trading212.com/api/v0"
 
 
 def test_metrics_module_exports_all_expected_names():
@@ -29,14 +36,6 @@ def test_metrics_generate_valid_prometheus_text():
     assert b"orders_total" in output
     assert b"equity_total" in output
     assert b"inference_latency_seconds" in output
-
-
-import respx
-import httpx
-from unittest.mock import MagicMock, patch
-from alphalink.broker.t212_client import T212Client
-
-DEMO_BASE = "https://demo.trading212.com/api/v0"
 
 
 class TestT212ClientMetrics:
@@ -76,13 +75,74 @@ class TestT212ClientMetrics:
             patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
             patch("time.sleep"),
         ):
-            try:
+            with pytest.raises(Exception):
                 client.get_account_summary()
-            except Exception:
-                pass
 
-        # Counter must be called for each attempt (3 retries → 3 increments)
-        assert mock_counter.labels.call_count >= 1
+        # Counter must be called once per attempt (3 retries → 3 increments)
+        assert mock_counter.labels.call_count == 3
         # All status labels should be "500"
         for call in mock_counter.labels.call_args_list:
             assert call.kwargs["status"] == "500"
+
+    @respx.mock
+    def test_successful_post_increments_counter(self):
+        respx.post(f"{DEMO_BASE}/equity/orders/market").mock(
+            return_value=httpx.Response(200, json={"id": "123"})
+        )
+        client = T212Client(api_key="test-key", env="demo")
+        mock_counter = MagicMock()
+        mock_histogram = MagicMock()
+
+        with (
+            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+        ):
+            client.place_market_order("AAPL_US_EQ", 1)
+
+        mock_counter.labels.assert_called_once_with(
+            endpoint="/equity/orders/market", status="200"
+        )
+        mock_counter.labels.return_value.inc.assert_called_once()
+
+    @respx.mock
+    def test_successful_delete_increments_counter(self):
+        respx.delete(f"{DEMO_BASE}/equity/orders/abc123").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        client = T212Client(api_key="test-key", env="demo")
+        mock_counter = MagicMock()
+        mock_histogram = MagicMock()
+
+        with (
+            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+        ):
+            client.cancel_order("abc123")
+
+        # Route template used, not the raw path with order ID
+        mock_counter.labels.assert_called_once_with(
+            endpoint="/equity/orders/{id}", status="200"
+        )
+        mock_counter.labels.return_value.inc.assert_called_once()
+
+    @respx.mock
+    def test_transport_error_records_error_status(self):
+        respx.get(f"{DEMO_BASE}/equity/account/summary").mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        client = T212Client(api_key="test-key", env="demo")
+        mock_counter = MagicMock()
+        mock_histogram = MagicMock()
+
+        with (
+            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("time.sleep"),
+        ):
+            with pytest.raises(httpx.ConnectError):
+                client.get_account_summary()
+
+        # All 3 attempts record status="error"
+        assert mock_counter.labels.call_count == 3
+        for call in mock_counter.labels.call_args_list:
+            assert call.kwargs["status"] == "error"

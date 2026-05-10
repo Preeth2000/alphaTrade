@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -25,11 +26,14 @@ def notify(level: str, msg: str, category: str = "general") -> None:
         return
     _rate_limits[category] = now
     text = f"[{level}] {msg}"
+    host = urlparse(_webhook_url).hostname or ""
     payload: dict[str, str] = (
-        {"text": text} if "slack.com" in _webhook_url else {"content": text}
+        {"text": text} if host.endswith("slack.com") else {"content": text}
     )
     try:
-        httpx.post(_webhook_url, json=payload, timeout=5)
+        resp = httpx.post(_webhook_url, json=payload, timeout=5)
+        if resp.status_code >= 400:
+            log.warning("Webhook delivery non-2xx: %s", resp.status_code)
     except Exception as exc:
         log.warning("Webhook delivery failed: %s", exc)
 

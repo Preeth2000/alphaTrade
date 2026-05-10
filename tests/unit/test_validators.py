@@ -157,3 +157,32 @@ class TestStalenessCheck:
         df = _make_df()
         df.index = range(len(df))  # integer index
         validate_ohlcv(df, _INTERVAL)  # no raise — staleness skipped
+
+
+class TestTimestampGaps:
+    def test_warns_on_gap_exceeding_3x_interval(self, caplog):
+        # _make_df creates 1h-spaced bars. Shift bars 2-4 forward by 3h to
+        # create a 4h gap between bar 1 and bar 2 (threshold = 3h for 1h interval).
+        df = _make_df(n=5)
+        idx = df.index.tolist()
+        shift = timedelta(hours=3)
+        idx[2] = idx[2] + shift
+        idx[3] = idx[3] + shift
+        idx[4] = idx[4] + shift
+        df.index = pd.DatetimeIndex(idx)
+        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+            validate_ohlcv(df, _INTERVAL)
+        assert "timestamp gap" in caplog.text
+
+    def test_no_warning_on_normal_gaps(self, caplog):
+        df = _make_df(n=5)
+        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+            validate_ohlcv(df, _INTERVAL)
+        assert "timestamp gap" not in caplog.text
+
+    def test_skips_gap_check_for_non_datetime_index(self, caplog):
+        df = _make_df()
+        df.index = range(len(df))
+        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+            validate_ohlcv(df, _INTERVAL)
+        assert "timestamp gap" not in caplog.text

@@ -32,14 +32,19 @@ _MAX_AGE_SECONDS: dict[str, int] = {
 def validate_ohlcv(df: pd.DataFrame, interval: str, ticker: str = "") -> None:
     """Validate OHLCV DataFrame. Raises ValueError describing the first violation.
 
-    Checks:
+    Checks (raises ValueError):
     - DataFrame not empty
     - Required columns present
     - No NaN in OHLC
     - All prices > 0
     - High >= Low >= 0 per row
+    - Close within [Low, High] per row
     - Volume >= 0
     - Latest bar timestamp within 2× interval of now
+
+    Warnings (log.warning):
+    - Zero-volume bars
+    - Timestamp gaps > 3× interval
     """
     tag = f"[{ticker}@{interval}] " if ticker else f"[{interval}] "
 
@@ -95,3 +100,17 @@ def validate_ohlcv(df: pd.DataFrame, interval: str, ticker: str = "") -> None:
                 )
         except (AttributeError, TypeError):
             pass  # non-datetime index — skip staleness check
+
+    # Timestamp gap detection
+    if hasattr(df.index, "to_pydatetime"):
+        try:
+            diffs = pd.Series(df.index).diff().dt.total_seconds().dropna()
+            threshold = _INTERVAL_SECONDS.get(interval, 86400) * 3
+            gaps = diffs[diffs > threshold]
+            if not gaps.empty:
+                log.warning(
+                    "%s%d timestamp gap(s) detected (largest: %.0fs, threshold: %ds)",
+                    tag, len(gaps), gaps.max(), threshold,
+                )
+        except (AttributeError, TypeError):
+            pass

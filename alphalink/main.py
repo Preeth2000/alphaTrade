@@ -149,7 +149,7 @@ async def run(settings: Settings) -> None:
 
     health_state = HealthState()
     try:
-        await asyncio.to_thread(t212.get_total_equity)
+        await asyncio.to_thread(t212.get_total_equity)  # probe only; result discarded
         health_state.t212_ok = True
     except Exception as exc:
         log.warning("T212 startup probe failed: %s", exc)
@@ -199,6 +199,10 @@ async def run(settings: Settings) -> None:
             bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             await registry.refresh(settings.models_dir, settings.model_overrides)
             health_state.models_loaded = bool(registry.by_run_name)
+            health_state.longest_interval_seconds = max(
+                (_INTERVAL_SECONDS.get(i, 3600) for i in registry.snapshot_by_interval()),
+                default=3600,
+            )
             interval_models = registry.snapshot_by_interval().get(interval, [])
             if not interval_models:
                 log.debug("No active models for interval %s this tick", interval)

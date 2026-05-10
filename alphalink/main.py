@@ -20,7 +20,7 @@ from alphalink.adapter.normalize import normalize
 from alphalink.adapter.window import build_input
 from alphalink.broker.instrument_map import InstrumentMap
 from alphalink.broker.oco_monitor import monitor_oco
-from alphalink.broker.orders import submit_order
+from alphalink.broker.orders import make_client_order_id, submit_order
 from alphalink.broker.t212_client import T212Client
 from alphalink.config import Settings
 from alphalink.consensus.softmax_avg import consensus_by_ticker
@@ -174,6 +174,7 @@ async def run(settings: Settings) -> None:
 
     def make_tick(interval: str, interval_models: list[tuple[Manifest, OnnxModel]]):
         async def tick() -> None:
+            bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             ticker_logits: dict[str, list] = defaultdict(list)
             ticker_manifest: dict[str, Manifest] = {}
 
@@ -274,13 +275,7 @@ async def run(settings: Settings) -> None:
                         log.warning("Computed quantity 0 for %s, skipping", t212_ticker)
                         continue
 
-                    order_rec = Order(
-                        signal_id=sig_rec.id,
-                        t212_ticker=t212_ticker,
-                        side=signal,
-                        quantity=qty,
-                    )
-                    order_repo.save(order_rec)
+                    cid = make_client_order_id(manifest.run_name, t212_ticker, bar_close_iso, signal)
 
                     try:
                         resp = submit_order(
@@ -288,10 +283,17 @@ async def run(settings: Settings) -> None:
                             instrument_ticker=t212_ticker,
                             side=signal,
                             quantity=qty,
+                            order_repo=order_repo,
+                            client_order_id=cid,
                         )
+                        if resp.get("skipped_duplicate"):
+                            log.info("Duplicate order skipped (cid=%s)", cid)
+                            continue
                         fill_price = resp.get("fillPrice") or resp.get("filledQuantity")
                         t212_id = str(resp.get("id", ""))
-                        order_repo.update_fill(order_rec.id, "filled", fill_price, t212_id)
+                        saved_rec = order_repo.find_by_client_order_id(cid)
+                        if saved_rec:
+                            order_repo.update_fill(saved_rec.id, "filled", fill_price, t212_id)
                         log.info("Filled %s %s qty=%s", signal, t212_ticker, qty)
 
                         cooldown_td = timedelta(
@@ -346,7 +348,9 @@ async def run(settings: Settings) -> None:
                             ))
 
                     except Exception as exc:
-                        order_repo.update_fill(order_rec.id, "error", None, "")
+                        err_rec = order_repo.find_by_client_order_id(cid)
+                        if err_rec:
+                            order_repo.update_fill(err_rec.id, "error", None, "")
                         log.error("Order failed for %s: %s", t212_ticker, exc)
 
         return tick

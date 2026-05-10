@@ -154,6 +154,7 @@ def make_tick(
     All T212Client HTTP calls run via asyncio.to_thread so the event loop
     stays responsive to health checks and OCO monitor tasks during latency spikes.
     """
+    _prev_halt: list[bool] = [False]
     async def tick() -> None:
         bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         await registry.refresh(settings.models_dir, settings.model_overrides)
@@ -217,13 +218,14 @@ def make_tick(
             daily_loss_pct = (equity - today_open) / (today_open or 1)
             metric_daily_pnl_pct.set(daily_loss_pct)
             daily_loss_halted = daily_loss_pct <= -settings.risk.daily_loss_halt_pct
-            if daily_loss_halted:
+            if daily_loss_halted and not _prev_halt[0]:
                 log.warning("Daily loss halt active (%.2f%%). No new orders.", daily_loss_pct * 100)
                 wh.notify(
                     "WARNING",
                     f"Daily loss halt active ({daily_loss_pct:.2%}). No new orders.",
                     category="daily-loss-halt",
                 )
+            _prev_halt[0] = daily_loss_halted
 
             for yf_ticker, signal in signals.items():
                 manifest = ticker_manifest[yf_ticker]

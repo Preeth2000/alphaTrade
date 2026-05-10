@@ -1,6 +1,7 @@
 """Tests for OHLCV sanity validator."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -125,6 +126,21 @@ class TestCloseConsistency:
         df = _make_df()
         df.loc[df.index[0], "Close"] = 95.0  # exactly Low — valid
         validate_ohlcv(df, _INTERVAL)  # no raise
+
+
+class TestZeroVolumeWarning:
+    def test_warns_on_zero_volume(self, caplog):
+        df = _make_df()
+        df.loc[df.index[0], "Volume"] = 0
+        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+            validate_ohlcv(df, _INTERVAL)
+        assert "zero-volume" in caplog.text
+
+    def test_no_warning_all_nonzero(self, caplog):
+        df = _make_df()
+        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+            validate_ohlcv(df, _INTERVAL)
+        assert "zero-volume" not in caplog.text
 
 
 class TestStalenessCheck:

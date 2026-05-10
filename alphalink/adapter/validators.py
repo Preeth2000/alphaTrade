@@ -1,9 +1,12 @@
 """OHLCV data sanity checks. Raises ValueError on bad data."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 _INTERVAL_SECONDS: dict[str, int] = {
     "1m": 60,
@@ -60,6 +63,10 @@ def validate_ohlcv(df: pd.DataFrame, interval: str, ticker: str = "") -> None:
 
     if (df["Volume"] < 0).any():
         raise ValueError(f"{tag}negative Volume values")
+
+    zero_vol = int((df["Volume"] == 0).sum())
+    if zero_vol:
+        log.warning("%szero-volume bars: %d row(s)", tag, zero_vol)
 
     if (df["High"] < df["Low"]).any():
         raise ValueError(f"{tag}High < Low on some rows")

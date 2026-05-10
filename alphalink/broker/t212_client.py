@@ -71,10 +71,10 @@ class T212Client:
         quantity: float,
         stop_price: float,
     ) -> dict[str, Any]:
-        """Submit STOP SELL order. Used as SL leg of OCO after a BUY fill."""
+        """Submit STOP SELL leg. quantity must be positive; negated internally for T212 SELL convention."""
         body: dict[str, Any] = {
             "ticker": instrument_ticker,
-            "quantity": quantity,
+            "quantity": -abs(quantity),
             "stopPrice": stop_price,
         }
         return self._post("/equity/orders/stop", body)
@@ -85,10 +85,10 @@ class T212Client:
         quantity: float,
         limit_price: float,
     ) -> dict[str, Any]:
-        """Submit LIMIT SELL order. Used as TP leg of OCO after a BUY fill."""
+        """Submit LIMIT SELL leg. quantity must be positive; negated internally for T212 SELL convention."""
         body: dict[str, Any] = {
             "ticker": instrument_ticker,
-            "quantity": quantity,
+            "quantity": -abs(quantity),
             "limitPrice": limit_price,
         }
         return self._post("/equity/orders/limit", body)

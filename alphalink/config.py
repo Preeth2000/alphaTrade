@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     state_db_path: Path = Path("./state.db")
     overrides_path: Path = Path("./overrides.yaml")
     webhook_url: str = ""
-    webhook_levels: str = "WARNING"
+    webhook_level: str = "WARNING"
 
     # Populated from overrides.yaml after load
     defaults: Defaults = Defaults()

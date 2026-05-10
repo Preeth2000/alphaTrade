@@ -8,6 +8,10 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# third-party
+from sqlmodel import Session, SQLModel
+
+# first-party (alphabetical)
 from alphalink.adapter.features import compute_features
 from alphalink.adapter.inference import OnnxModel
 from alphalink.adapter.manifest import Manifest
@@ -18,8 +22,8 @@ from alphalink.broker.orders import submit_order
 from alphalink.broker.t212_client import T212Client
 from alphalink.config import Settings
 from alphalink.consensus.softmax_avg import consensus_by_ticker
-from alphalink.notify import webhook as wh
 from alphalink.data.provider import DataProvider
+from alphalink.notify import webhook as wh
 from alphalink.risk.gates import GateResult, run_gates
 from alphalink.risk.sizing import compute_quantity
 from alphalink.scheduler.bar_close import schedule_bar_close
@@ -34,7 +38,6 @@ from alphalink.store.repos import (
     Signal,
     SignalRepo,
 )
-from sqlmodel import Session, SQLModel
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +104,7 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
                 wh.notify(
                     "WARNING",
                     f"Reconcile: removing stale position {local_pos.t212_ticker} (not in T212 portfolio)",
-                    category="reconcile-divergence",
+                    category=f"reconcile-divergence-{local_pos.t212_ticker}",
                 )
                 repo.remove(local_pos.t212_ticker)
 
@@ -126,8 +129,10 @@ async def run(settings: Settings) -> None:
     if settings.webhook_url:
         wh.configure(settings.webhook_url)
         _wh = wh.WebhookHandler()
-        _wh.setLevel(settings.webhook_levels)
-        logging.getLogger().addHandler(_wh)
+        _wh.setLevel(settings.webhook_level)
+        root = logging.getLogger()
+        if not any(isinstance(h, wh.WebhookHandler) for h in root.handlers):
+            root.addHandler(_wh)
         wh.notify("INFO", "alphaLink bot started", category="startup")
 
     provider = _build_data_provider(settings)

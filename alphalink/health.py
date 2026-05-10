@@ -11,6 +11,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class HealthState:
+    # Not thread-safe: mutate only from the asyncio event loop thread.
+    # longest_interval_seconds must be set before the first tick.
     last_tick_at: datetime | None = None
     longest_interval_seconds: int = 3600
     t212_ok: bool = False
@@ -47,6 +49,10 @@ async def start_health_server(state: HealthState, port: int = 8080) -> web.AppRu
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
+    try:
+        await site.start()
+    except Exception:
+        log.error("Health server failed to bind on :%d", port)
+        raise
     log.info("Health server listening on :%d", port)
     return runner

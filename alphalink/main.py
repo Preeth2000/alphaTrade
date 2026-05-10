@@ -423,6 +423,11 @@ async def run(settings: Settings) -> None:
     # Reconcile positions with T212 before first tick
     reconcile_positions(t212, settings)
 
+    # Initialize open_positions gauge from reconciled DB state
+    with Session(engine) as _session:
+        _pos_repo = PositionRepo(_session)
+        metric_open_positions.set(len([p for p in _pos_repo.all() if p.quantity > 0]))
+
     # Build static t212_ticker overrides from overrides.yaml
     static_map: dict[str, str] = {}
     for run_name, override in settings.model_overrides.items():

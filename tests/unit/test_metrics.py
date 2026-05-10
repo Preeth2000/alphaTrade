@@ -156,6 +156,32 @@ class TestT212ClientMetrics:
         for call in mock_counter.labels.call_args_list:
             assert call.kwargs["status"] == "error"
 
+    @respx.mock
+    def test_429_records_429_status(self):
+        call_count = 0
+
+        def handler(request):
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(429, headers={"Retry-After": "0"}, json={})
+
+        respx.get(f"{DEMO_BASE}/equity/account/summary").mock(side_effect=handler)
+        client = T212Client(api_key="test-key", env="demo")
+        mock_counter = MagicMock()
+        mock_histogram = MagicMock()
+
+        with (
+            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("time.sleep"),
+        ):
+            with pytest.raises(Exception):
+                client.get_account_summary()
+
+        assert mock_counter.labels.call_count == 4
+        for call in mock_counter.labels.call_args_list:
+            assert call.kwargs["status"] == "429"
+
 
 _BUY_DF = pd.DataFrame({
     "Open": [150.0], "High": [155.0], "Low": [148.0],

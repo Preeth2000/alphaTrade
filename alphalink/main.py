@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # third-party
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session
 
 # first-party (alphabetical)
 from alphalink.adapter.features import compute_features
@@ -83,7 +83,6 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
     Prevents stale SQLite state from causing wrong gate decisions after downtime.
     """
     engine = get_engine(settings.state_db_path)
-    SQLModel.metadata.create_all(engine)
     try:
         t212_positions = t212.get_positions()
     except Exception as exc:

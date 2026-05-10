@@ -1,15 +1,29 @@
 """Trading212 HTTP client. Auth via T212_API_KEY header. demo/live via T212_ENV."""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
-
 
 _BASE_URLS = {
     "demo": "https://demo.trading212.com/api/v0",
     "live": "https://live.trading212.com/api/v0",
 }
+
+_MAX_RETRIES = 3
+_DEFAULT_429_SLEEP = 60
+_NO_RETRY_CODES = {401, 403}
+
+
+def _handle_429(response: httpx.Response, attempt: int) -> None:
+    if attempt >= _MAX_RETRIES:
+        response.raise_for_status()
+    try:
+        sleep_secs = int(response.headers.get("Retry-After", _DEFAULT_429_SLEEP))
+    except (ValueError, TypeError):
+        sleep_secs = _DEFAULT_429_SLEEP
+    time.sleep(sleep_secs)
 
 
 class T212Client:
@@ -21,20 +35,60 @@ class T212Client:
 
     def _get(self, path: str, **params: Any) -> Any:
         url = f"{self._base}{path}"
-        r = httpx.get(url, headers=self._headers, params=params, timeout=30)
-        r.raise_for_status()
-        return r.json()
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                r = httpx.get(url, headers=self._headers, params=params, timeout=30)
+                if r.status_code == 429:
+                    _handle_429(r, attempt)
+                    continue
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
+            except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
+                if attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
 
     def _post(self, path: str, body: dict[str, Any]) -> Any:
         url = f"{self._base}{path}"
-        r = httpx.post(url, headers=self._headers, json=body, timeout=30)
-        r.raise_for_status()
-        return r.json()
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                r = httpx.post(url, headers=self._headers, json=body, timeout=30)
+                if r.status_code == 429:
+                    _handle_429(r, attempt)
+                    continue
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
+            except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
+                if attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
 
     def _delete(self, path: str) -> None:
         url = f"{self._base}{path}"
-        r = httpx.delete(url, headers=self._headers, timeout=30)
-        r.raise_for_status()
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                r = httpx.delete(url, headers=self._headers, timeout=30)
+                if r.status_code == 429:
+                    _handle_429(r, attempt)
+                    continue
+                r.raise_for_status()
+                return
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in _NO_RETRY_CODES or attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
+            except (httpx.TransportError, httpx.ConnectError, httpx.NetworkError):
+                if attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(min(2 ** attempt, 10))
 
     def get_account_summary(self) -> dict[str, Any]:
         """Returns account summary including cash and totalValue."""
@@ -43,7 +97,6 @@ class T212Client:
     def get_total_equity(self) -> float:
         """Return total portfolio value (cash + positions)."""
         summary = self.get_account_summary()
-        # T212 response: {"cash": {"availableToTrade": ..., ...}, "totalValue": ...}
         return float(summary.get("totalValue", summary.get("cash", {}).get("availableToTrade", 0)))
 
     def get_positions(self) -> list[dict[str, Any]]:

@@ -76,9 +76,6 @@ def validate_ohlcv(df: pd.DataFrame, interval: str, ticker: str = "") -> None:
     if (df["High"] < df["Low"]).any():
         raise ValueError(f"{tag}High < Low on some rows")
 
-    if (df["Low"] < 0).any():
-        raise ValueError(f"{tag}negative Low values")
-
     if (df["Close"] > df["High"]).any() or (df["Close"] < df["Low"]).any():
         raise ValueError(f"{tag}Close outside [Low, High] on some rows")
 

@@ -40,4 +40,9 @@ def notify(level: str, msg: str, category: str = "general") -> None:
 
 class WebhookHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
-        raise NotImplementedError
+        category: str = getattr(record, "category", record.name)
+        try:
+            msg = self.format(record)
+            notify(record.levelname, msg, category)
+        except Exception:
+            self.handleError(record)

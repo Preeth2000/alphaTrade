@@ -136,7 +136,7 @@ def test_handler_uses_category_from_extra():
         )
         record.category = "order-reject"  # type: ignore[attr-defined]
         handler.emit(record)
-    assert len(mock.calls) == 1
+        assert len(mock.calls) == 1
 
 
 def test_handler_falls_back_to_logger_name_as_category():
@@ -151,9 +151,9 @@ def test_handler_falls_back_to_logger_name_as_category():
         )
         # No category on record — should fall back to "alphalink.broker"
         handler.emit(record)
-    assert len(mock.calls) == 1
+        assert len(mock.calls) == 1
     # Second call for same logger name should be rate-limited
     with respx.mock() as mock2:
-        mock2.post(DISCORD_URL).mock(return_value=httpx.Response(204))
+        # Don't set up a route since the request should be rate-limited
         handler.emit(record)
-    assert len(mock2.calls) == 0  # rate-limited under "alphalink.broker"
+        assert len(mock2.calls) == 0  # rate-limited under "alphalink.broker"

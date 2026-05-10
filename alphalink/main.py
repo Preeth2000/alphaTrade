@@ -389,6 +389,13 @@ async def run(settings: Settings) -> None:
             root.addHandler(_wh)
         wh.notify("INFO", "alphaLink bot started", category="startup")
 
+    from prometheus_client import start_http_server as _start_metrics
+    try:
+        _start_metrics(9090)
+        log.info("Metrics server listening on :9090")
+    except OSError as exc:
+        log.error("Metrics server failed to start on :9090: %s", exc)
+
     provider = _build_data_provider(settings)
     t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)
 

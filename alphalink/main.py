@@ -128,7 +128,8 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
 
 
 async def run(settings: Settings) -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from alphalink.logging_config import configure_logging
+    configure_logging(log_file=settings.log_file)
     _oco_tasks: set[asyncio.Task] = set()
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()

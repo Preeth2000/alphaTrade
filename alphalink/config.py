@@ -31,6 +31,7 @@ class Defaults(BaseSettings):
     stop_loss_pct: float = 0.02
     take_profit_pct: float = 0.05
     cooldown_bars: int = 3
+    extended_hours: bool = False  # set True to allow ticks outside NYSE regular hours
 
 
 class Settings(BaseSettings):
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
     overrides_path: Path = Path("./overrides.yaml")
     webhook_url: str = ""
     webhook_level: str = "WARNING"
+    log_file: Path = Path("./alphalink.log")
 
     # Populated from overrides.yaml after load
     defaults: Defaults = Defaults()

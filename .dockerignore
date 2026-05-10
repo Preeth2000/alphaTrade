@@ -1,0 +1,17 @@
+.git/
+.beads/
+.github/
+tests/
+docs/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.db
+*.parquet
+.env
+*.egg-info/
+dist/
+build/
+HALT
+alphalink.log*

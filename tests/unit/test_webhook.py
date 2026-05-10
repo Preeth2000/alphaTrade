@@ -46,9 +46,9 @@ def test_notify_discord_sends_content_payload():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "Daily loss halt", "daily-loss-halt")
-    payload = mock.calls[0].request.read()
-    body = json.loads(payload)
-    assert body == {"content": "[WARNING] Daily loss halt"}
+        payload = mock.calls[0].request.read()
+        body = json.loads(payload)
+        assert body == {"content": "[WARNING] Daily loss halt"}
 
 
 # --- notify(): Slack ---
@@ -58,8 +58,8 @@ def test_notify_slack_sends_text_payload():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(SLACK_URL).mock(return_value=httpx.Response(200))
         webhook.notify("ERROR", "Order failed", "order-reject")
-    body = json.loads(mock.calls[0].request.read())
-    assert body == {"text": "[ERROR] Order failed"}
+        body = json.loads(mock.calls[0].request.read())
+        assert body == {"text": "[ERROR] Order failed"}
 
 
 # --- notify(): unknown URL → Discord format ---
@@ -70,8 +70,8 @@ def test_notify_unknown_url_uses_discord_format():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(url).mock(return_value=httpx.Response(200))
         webhook.notify("INFO", "msg", "cat")
-    body = json.loads(mock.calls[0].request.read())
-    assert "content" in body
+        body = json.loads(mock.calls[0].request.read())
+        assert "content" in body
 
 
 # --- notify(): rate limiting ---
@@ -82,7 +82,7 @@ def test_rate_limit_suppresses_second_call_same_category():
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "daily-loss-halt")
         webhook.notify("WARNING", "msg2", "daily-loss-halt")
-    assert len(mock.calls) == 1
+        assert len(mock.calls) == 1
 
 
 def test_rate_limit_different_categories_both_send():
@@ -91,7 +91,7 @@ def test_rate_limit_different_categories_both_send():
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "cat-a")
         webhook.notify("WARNING", "msg2", "cat-b")
-    assert len(mock.calls) == 2
+        assert len(mock.calls) == 2
 
 
 def test_rate_limit_allows_send_after_window_elapsed(monkeypatch):
@@ -101,7 +101,7 @@ def test_rate_limit_allows_send_after_window_elapsed(monkeypatch):
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "cat")
         webhook.notify("WARNING", "msg2", "cat")
-    assert len(mock.calls) == 2
+        assert len(mock.calls) == 2
 
 
 # --- notify(): error handling ---

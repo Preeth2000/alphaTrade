@@ -187,7 +187,7 @@ Replaces fixed `size_pct` with dynamic calculation. Three modes:
 
 **atr** — `quantity = (equity × risk_pct) / (ATR × atr_multiplier)`. ATR reused from `adapter/features.py` — no extra fetch.
 
-**vix** — `size_pct` scaled inversely with VIX level. VIX fetched via yfinance (`^VIX`) once per day, cached in memory.
+**vix** — `size_pct` scaled inversely with VIX level. VIX fetched via yfinance (`^VIX`) once per calendar day, cached in memory with date key. On restart, cache is empty — VIX re-fetched on first tick of the day.
 
 ### Config
 
@@ -310,7 +310,7 @@ alphalink report --format json|csv --since 2024-01-01
 ```
 
 Queries `trade_journal` + `model_performance`. Output per model and per ticker:
-- Win rate, trade count, avg P&L, total P&L, Sharpe proxy (annualised Sortino if enough data)
+- Win rate, trade count, avg P&L, total P&L, Sharpe proxy: annualised `mean(daily_pnl) / std(daily_pnl) * sqrt(252)`. Labelled "Sortino" in output if downside-only std used (requires ≥30 daily observations).
 
 UI can call CLI or query DB directly.
 
@@ -342,7 +342,7 @@ alphalink/
     bar_close.py       # extend: daily summary + pnl snapshot trigger
 ```
 
-**Unchanged:** `adapter/`, `consensus/`, `broker/t212_client.py`, `main.py` tick loop structure.
+**Unchanged:** `adapter/`, `consensus/`, `broker/t212_client.py`, `main.py` tick loop structure. `main.py` halt handler receives a small addition (write `trade_journal` HALT exit row) but tick loop flow is not restructured.
 
 ---
 

@@ -447,6 +447,8 @@ async def run(settings: Settings) -> None:
         default=3600,
     )
 
+    engine = get_engine(settings.state_db_path)
+
     # Reconcile positions with T212 before first tick
     await reconcile_positions(t212, settings)
 
@@ -464,8 +466,6 @@ async def run(settings: Settings) -> None:
             )
             if manifest_match:
                 static_map[manifest_match.ticker] = override.t212_ticker
-
-    engine = get_engine(settings.state_db_path)
 
     # Pre-resolve all model tickers to populate instrument cache before tick loop.
     _preresolve_tickers(t212, engine, registry, static_map)

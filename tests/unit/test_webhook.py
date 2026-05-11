@@ -16,6 +16,7 @@ def reset_state():
     webhook._webhook_url = ""
     webhook._rate_limits.clear()
     yield
+    webhook._drain()
     webhook._webhook_url = ""
     webhook._rate_limits.clear()
 
@@ -36,6 +37,7 @@ def test_configure_sets_webhook_url():
 def test_notify_noop_when_url_not_configured():
     with respx.mock() as mock:
         webhook.notify("WARNING", "test", "cat")
+        webhook._drain()
         assert len(mock.calls) == 0
 
 
@@ -46,6 +48,7 @@ def test_notify_discord_sends_content_payload():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "Daily loss halt", "daily-loss-halt")
+        webhook._drain()
         payload = mock.calls[0].request.read()
         body = json.loads(payload)
         assert body == {"content": "[WARNING] Daily loss halt"}
@@ -58,6 +61,7 @@ def test_notify_slack_sends_text_payload():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(SLACK_URL).mock(return_value=httpx.Response(200))
         webhook.notify("ERROR", "Order failed", "order-reject")
+        webhook._drain()
         body = json.loads(mock.calls[0].request.read())
         assert body == {"text": "[ERROR] Order failed"}
 
@@ -70,6 +74,7 @@ def test_notify_unknown_url_uses_discord_format():
     with respx.mock(assert_all_called=True) as mock:
         mock.post(url).mock(return_value=httpx.Response(200))
         webhook.notify("INFO", "msg", "cat")
+        webhook._drain()
         body = json.loads(mock.calls[0].request.read())
         assert "content" in body
 
@@ -82,6 +87,7 @@ def test_rate_limit_suppresses_second_call_same_category():
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "daily-loss-halt")
         webhook.notify("WARNING", "msg2", "daily-loss-halt")
+        webhook._drain()
         assert len(mock.calls) == 1
 
 
@@ -91,6 +97,7 @@ def test_rate_limit_different_categories_both_send():
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "cat-a")
         webhook.notify("WARNING", "msg2", "cat-b")
+        webhook._drain()
         assert len(mock.calls) == 2
 
 
@@ -101,6 +108,7 @@ def test_rate_limit_allows_send_after_window_elapsed(monkeypatch):
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         webhook.notify("WARNING", "msg1", "cat")
         webhook.notify("WARNING", "msg2", "cat")
+        webhook._drain()
         assert len(mock.calls) == 2
 
 
@@ -112,6 +120,7 @@ def test_notify_delivery_failure_does_not_raise():
         mock.post(DISCORD_URL).mock(side_effect=httpx.ConnectError("timeout"))
         # Must not raise
         webhook.notify("WARNING", "msg", "cat")
+        webhook._drain()
 
 
 def test_notify_non_2xx_response_does_not_raise():
@@ -120,6 +129,7 @@ def test_notify_non_2xx_response_does_not_raise():
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(429))
         # Must not raise even on 429
         webhook.notify("WARNING", "msg", "cat")
+        webhook._drain()
 
 
 # --- WebhookHandler ---
@@ -136,6 +146,7 @@ def test_handler_uses_category_from_extra():
         )
         record.category = "order-reject"  # type: ignore[attr-defined]
         handler.emit(record)
+        webhook._drain()
         assert len(mock.calls) == 1
 
 
@@ -151,9 +162,11 @@ def test_handler_falls_back_to_logger_name_as_category():
         )
         # No category on record — should fall back to "alphalink.broker"
         handler.emit(record)
+        webhook._drain()
         assert len(mock.calls) == 1
     # Second call for same logger name should be rate-limited
     with respx.mock() as mock2:
         # Don't set up a route since the request should be rate-limited
         handler.emit(record)
+        webhook._drain()
         assert len(mock2.calls) == 0  # rate-limited under "alphalink.broker"

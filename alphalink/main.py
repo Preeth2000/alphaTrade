@@ -88,14 +88,14 @@ def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
     return results
 
 
-def reconcile_positions(t212: T212Client, settings: Settings) -> None:
+async def reconcile_positions(t212: T212Client, settings: Settings) -> None:
     """Sync local PositionRepo with actual T212 portfolio on startup.
 
     Prevents stale SQLite state from causing wrong gate decisions after downtime.
     """
     engine = get_engine(settings.state_db_path)
     try:
-        t212_positions = t212.get_positions()
+        t212_positions = await asyncio.to_thread(t212.get_positions)
     except Exception as exc:
         log.warning("Could not fetch T212 positions for reconciliation: %s. Using local state.", exc)
         return
@@ -135,6 +135,27 @@ def reconcile_positions(t212: T212Client, settings: Settings) -> None:
                     last_signal_ts=existing.last_signal_ts if existing else None,
                     cooldown_until_ts=existing.cooldown_until_ts if existing else None,
                 ))
+
+
+def _preresolve_tickers(
+    t212,
+    engine,
+    registry,
+    static_map: dict[str, str],
+) -> None:
+    """Populate instrument cache for all registry tickers before tick loop starts."""
+    from sqlmodel import Session
+    from alphalink.broker.instrument_map import InstrumentMap
+    from alphalink.store.repos import InstrumentCacheRepo
+
+    with Session(engine) as session:
+        cache = InstrumentCacheRepo(session)
+        inst_map = InstrumentMap(t212, cache, static_map)
+        for manifest, _ in registry.by_run_name.values():
+            try:
+                inst_map.resolve(manifest.ticker)
+            except Exception as exc:
+                log.warning("Pre-resolve failed for %s: %s", manifest.ticker, exc)
 
 
 def make_tick(
@@ -427,7 +448,7 @@ async def run(settings: Settings) -> None:
     )
 
     # Reconcile positions with T212 before first tick
-    reconcile_positions(t212, settings)
+    await reconcile_positions(t212, settings)
 
     # Initialize open_positions gauge from reconciled DB state
     with Session(engine) as _session:
@@ -445,6 +466,9 @@ async def run(settings: Settings) -> None:
                 static_map[manifest_match.ticker] = override.t212_ticker
 
     engine = get_engine(settings.state_db_path)
+
+    # Pre-resolve all model tickers to populate instrument cache before tick loop.
+    _preresolve_tickers(t212, engine, registry, static_map)
 
     # Snapshot initial intervals to determine which scheduler tasks to spawn.
     # New models on existing intervals are hot-reloaded each tick.

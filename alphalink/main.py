@@ -246,6 +246,7 @@ def make_tick(
     All T212Client HTTP calls run via asyncio.to_thread so the event loop
     stays responsive to health checks and OCO monitor tasks during latency spikes.
     """
+    from alphalink.api import stream_bus as _sb
     # Tracks halt state for edge-triggered alerting across ticks.
     # Survives UTC day boundaries; relies on today_open reset producing
     # a non-halted tick before any re-halt for next-day re-entry alert.
@@ -365,6 +366,8 @@ def make_tick(
                 signal_repo.save(sig_rec)
                 signals_total.labels(ticker=yf_ticker, signal=signal).inc()
                 log.info("Signal %s → %s", yf_ticker, signal)
+                _sb.publish({"type": "signal_fired", "ticker": yf_ticker, "signal": signal,
+                             "run_name": manifest.run_name, "ts": bar_close_iso})
 
                 if kill_switch_active:
                     log.info("Kill switch: order skipped for %s %s", signal, yf_ticker)
@@ -440,6 +443,8 @@ def make_tick(
                     if saved_rec:
                         order_repo.update_fill(saved_rec.id, "filled", fill_price, t212_id)
                     log.info("Filled %s %s qty=%s", signal, t212_ticker, qty)
+                    _sb.publish({"type": "order_filled", "ticker": t212_ticker, "side": signal,
+                                 "qty": qty, "fill_price": fill_price, "ts": bar_close_iso})
                     fill_price_alert = resp.get("fillPrice") or 0.0
                     if alert_manager is not None:
                         alert_manager.notify(
@@ -549,6 +554,7 @@ def make_tick(
                             AlertLevel.ERROR,
                         )
 
+        _sb.publish({"type": "tick_complete", "interval": interval, "ts": bar_close_iso})
         health_state.last_tick_at = datetime.now(timezone.utc)
 
     return tick

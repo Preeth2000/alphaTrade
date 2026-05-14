@@ -218,6 +218,7 @@ def test_create_app_has_all_routes(tmp_path):
     assert "/api/v1/trades" in paths
     assert "/api/v1/equity-curve" in paths
     assert "/api/v1/backtest/runs/{run_id}" in paths
+    assert "/api/v1/stream" in paths
 
 
 # --- Trades ---

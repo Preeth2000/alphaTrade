@@ -62,6 +62,8 @@ class YFinanceProvider(DataProvider):
                         "1d": 86400, "1wk": 604800}
             secs = _SECONDS.get(interval, 86400)
             warmup_delta = timedelta(seconds=secs * extra_bars)
+            if interval in ("1d", "1wk"):
+                warmup_delta = timedelta(seconds=int(secs * extra_bars * 1.5))
             start_dt = pd.Timestamp(start) - warmup_delta
             start_str = start_dt.strftime("%Y-%m-%d")
 
@@ -73,6 +75,13 @@ class YFinanceProvider(DataProvider):
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
             df = df.sort_index()
+            # Flatten MultiIndex columns (yfinance >= 0.2.x may return them)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            # Rename lowercase columns if needed
+            col_map = {c: c.capitalize() for c in df.columns if c in ("open","high","low","close","volume")}
+            if col_map:
+                df = df.rename(columns=col_map)
             return df
         except Exception as exc:
             log.warning("fetch_ohlcv_range failed for %s: %s", ticker, exc)

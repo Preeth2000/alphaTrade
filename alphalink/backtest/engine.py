@@ -184,6 +184,7 @@ def _run_single_model(
         last_bar = df.iloc[-1]
         exit_price = float(last_bar["Close"])
         realized = state.pnl(exit_price) - cfg.commission_per_trade
+        equity += realized
         trades.append(_build_trade(
             state=state, exit_price=exit_price, exit_bar=len(df) - 1,
             exit_time=last_bar.name, realized_pnl=realized, exit_reason="END_OF_DATA",
@@ -205,7 +206,7 @@ def _infer(manifest: Manifest, model: OnnxModel, df) -> str:
         logits = model.run(x)
         return CLASS_NAMES[int(logits.argmax())]
     except Exception as exc:
-        log.debug("backtest infer error: %s", exc)
+        log.warning("backtest infer error: %s", exc)
         return "HOLD"
 
 

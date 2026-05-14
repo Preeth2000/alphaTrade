@@ -94,3 +94,68 @@ def test_signals_since_filters(tmp_path):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["ticker"] == "NEW"
+
+
+# --- PnL ---
+
+def test_pnl_since_filters(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import PnlSnapshot, PnlSnapshotRepo
+    with Session(engine) as s:
+        repo = PnlSnapshotRepo(s)
+        repo.upsert(PnlSnapshot(date="2020-01-01", total_equity=10000, day_pnl=0, day_pnl_pct=0, realized_pnl=0, unrealized_pnl=0))
+        repo.upsert(PnlSnapshot(date="2026-01-01", total_equity=12000, day_pnl=200, day_pnl_pct=1.7, realized_pnl=200, unrealized_pnl=0))
+    resp = _client(engine).get("/api/v1/pnl?since=2025-01-01")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["date"] == "2026-01-01"
+
+
+# --- Models ---
+
+def test_models_empty(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/models")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_models_returns_rows(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import ModelPerformanceRepo
+    with Session(engine) as s:
+        ModelPerformanceRepo(s).get_or_create("my_model")
+    resp = _client(engine).get("/api/v1/models")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["model_id"] == "my_model"
+
+
+# --- Backtest ---
+
+def test_backtest_runs_empty(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/backtest/runs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_backtest_trades_404_unknown_run(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/backtest/runs/999/trades")
+    assert resp.status_code == 404
+
+
+def test_backtest_trades_returns_rows(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import BacktestRepo
+    with Session(engine) as s:
+        run_id = BacktestRepo(s).create_run("2025-01-01", "2025-12-31")
+        BacktestRepo(s).record_trade(
+            run_id=run_id, model_id="m", side="BUY",
+            entry_time=datetime(2025, 1, 1), exit_time=datetime(2025, 2, 1),
+            entry_price=100.0, exit_price=110.0, quantity=1.0,
+            exit_reason="OCO_TP", realized_pnl=10.0,
+        )
+    resp = _client(engine).get(f"/api/v1/backtest/runs/{run_id}/trades")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1

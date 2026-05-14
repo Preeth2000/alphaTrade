@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, orders, signals, health
+    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health
 
     app = FastAPI(title="alphaLink API", version="1.0")
     session_dep = make_session_dep(engine)
@@ -19,6 +19,9 @@ def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
     app.include_router(positions.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(orders.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(signals.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(pnl.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(models.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(backtest.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
 
     return app

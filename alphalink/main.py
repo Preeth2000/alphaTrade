@@ -34,6 +34,8 @@ from alphalink.kill_switch import is_halted
 from alphalink.scheduler.bar_close import schedule_bar_close
 from alphalink.store.db import get_engine
 from alphalink.store.repos import (
+    BotSettings,
+    BotSettingsRepo,
     EquityRepo,
     InstrumentCacheRepo,
     ModelPerformanceRepo,
@@ -61,6 +63,43 @@ log = logging.getLogger(__name__)
 _INTERVAL_SECONDS: dict[str, int] = {
     "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400, "1wk": 604800,
 }
+
+
+def apply_bot_settings(
+    db_s: BotSettings,
+    settings: Settings,
+    t212_holder: list,
+) -> None:
+    from alphalink.broker.t212_client import T212Client
+    new_key = db_s.t212_api_key or ""
+    new_env = db_s.t212_env or "demo"
+    current_headers = getattr(t212_holder[0], "_headers", {})
+    if new_key and current_headers.get("Authorization") != new_key:
+        t212_holder[0] = T212Client(api_key=new_key, env=new_env)
+        log.info("Hot-reload: T212Client reinitialised (env=%s)", new_env)
+    if db_s.data_provider:
+        settings.data_provider = db_s.data_provider
+    if db_s.size_pct:
+        settings.defaults.size_pct = db_s.size_pct
+    if db_s.stop_loss_pct:
+        settings.defaults.stop_loss_pct = db_s.stop_loss_pct
+    if db_s.take_profit_pct:
+        settings.defaults.take_profit_pct = db_s.take_profit_pct
+    if db_s.cooldown_bars:
+        settings.defaults.cooldown_bars = db_s.cooldown_bars
+    settings.defaults.extended_hours = db_s.extended_hours
+    if db_s.max_positions:
+        settings.risk.max_positions = db_s.max_positions
+    if db_s.daily_loss_halt_pct:
+        settings.risk.daily_loss_halt_pct = db_s.daily_loss_halt_pct
+    settings.alerts.slack.enabled = db_s.slack_enabled
+    if db_s.slack_webhook_url:
+        settings.alerts.slack.webhook_url = db_s.slack_webhook_url
+    settings.alerts.email.enabled = db_s.email_enabled
+    if db_s.email_to_addrs:
+        settings.alerts.email.to_addrs = [
+            a.strip() for a in db_s.email_to_addrs.split(",") if a.strip()
+        ]
 
 
 def _build_data_provider(settings: Settings) -> DataProvider:
@@ -195,7 +234,7 @@ def make_tick(
     registry,
     settings: Settings,
     engine,
-    t212: T212Client,
+    t212_holder: list,
     provider,
     health_state,
     oco_tasks: set,
@@ -213,6 +252,11 @@ def make_tick(
     _prev_halt: bool = False
     async def tick() -> None:
         nonlocal _prev_halt
+        with Session(engine) as _hs:
+            _db_s = BotSettingsRepo(_hs).get()
+        if _db_s is not None:
+            apply_bot_settings(_db_s, settings, t212_holder)
+        t212 = t212_holder[0]
         bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         await registry.refresh(settings.models_dir, settings.model_overrides)
         snap = registry.snapshot_by_interval()
@@ -536,6 +580,7 @@ async def run(settings: Settings) -> None:
 
     provider = _build_data_provider(settings)
     t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)
+    t212_holder: list = [t212]
 
     health_state = HealthState()
     try:
@@ -563,7 +608,7 @@ async def run(settings: Settings) -> None:
     )
 
     # Reconcile positions with T212 before first tick
-    await reconcile_positions(t212, settings)
+    await reconcile_positions(t212_holder[0], settings)
 
     # Initialize open_positions gauge from reconciled DB state
     with Session(engine) as _session:
@@ -581,7 +626,7 @@ async def run(settings: Settings) -> None:
                 static_map[manifest_match.ticker] = override.t212_ticker
 
     # Pre-resolve all model tickers to populate instrument cache before tick loop.
-    _preresolve_tickers(t212, engine, registry, static_map)
+    _preresolve_tickers(t212_holder[0], engine, registry, static_map)
 
     # Snapshot initial intervals to determine which scheduler tasks to spawn.
     # New models on existing intervals are hot-reloaded each tick.
@@ -594,6 +639,13 @@ async def run(settings: Settings) -> None:
     except Exception as exc:
         log.error("Health server failed to start on :8080: %s", exc)
 
+    api_server = None
+    try:
+        from alphalink.api.app import start_api_server
+        api_server = await start_api_server(engine, health_state, port=settings.api_port)
+    except Exception as exc:
+        log.error("API server failed to start on :%d: %s", settings.api_port, exc)
+
     tasks = [
         asyncio.create_task(
             schedule_bar_close(
@@ -603,7 +655,7 @@ async def run(settings: Settings) -> None:
                     registry=registry,
                     settings=settings,
                     engine=engine,
-                    t212=t212,
+                    t212_holder=t212_holder,
                     provider=provider,
                     health_state=health_state,
                     oco_tasks=_oco_tasks,
@@ -673,6 +725,8 @@ async def run(settings: Settings) -> None:
         task.cancel()
     if _oco_tasks:
         await asyncio.gather(*_oco_tasks, return_exceptions=True)
+    if api_server is not None:
+        api_server.should_exit = True
     if health_runner is not None:
         await health_runner.cleanup()
     alert_manager.shutdown(timeout=5.0)

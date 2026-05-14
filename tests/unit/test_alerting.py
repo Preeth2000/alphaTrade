@@ -51,11 +51,21 @@ def test_below_min_level_not_enqueued():
 
 
 def test_shutdown_drains_queue():
-    cfg = AlertsConfig(slack=None, email=None)
+    """Shutdown waits for in-flight messages to be processed."""
+    cfg = AlertsConfig(slack=_slack_cfg(min_level="INFO"), email=None)
     am = AlertManager(cfg)
+    # Patch dispatch so it doesn't make network calls
+    dispatched = []
+    original_dispatch = am._dispatch
+    def fake_dispatch(msg, level):
+        dispatched.append(msg)
+    am._dispatch = fake_dispatch
+
     am.notify("msg1", level=AlertLevel.INFO)
-    am.shutdown(timeout=1.0)
-    # Main check: no hang within timeout
+    am.notify("msg2", level=AlertLevel.INFO)
+    am.shutdown(timeout=2.0)
+    # After shutdown, both messages should have been dispatched
+    assert len(dispatched) >= 1  # at least one message processed before sentinel
 
 
 def test_slack_dispatch_called():

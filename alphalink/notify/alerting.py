@@ -58,7 +58,10 @@ class AlertManager:
 
     def shutdown(self, timeout: float = 5.0) -> None:
         """Drain queue and stop worker thread."""
-        self._queue.put(_SENTINEL)
+        try:
+            self._queue.put_nowait(_SENTINEL)
+        except queue.Full:
+            log.warning("alert queue full during shutdown — sentinel not delivered")
         self._thread.join(timeout=timeout)
 
     def _any_enabled(self, level: AlertLevel) -> bool:
@@ -74,11 +77,14 @@ class AlertManager:
 
     def _worker(self) -> None:
         while True:
-            item = self._queue.get()
-            if item is _SENTINEL:
-                return
-            message, level = item
-            self._dispatch(message, level)
+            try:
+                item = self._queue.get()
+                if item is _SENTINEL:
+                    return
+                message, level = item
+                self._dispatch(message, level)
+            except Exception as exc:
+                log.warning("alert worker error: %s", exc)
 
     def _dispatch(self, message: str, level: AlertLevel) -> None:
         slack_cfg = self._cfg.slack

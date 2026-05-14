@@ -143,5 +143,41 @@ def resume():
         console.print("[green]Kill switch already clear.[/green]")
 
 
+@app.command()
+def backtest(
+    start: str = typer.Argument(..., help="Start date YYYY-MM-DD"),
+    end: str = typer.Argument(..., help="End date YYYY-MM-DD"),
+    models_dir: Path = typer.Option(None, "--models-dir", help="Override default models directory"),
+    output: str = typer.Option("text", "--output", "-o", help="Output format: text | json"),
+):
+    """Run dry-run backtester over historical data for all loaded models."""
+    from alphalink.config import Settings
+    from alphalink.backtest.engine import run_backtest
+    from alphalink.backtest.reporter import compute_summary, format_text
+    from alphalink.store.db import get_session
+
+    settings = Settings()
+    mdir = models_dir or settings.models_dir
+
+    console.print(f"[bold]Running backtest[/bold] {start} → {end} from {mdir}")
+
+    with get_session(settings.state_db_path) as session:
+        result = run_backtest(
+            session=session,
+            models_dir=mdir,
+            start=start,
+            end=end,
+            cfg=settings.backtest,
+        )
+
+    trades = result["trades"]
+    summary = compute_summary(trades, initial_equity=settings.backtest.initial_equity)
+
+    if output == "json":
+        console.print(json.dumps(summary, indent=2))
+    else:
+        console.print(format_text(summary))
+
+
 if __name__ == "__main__":
     app()

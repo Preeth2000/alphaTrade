@@ -64,6 +64,16 @@ class SignalRepo:
         self._s.refresh(sig)
         return sig
 
+    def list(self, limit: int = 100) -> list[Signal]:
+        return list(self._s.exec(
+            select(Signal).order_by(Signal.ts.desc()).limit(limit)
+        ).all())
+
+    def since(self, since: datetime, limit: int = 500) -> list[Signal]:
+        return list(self._s.exec(
+            select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)
+        ).all())
+
 
 class OrderRepo:
     def __init__(self, session: Session) -> None:
@@ -87,6 +97,16 @@ class OrderRepo:
             order.fill_price = fill_price
             order.t212_order_id = t212_id
             self._s.commit()
+
+    def list(self, limit: int = 100) -> list[Order]:
+        return list(self._s.exec(
+            select(Order).order_by(Order.ts.desc()).limit(limit)
+        ).all())
+
+    def since(self, since: datetime, limit: int = 500) -> list[Order]:
+        return list(self._s.exec(
+            select(Order).where(Order.ts >= since).order_by(Order.ts.desc()).limit(limit)
+        ).all())
 
 
 class PositionRepo:
@@ -325,6 +345,9 @@ class ModelPerformanceRepo:
         ).first()
         return row.retired if row else False
 
+    def all(self) -> list[ModelPerformance]:
+        return list(self._s.exec(select(ModelPerformance)).all())
+
 
 class SectorCacheRepo:
     def __init__(self, session: Session) -> None:
@@ -367,3 +390,58 @@ class BacktestRepo:
         return list(self._s.exec(
             select(BacktestTrade).where(BacktestTrade.run_id == run_id)
         ).all())
+
+    def list_runs(self, limit: int = 50) -> list[BacktestRun]:
+        return list(self._s.exec(
+            select(BacktestRun).order_by(BacktestRun.ts.desc()).limit(limit)
+        ).all())
+
+
+# ---------------------------------------------------------------------------
+# BotSettings (migration 0003)
+# ---------------------------------------------------------------------------
+
+class BotSettings(SQLModel, table=True):
+    id: int = Field(default=1, primary_key=True)
+    t212_api_key: str = Field(default="")
+    t212_env: str = Field(default="demo")
+    t212_account_type: str = Field(default="invest")
+    data_provider: str = Field(default="yfinance")
+    polygon_api_key: str = Field(default="")
+    slack_enabled: bool = Field(default=False)
+    slack_webhook_url: str = Field(default="")
+    slack_min_level: str = Field(default="WARNING")
+    email_enabled: bool = Field(default=False)
+    email_smtp_host: str = Field(default="")
+    email_smtp_port: int = Field(default=587)
+    email_smtp_user: str = Field(default="")
+    email_smtp_password: str = Field(default="")
+    email_from_addr: str = Field(default="")
+    email_to_addrs: str = Field(default="")
+    email_min_level: str = Field(default="WARNING")
+    size_pct: float = Field(default=0.10)
+    stop_loss_pct: float = Field(default=0.02)
+    take_profit_pct: float = Field(default=0.05)
+    cooldown_bars: int = Field(default=3)
+    extended_hours: bool = Field(default=False)
+    max_positions: int = Field(default=5)
+    daily_loss_halt_pct: float = Field(default=0.05)
+    alphalink_api_key: str = Field(default="")
+
+
+class BotSettingsRepo:
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def get(self) -> BotSettings | None:
+        return self._s.get(BotSettings, 1)
+
+    def upsert(self, settings: BotSettings) -> None:
+        settings.id = 1
+        existing = self._s.get(BotSettings, 1)
+        if existing:
+            for key, val in settings.model_dump(exclude={"id"}).items():
+                setattr(existing, key, val)
+        else:
+            self._s.add(settings)
+        self._s.commit()

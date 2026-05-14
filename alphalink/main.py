@@ -88,6 +88,31 @@ def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
     return results
 
 
+def build_sell_journal_entry(
+    model_id: str,
+    t212_ticker: str,
+    exit_price: float,
+    quantity: float,
+    position: "Position",
+) -> "TradeJournal":
+    from alphalink.store.repos import TradeJournal
+    entry_price = position.avg_entry
+    realized_pnl = (exit_price - entry_price) * quantity
+    pnl_pct = (exit_price - entry_price) / entry_price if entry_price else 0.0
+    return TradeJournal(
+        model_id=model_id,
+        ticker=t212_ticker,
+        entry_price=entry_price,
+        exit_price=exit_price,
+        quantity=quantity,
+        entry_time=position.opened_at,
+        exit_time=datetime.utcnow(),
+        exit_reason="SIGNAL_SELL",
+        realized_pnl=realized_pnl,
+        pnl_pct=pnl_pct,
+    )
+
+
 async def reconcile_positions(t212: T212Client, settings: Settings) -> None:
     """Sync local PositionRepo with actual T212 portfolio on startup.
 
@@ -277,6 +302,8 @@ def make_tick(
                     log.info("Kill switch: order skipped for %s %s", signal, yf_ticker)
                     continue
 
+                pos = pos_repo.get(t212_ticker)
+
                 gate: GateResult = run_gates(
                     signal=signal,
                     t212_ticker=t212_ticker,
@@ -360,6 +387,12 @@ def make_tick(
                                 limit_order_id=str(limit_resp["id"]),
                                 engine=engine,
                                 cooldown_td=cooldown_td,
+                                entry_price=entry_price,
+                                sl_price=sl_price,
+                                tp_price=tp_price,
+                                quantity=qty,
+                                model_id=manifest.run_name,
+                                entry_time=datetime.utcnow(),
                             ))
                             oco_tasks.add(_task)
                             _task.add_done_callback(oco_tasks.discard)
@@ -386,6 +419,18 @@ def make_tick(
                             cooldown_until_ts=datetime.utcnow() + cooldown_td,
                         ))
                         metric_open_positions.set(len(pos_repo.all()))
+                        if pos:
+                            from alphalink.store.repos import TradeJournalRepo
+                            fill_price_raw = resp.get("fillPrice") if isinstance(resp, dict) else None
+                            exit_p = float(fill_price_raw) if fill_price_raw else current_price
+                            journal_repo = TradeJournalRepo(session)
+                            journal_repo.save(build_sell_journal_entry(
+                                model_id=manifest.run_name,
+                                t212_ticker=t212_ticker,
+                                exit_price=exit_p,
+                                quantity=qty,
+                                position=pos,
+                            ))
 
                 except Exception as exc:
                     err_rec = order_repo.find_by_client_order_id(cid)

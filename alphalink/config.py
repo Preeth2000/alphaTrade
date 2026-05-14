@@ -17,11 +17,86 @@ class ModelOverride(BaseSettings):
     size_pct: Optional[float] = None
 
 
+class ModelRetirementConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    enabled: bool = False
+    lookback_trades: int = 20
+    min_win_rate: float = 0.4
+    min_rolling_pnl: float = -500.0
+    auto_reload: bool = True
+
+
+class BalancedPortfolioConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    max_sector_pct: float = 0.33
+
+
+class UnbalancedPortfolioConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    max_per_sector: int = 3
+    sector_overrides: dict[str, int] = {}
+
+
+class AtrSizingConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    risk_pct: float = 0.01
+    atr_multiplier: float = 2.0
+
+
+class VixSizingConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    base_size_pct: float = 0.05
+    vix_scalar: float = 20.0
+    max_size_pct: float = 0.15
+
+
+class AlertSlackConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    enabled: bool = False
+    webhook_url: str = ""
+    min_level: str = "WARNING"
+
+
+class AlertEmailConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_addr: str = ""
+    to_addrs: list[str] = []
+    min_level: str = "CRITICAL"
+
+
+class AlertsConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    slack: AlertSlackConfig = AlertSlackConfig()
+    email: AlertEmailConfig = AlertEmailConfig()
+
+
+class BacktestConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    slippage_bps: int = 5
+    commission_per_trade: float = 0.0
+    initial_equity: float = 10000.0
+    default_size_pct: float = 0.10
+    sl_pct: Optional[float] = None
+    tp_pct: Optional[float] = None
+
+
 class RiskConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     max_positions: int = 5
     daily_loss_halt_pct: float = 0.05
+    sizing_mode: str = "fixed"          # fixed | atr | vix
+    portfolio_mode: str = "unbalanced"  # balanced | unbalanced
+    model_retirement: ModelRetirementConfig = ModelRetirementConfig()
+    balanced: BalancedPortfolioConfig = BalancedPortfolioConfig()
+    unbalanced: UnbalancedPortfolioConfig = UnbalancedPortfolioConfig()
+    atr: AtrSizingConfig = AtrSizingConfig()
+    vix: VixSizingConfig = VixSizingConfig()
 
 
 class Defaults(BaseSettings):
@@ -52,6 +127,8 @@ class Settings(BaseSettings):
     defaults: Defaults = Defaults()
     risk: RiskConfig = RiskConfig()
     model_overrides: dict[str, ModelOverride] = {}
+    alerts: AlertsConfig = AlertsConfig()
+    backtest: BacktestConfig = BacktestConfig()
 
     @field_validator("webhook_level")
     @classmethod
@@ -74,6 +151,10 @@ class Settings(BaseSettings):
                     run_name: ModelOverride(**(cfg or {}))
                     for run_name, cfg in raw["models"].items()
                 }
+            if "alerts" in raw:
+                self.alerts = AlertsConfig(**raw["alerts"])
+            if "backtest" in raw:
+                self.backtest = BacktestConfig(**raw["backtest"])
         if self.data_provider == "polygon" and not self.polygon_api_key:
             raise ValueError("POLYGON_API_KEY is required when DATA_PROVIDER=polygon")
         if self.t212_env not in ("demo", "live"):

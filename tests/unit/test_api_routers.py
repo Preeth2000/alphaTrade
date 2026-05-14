@@ -53,3 +53,44 @@ def test_health_returns_state(tmp_path):
     assert body["t212_ok"] is True
     assert body["models_loaded"] is True
     assert body["last_tick_at"] is None
+
+
+# --- Orders ---
+
+from datetime import datetime, timedelta
+
+
+def test_orders_empty_defaults_24h(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/orders")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_orders_since_filters(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import Order
+    with Session(engine) as s:
+        s.add(Order(ts=datetime(2020, 1, 1), t212_ticker="OLD", side="BUY", quantity=1.0, status="filled"))
+        s.add(Order(ts=datetime(2026, 1, 1), t212_ticker="NEW", side="BUY", quantity=1.0, status="filled"))
+        s.commit()
+    resp = _client(engine).get("/api/v1/orders?since=2025-01-01T00:00:00&limit=50")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["t212_ticker"] == "NEW"
+
+
+# --- Signals ---
+
+def test_signals_since_filters(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import Signal
+    with Session(engine) as s:
+        s.add(Signal(ts=datetime(2020, 1, 1), run_name="r", ticker="OLD", signal="BUY"))
+        s.add(Signal(ts=datetime(2026, 1, 1), run_name="r", ticker="NEW", signal="SELL"))
+        s.commit()
+    resp = _client(engine).get("/api/v1/signals?since=2025-01-01T00:00:00")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["ticker"] == "NEW"

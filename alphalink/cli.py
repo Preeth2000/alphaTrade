@@ -179,5 +179,81 @@ def backtest(
         console.print(format_text(summary))
 
 
+@app.command()
+def report(
+    since: str = typer.Option("", "--since", help="Start date YYYY-MM-DD (default: 30 days ago)"),
+    output: str = typer.Option("text", "--output", "-o", help="Output format: text | json | csv"),
+):
+    """Print P&L report: daily snapshots and closed trade summary since DATE."""
+    import csv
+    import sys
+    from datetime import date, timedelta
+    from alphalink.config import Settings
+    from alphalink.store.db import get_session
+    from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo
+
+    settings = Settings()
+    since_date = since or (date.today() - timedelta(days=30)).isoformat()
+
+    with get_session(settings.state_db_path) as session:
+        snapshots = PnlSnapshotRepo(session).since(since_date)
+        trades = TradeJournalRepo(session).since(since_date)
+
+    snap_dicts = [
+        {
+            "date": s.date,
+            "total_equity": s.total_equity,
+            "day_pnl": s.day_pnl,
+            "day_pnl_pct": s.day_pnl_pct,
+            "trade_count": s.trade_count,
+        }
+        for s in snapshots
+    ]
+    trade_dicts = [
+        {
+            "ts": t.ts.isoformat(),
+            "model_id": t.model_id,
+            "ticker": t.ticker,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
+            "quantity": t.quantity,
+            "realized_pnl": t.realized_pnl,
+            "exit_reason": t.exit_reason,
+        }
+        for t in trades
+    ]
+
+    if output == "json":
+        console.print(json.dumps({"snapshots": snap_dicts, "trades": trade_dicts}, indent=2))
+
+    elif output == "csv":
+        if trade_dicts:
+            writer = csv.DictWriter(sys.stdout, fieldnames=list(trade_dicts[0].keys()))
+            writer.writeheader()
+            writer.writerows(trade_dicts)
+        else:
+            console.print("No trades found.")
+
+    else:
+        if snap_dicts:
+            t = Table("date", "equity", "day P&L", "day %", "trades")
+            for s in snap_dicts:
+                t.add_row(
+                    s["date"],
+                    f"{s['total_equity']:.2f}",
+                    f"{s['day_pnl']:+.2f}",
+                    f"{s['day_pnl_pct']:+.2f}%",
+                    str(s["trade_count"]),
+                )
+            console.print("\n[bold]Daily P&L snapshots:[/bold]")
+            console.print(t)
+        else:
+            console.print(f"No snapshots since {since_date}.")
+
+        total_realized = sum(tr["realized_pnl"] for tr in trade_dicts)
+        console.print(f"\n[bold]Total realized P&L since {since_date}:[/bold] {total_realized:+.2f}")
+        console.print(f"[bold]Closed trades:[/bold] {len(trade_dicts)}")
+
+
 if __name__ == "__main__":
     app()

@@ -196,6 +196,7 @@ def make_tick(
     health_state,
     oco_tasks: set,
     static_map: dict[str, str],
+    alert_manager=None,
 ):
     """Return an async tick coroutine for the given interval.
 
@@ -249,6 +250,8 @@ def make_tick(
         kill_switch_active = is_halted()
         if kill_switch_active:
             log.warning("Kill switch active — signals will be logged but orders skipped")
+            if alert_manager is not None:
+                alert_manager.notify("Kill switch engaged — orders halted", AlertLevel.CRITICAL)
 
         # Fresh session per tick — no long-lived session across bar closes
         with Session(engine) as session:
@@ -281,6 +284,11 @@ def make_tick(
                     f"Daily loss halt active ({daily_loss_pct:.2%}). No new orders.",
                     category="daily-loss-halt",
                 )
+                if alert_manager is not None:
+                    alert_manager.notify(
+                        f"Daily loss at 80% of limit: {abs(daily_loss_pct * today_open):.2f} / {settings.risk.daily_loss_halt_pct * today_open:.2f}",
+                        AlertLevel.WARNING,
+                    )
             _prev_halt = daily_loss_halted
 
             for yf_ticker, signal in signals.items():
@@ -377,6 +385,12 @@ def make_tick(
                     if saved_rec:
                         order_repo.update_fill(saved_rec.id, "filled", fill_price, t212_id)
                     log.info("Filled %s %s qty=%s", signal, t212_ticker, qty)
+                    fill_price_alert = resp.get("fillPrice") or 0.0
+                    if alert_manager is not None:
+                        alert_manager.notify(
+                            f"Order filled: {signal} {qty:.2f}x {t212_ticker} @ {float(fill_price_alert):.4f}",
+                            AlertLevel.INFO,
+                        )
                     orders_total.labels(side=signal, status="filled").inc()
 
                     cooldown_td = timedelta(
@@ -463,9 +477,10 @@ def make_tick(
                                          cfg=settings.risk.model_retirement)
                             if check_retirement(session, model_id=manifest.run_name,
                                                 cfg=settings.risk.model_retirement):
-                                wh.notify("WARNING",
-                                          f"Model {manifest.run_name} retired after performance check",
-                                          category="model-retirement")
+                                msg = f"Model {manifest.run_name} auto-retired: performance below threshold"
+                                wh.notify("WARNING", msg, category="model-retirement")
+                                if alert_manager is not None:
+                                    alert_manager.notify(msg, AlertLevel.WARNING)
 
                 except Exception as exc:
                     err_rec = order_repo.find_by_client_order_id(cid)
@@ -473,6 +488,11 @@ def make_tick(
                         order_repo.update_fill(err_rec.id, "error", None, "")
                     orders_total.labels(side=signal, status="error").inc()
                     log.error("Order failed for %s: %s", t212_ticker, exc)
+                    if alert_manager is not None:
+                        alert_manager.notify(
+                            f"Order error for {t212_ticker}: {exc}",
+                            AlertLevel.ERROR,
+                        )
 
         health_state.last_tick_at = datetime.now(timezone.utc)
 
@@ -515,6 +535,9 @@ async def run(settings: Settings) -> None:
         health_state.t212_ok = False
 
     engine = get_engine(settings.state_db_path)
+
+    from alphalink.notify.alerting import AlertManager, AlertLevel
+    alert_manager = AlertManager(settings.alerts)
 
     from alphalink.model_registry import ModelRegistry
     registry = ModelRegistry(engine=engine)
@@ -575,6 +598,7 @@ async def run(settings: Settings) -> None:
                     health_state=health_state,
                     oco_tasks=_oco_tasks,
                     static_map=static_map,
+                    alert_manager=alert_manager,
                 ),
                 stop_event,
                 extended_hours=settings.defaults.extended_hours,
@@ -582,6 +606,55 @@ async def run(settings: Settings) -> None:
         )
         for interval, interval_models in by_interval.items()
     ]
+
+    async def daily_close_callback() -> None:
+        """Fires at NYSE close: write PnlSnapshot + send daily summary alert."""
+        from datetime import date
+        from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo, PositionRepo, PnlSnapshot, EquityRepo
+
+        today_str = date.today().isoformat()
+        try:
+            with Session(engine) as session:
+                journal_repo = TradeJournalRepo(session)
+                pos_repo = PositionRepo(session)
+                snapshot_repo = PnlSnapshotRepo(session)
+                eq_repo = EquityRepo(session)
+
+                today_trades = journal_repo.today()
+                realized_pnl = sum(t.realized_pnl for t in today_trades)
+                trade_count = len(today_trades)
+                open_positions = pos_repo.all()
+                today_open = eq_repo.today_open() or 0.0
+                total_equity = today_open + realized_pnl
+                day_pnl_pct = (realized_pnl / today_open * 100) if today_open > 0 else 0.0
+
+                snapshot_repo.upsert(PnlSnapshot(
+                    date=today_str,
+                    total_equity=total_equity,
+                    day_pnl=realized_pnl,
+                    day_pnl_pct=day_pnl_pct,
+                    realized_pnl=realized_pnl,
+                    unrealized_pnl=0.0,
+                    open_positions=len(open_positions),
+                    trade_count=trade_count,
+                ))
+
+                summary = (
+                    f"Daily summary {today_str}: "
+                    f"realized P&L={realized_pnl:+.2f} ({day_pnl_pct:+.2f}%), "
+                    f"{trade_count} trade(s) closed, "
+                    f"{len(open_positions)} position(s) open"
+                )
+                log.info(summary)
+                alert_manager.notify(summary, AlertLevel.INFO)
+
+        except Exception as exc:
+            log.error("daily_close_callback failed: %s", exc)
+
+    tasks.append(asyncio.create_task(
+        schedule_bar_close("1d", daily_close_callback, stop_event=stop_event)
+    ))
+
     log.info("Scheduler running. Intervals: %s", list(by_interval.keys()))
     await asyncio.gather(*tasks)
 
@@ -592,4 +665,5 @@ async def run(settings: Settings) -> None:
         await asyncio.gather(*_oco_tasks, return_exceptions=True)
     if health_runner is not None:
         await health_runner.cleanup()
+    alert_manager.shutdown(timeout=5.0)
     log.info("Graceful shutdown complete.")

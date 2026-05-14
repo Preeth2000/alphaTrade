@@ -159,3 +159,59 @@ def test_backtest_trades_returns_rows(tmp_path):
     resp = _client(engine).get(f"/api/v1/backtest/runs/{run_id}/trades")
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+# --- Settings ---
+
+def test_settings_get_returns_defaults(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["t212_env"] == "demo"
+    assert body["max_positions"] == 5
+
+
+def test_settings_sensitive_fields_masked(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    with Session(engine) as s:
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphalink_api_key="api-key"))
+    resp = _client(engine).get("/api/v1/settings", headers={"X-API-Key": "api-key"})
+    body = resp.json()
+    assert body["t212_api_key"] == "***"
+    assert body["alphalink_api_key"] == "***"
+
+
+def test_settings_put_partial_update(tmp_path):
+    engine = _engine(tmp_path)
+    client = _client(engine)
+    resp = client.put("/api/v1/settings", json={"max_positions": 10, "t212_env": "live"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["max_positions"] == 10
+    assert body["t212_env"] == "live"
+    assert body["size_pct"] == pytest.approx(0.10)
+
+
+def test_settings_put_sensitive_masked_in_response(tmp_path):
+    resp = _client(_engine(tmp_path)).put("/api/v1/settings", json={"t212_api_key": "new-key"})
+    assert resp.json()["t212_api_key"] == "***"
+
+
+# --- Route completeness ---
+
+def test_create_app_has_all_routes(tmp_path):
+    engine = _engine(tmp_path)
+    state = HealthState()
+    from alphalink.api.app import create_app
+    app = create_app(engine, state)
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/positions" in paths
+    assert "/api/v1/orders" in paths
+    assert "/api/v1/signals" in paths
+    assert "/api/v1/pnl" in paths
+    assert "/api/v1/models" in paths
+    assert "/api/v1/backtest/runs" in paths
+    assert "/api/v1/backtest/runs/{run_id}/trades" in paths
+    assert "/api/v1/health" in paths
+    assert "/api/v1/settings" in paths

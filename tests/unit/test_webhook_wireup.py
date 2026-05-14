@@ -50,6 +50,7 @@ def _base_patches():
         patch("alphalink.main._preresolve_tickers"),
         patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
         patch("prometheus_client.start_http_server"),
+        patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
     ]
 
 
@@ -66,6 +67,7 @@ class TestStartupNotify:
             patch("alphalink.main._preresolve_tickers"),
             patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
             patch("prometheus_client.start_http_server"),
+            patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
             patch("alphalink.main.wh.notify") as mock_notify,
         ):
             await run(settings)
@@ -89,6 +91,7 @@ class TestStartupNotify:
             patch("alphalink.main._preresolve_tickers"),
             patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
             patch("prometheus_client.start_http_server"),
+            patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
             patch("alphalink.main.wh.notify") as mock_notify,
         ):
             await run(settings)
@@ -135,6 +138,7 @@ class TestHandlerIdempotency:
                 patch("alphalink.main._preresolve_tickers"),
                 patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
                 patch("prometheus_client.start_http_server"),
+                patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
                 patch("alphalink.main.wh.notify"),  # suppress actual delivery
             ):
                 await run(settings)

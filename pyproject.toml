@@ -47,3 +47,11 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["alphalink"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+
+[tool.hatch.build.targets.sdist]
+include = ["alphalink/store/alembic.ini", "alphalink/store/migrations/**"]
+
+[tool.setuptools.package-data]
+"alphalink.store" = ["alembic.ini", "migrations/**/*"]

@@ -27,6 +27,7 @@ from alphalink.config import Settings
 from alphalink.consensus.softmax_avg import consensus_by_ticker
 from alphalink.data.provider import DataProvider
 from alphalink.notify import webhook as wh
+from alphalink.notify.alerting import AlertManager, AlertLevel
 from alphalink.risk.gates import GateResult, run_gates
 from alphalink.risk.sizing import compute_quantity
 from alphalink.kill_switch import is_halted
@@ -71,6 +72,9 @@ def _build_data_provider(settings: Settings) -> DataProvider:
 
 
 def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
+    if not models_dir.exists():
+        log.error("models_dir does not exist: %s", models_dir)
+        return []
     results = []
     for run_dir in sorted(models_dir.iterdir()):
         if not run_dir.is_dir():
@@ -291,6 +295,12 @@ def make_tick(
                     )
             _prev_halt = daily_loss_halted
 
+            current_vix: float | None = None
+            if settings.risk.sizing_mode == "vix":
+                current_vix = await asyncio.to_thread(provider.fetch_vix)
+                if current_vix is None:
+                    log.warning("VIX fetch failed; compute_quantity will use internal fallback")
+
             for yf_ticker, signal in signals.items():
                 manifest = ticker_manifest[yf_ticker]
                 override = settings.model_overrides.get(manifest.run_name)
@@ -356,6 +366,7 @@ def make_tick(
                     atr=raw_atr,
                     atr_risk_pct=settings.risk.atr.risk_pct,
                     atr_multiplier=settings.risk.atr.atr_multiplier,
+                    current_vix=current_vix,
                     vix_base_size_pct=settings.risk.vix.base_size_pct,
                     vix_scalar=settings.risk.vix.vix_scalar,
                     vix_max_size_pct=settings.risk.vix.max_size_pct,
@@ -536,7 +547,6 @@ async def run(settings: Settings) -> None:
 
     engine = get_engine(settings.state_db_path)
 
-    from alphalink.notify.alerting import AlertManager, AlertLevel
     alert_manager = AlertManager(settings.alerts)
 
     from alphalink.model_registry import ModelRegistry

@@ -44,6 +44,18 @@ class YFinanceProvider(DataProvider):
         validate_ohlcv(result, interval, ticker)
         return result
 
+    def fetch_vix(self) -> float | None:
+        """Return latest VIX close. Returns None on failure."""
+        try:
+            import yfinance as yf
+            hist = yf.Ticker("^VIX").history(period="1d")
+            if hist.empty:
+                raise ValueError("Empty VIX history")
+            return float(hist["Close"].iloc[-1])
+        except Exception as exc:
+            log.warning("VIX fetch failed: %s", exc)
+            return None
+
     def fetch_ohlcv_range(
         self,
         ticker: str,

@@ -22,7 +22,7 @@ def run(
     from alphalink.config import Settings
     from alphalink.main import run as _run
 
-    settings = Settings()
+    settings = Settings(overrides_path=overrides)
     asyncio.run(_run(settings))
 
 

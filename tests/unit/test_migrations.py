@@ -50,7 +50,7 @@ class TestAlembicMigrations:
         monkeypatch.setattr(SQLModel.metadata, "create_all", lambda *a, **kw: calls.append(1))
 
         from alphalink.store import db as db_mod
-        monkeypatch.setattr(db_mod, "_engine", None)
+        monkeypatch.setattr(db_mod, "_engines", {})
 
         from alphalink.store.db import get_engine
         get_engine(tmp_path / "test.db")

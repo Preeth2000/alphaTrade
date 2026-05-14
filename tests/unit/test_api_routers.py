@@ -215,3 +215,83 @@ def test_create_app_has_all_routes(tmp_path):
     assert "/api/v1/backtest/runs/{run_id}/trades" in paths
     assert "/api/v1/health" in paths
     assert "/api/v1/settings" in paths
+    assert "/api/v1/trades" in paths
+    assert "/api/v1/equity-curve" in paths
+    assert "/api/v1/backtest/runs/{run_id}" in paths
+
+
+# --- Trades ---
+
+def test_trades_empty(tmp_path):
+    resp = _client(_engine(tmp_path)).get("/api/v1/trades")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_trades_since_filters(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import TradeJournal, TradeJournalRepo
+    with Session(engine) as s:
+        repo = TradeJournalRepo(s)
+        repo.save(TradeJournal(
+            ts=datetime(2020, 1, 1), model_id="m1", ticker="AAPL",
+            entry_price=100.0, exit_price=110.0, quantity=1.0,
+            entry_time=datetime(2020, 1, 1), exit_time=datetime(2020, 1, 2),
+            exit_reason="SIGNAL_SELL", realized_pnl=10.0, pnl_pct=0.10,
+        ))
+        repo.save(TradeJournal(
+            ts=datetime(2026, 1, 1), model_id="m1", ticker="TSLA",
+            entry_price=200.0, exit_price=220.0, quantity=2.0,
+            entry_time=datetime(2026, 1, 1), exit_time=datetime(2026, 1, 2),
+            exit_reason="OCO_TP", realized_pnl=40.0, pnl_pct=0.10,
+        ))
+    resp = _client(engine).get("/api/v1/trades?since=2025-01-01T00:00:00")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["ticker"] == "TSLA"
+
+
+def test_trades_model_id_filter(tmp_path):
+    engine = _engine(tmp_path)
+    from alphalink.store.repos import TradeJournal, TradeJournalRepo
+    with Session(engine) as s:
+        repo = TradeJournalRepo(s)
+        for ticker, model in [("AAPL", "model_a"), ("TSLA", "model_b")]:
+            repo.save(TradeJournal(
+                ts=datetime(2026, 1, 1), model_id=model, ticker=ticker,
+                entry_price=100.0, exit_price=110.0, quantity=1.0,
+                entry_time=datetime(2026, 1, 1), exit_time=datetime(2026, 1, 2),
+                exit_reason="SIGNAL_SELL", realized_pnl=10.0, pnl_pct=0.10,
+            ))
+    resp = _client(engine).get("/api/v1/trades?model_id=model_a")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["model_id"] == "model_a"
+
+
+# --- CORS ---
+
+def test_cors_preflight_returns_allow_origin(tmp_path):
+    from fastapi.testclient import TestClient
+    from alphalink.api.app import create_app
+    client = TestClient(create_app(_engine(tmp_path), HealthState()))
+    resp = client.options(
+        "/api/v1/positions",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-API-Key",
+        },
+    )
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+
+def test_cors_get_response_has_allow_origin(tmp_path):
+    from fastapi.testclient import TestClient
+    from alphalink.api.app import create_app
+    client = TestClient(create_app(_engine(tmp_path), HealthState()))
+    resp = client.get("/api/v1/positions", headers={"Origin": "http://localhost:3000"})
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "*"

@@ -434,7 +434,7 @@ def make_tick(
                         log.info("Duplicate order skipped (cid=%s)", cid)
                         orders_total.labels(side=signal, status="skipped_duplicate").inc()
                         continue
-                    fill_price = resp.get("fillPrice") or resp.get("filledQuantity")
+                    fill_price = resp.get("fillPrice")
                     t212_id = str(resp.get("id", ""))
                     saved_rec = order_repo.find_by_client_order_id(cid)
                     if saved_rec:

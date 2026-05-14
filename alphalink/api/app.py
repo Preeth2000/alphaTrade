@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity
+    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity, trades
 
     app = FastAPI(title="alphaLink API", version="1.0")
     app.add_middleware(
@@ -35,6 +35,7 @@ def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
     app.include_router(settings.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(equity.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(trades.make_router(session_dep, api_key_dep), prefix="/api/v1")
 
     return app
 

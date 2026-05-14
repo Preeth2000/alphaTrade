@@ -35,10 +35,12 @@ from alphalink.store.db import get_engine
 from alphalink.store.repos import (
     EquityRepo,
     InstrumentCacheRepo,
+    ModelPerformanceRepo,
     Order,
     OrderRepo,
     Position,
     PositionRepo,
+    SectorCacheRepo,
     Signal,
     SignalRepo,
 )
@@ -247,7 +249,7 @@ def make_tick(
         # Fresh session per tick — no long-lived session across bar closes
         with Session(engine) as session:
             inst_cache = InstrumentCacheRepo(session)
-            instrument_map = InstrumentMap(t212, inst_cache, static_map)
+            instrument_map = InstrumentMap(t212, inst_cache, static_map, sector_repo=SectorCacheRepo(session))
             pos_repo = PositionRepo(session)
             eq_repo = EquityRepo(session)
             signal_repo = SignalRepo(session)
@@ -310,6 +312,12 @@ def make_tick(
                     position_repo=pos_repo,
                     max_positions=settings.risk.max_positions,
                     daily_loss_halted=daily_loss_halted,
+                    model_id=manifest.run_name,
+                    perf_repo=ModelPerformanceRepo(session),
+                    yf_ticker=manifest.ticker,
+                    equity=equity,
+                    sector_repo=SectorCacheRepo(session),
+                    risk_cfg=settings.risk,
                 )
 
                 if not gate.approved:

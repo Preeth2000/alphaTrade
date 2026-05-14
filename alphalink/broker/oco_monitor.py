@@ -139,6 +139,14 @@ def _close_position(
                 realized_pnl=realized_pnl,
                 pnl_pct=pnl_pct,
             ))
+            # Record performance for retirement evaluation (uses defaults; tick loop enforces policy)
+            try:
+                from alphalink.risk.performance import record_trade as _record_trade
+                from alphalink.config import ModelRetirementConfig
+                _record_trade(session, model_id=model_id, realized_pnl=realized_pnl,
+                              cfg=ModelRetirementConfig())
+            except Exception as exc:
+                log.warning("Performance record failed for %s: %s", model_id, exc)
 
     log.info("OCO %s hit for %s — position closed pnl=%.2f", exit_reason, t212_ticker, realized_pnl)
     wh.notify("INFO", f"OCO {exit_reason} hit for {t212_ticker} pnl={realized_pnl:.2f}", category="oco")

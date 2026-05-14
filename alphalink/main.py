@@ -222,6 +222,7 @@ def make_tick(
 
         ticker_logits: dict[str, list] = defaultdict(list)
         ticker_manifest: dict[str, Manifest] = {}
+        ticker_atr: dict[str, float] = {}
 
         for manifest, model in interval_models:
             try:
@@ -229,6 +230,9 @@ def make_tick(
                 df = provider.fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
                 features = compute_features(df, manifest.feature_names)
                 features = features.dropna()
+                # Save raw ATR before normalization (ATR sizing uses price units)
+                if "ATR" in features.columns and not features.empty:
+                    ticker_atr[manifest.ticker] = float(features["ATR"].iloc[-1])
                 features = normalize(features, manifest)
                 x = build_input(features, manifest)
                 logits = model.run(x)
@@ -335,7 +339,19 @@ def make_tick(
                     log.error("Cannot get current price for %s: %s", yf_ticker, exc)
                     continue
 
-                qty = compute_quantity(equity, current_price, size_pct)
+                raw_atr = ticker_atr.get(manifest.ticker, 0.0)
+                qty = compute_quantity(
+                    equity=equity,
+                    current_price=current_price,
+                    size_pct=size_pct,
+                    mode=settings.risk.sizing_mode,
+                    atr=raw_atr,
+                    atr_risk_pct=settings.risk.atr.risk_pct,
+                    atr_multiplier=settings.risk.atr.atr_multiplier,
+                    vix_base_size_pct=settings.risk.vix.base_size_pct,
+                    vix_scalar=settings.risk.vix.vix_scalar,
+                    vix_max_size_pct=settings.risk.vix.max_size_pct,
+                )
                 if qty <= 0:
                     log.warning("Computed quantity 0 for %s, skipping", t212_ticker)
                     continue
@@ -439,6 +455,17 @@ def make_tick(
                                 quantity=qty,
                                 position=pos,
                             ))
+                            # Update model performance tracking
+                            from alphalink.risk.performance import record_trade, check_retirement
+                            pnl_for_perf = (exit_p - pos.avg_entry) * qty
+                            record_trade(session, model_id=manifest.run_name,
+                                         realized_pnl=pnl_for_perf,
+                                         cfg=settings.risk.model_retirement)
+                            if check_retirement(session, model_id=manifest.run_name,
+                                                cfg=settings.risk.model_retirement):
+                                wh.notify("WARNING",
+                                          f"Model {manifest.run_name} retired after performance check",
+                                          category="model-retirement")
 
                 except Exception as exc:
                     err_rec = order_repo.find_by_client_order_id(cid)

@@ -155,6 +155,11 @@ class EquityRepo:
                 return row.equity
         return None
 
+    def since(self, since: datetime, limit: int = 500) -> list[EquityCurve]:
+        return list(self._s.exec(
+            select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)
+        ).all())
+
 
 class InstrumentCacheRepo:
     def __init__(self, session: Session) -> None:

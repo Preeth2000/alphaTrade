@@ -3,6 +3,7 @@ import asyncio
 import logging
 from sqlalchemy.engine import Engine
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from alphalink.api.auth import make_api_key_dep
 from alphalink.api.deps import make_session_dep
@@ -12,9 +13,16 @@ log = logging.getLogger(__name__)
 
 
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health, settings
+    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity
 
     app = FastAPI(title="alphaLink API", version="1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
     session_dep = make_session_dep(engine)
     api_key_dep = make_api_key_dep(engine)
 
@@ -26,6 +34,7 @@ def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
     app.include_router(backtest.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
     app.include_router(settings.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(equity.make_router(session_dep, api_key_dep), prefix="/api/v1")
 
     return app
 

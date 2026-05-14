@@ -479,8 +479,10 @@ async def run(settings: Settings) -> None:
         log.warning("T212 startup probe failed: %s", exc)
         health_state.t212_ok = False
 
+    engine = get_engine(settings.state_db_path)
+
     from alphalink.model_registry import ModelRegistry
-    registry = ModelRegistry()
+    registry = ModelRegistry(engine=engine)
     await registry.refresh(settings.models_dir, settings.model_overrides)
     if not registry.by_run_name:
         log.error("No models loaded from %s. Exiting.", settings.models_dir)
@@ -491,8 +493,6 @@ async def run(settings: Settings) -> None:
         (_INTERVAL_SECONDS.get(i, 3600) for i in registry.snapshot_by_interval()),
         default=3600,
     )
-
-    engine = get_engine(settings.state_db_path)
 
     # Reconcile positions with T212 before first tick
     await reconcile_positions(t212, settings)

@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     webhook_url: str = ""
     webhook_level: str = "WARNING"
     log_file: Path = Path("./alphalink.log")
+    api_port: int = 8081
 
     # Populated from overrides.yaml after load
     defaults: Defaults = Defaults()

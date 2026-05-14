@@ -71,8 +71,8 @@ class AlertEmailConfig(BaseSettings):
 
 class AlertsConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
-    slack: AlertSlackConfig = AlertSlackConfig()
-    email: AlertEmailConfig = AlertEmailConfig()
+    slack: Optional[AlertSlackConfig] = AlertSlackConfig()
+    email: Optional[AlertEmailConfig] = AlertEmailConfig()
 
 
 class BacktestConfig(BaseSettings):

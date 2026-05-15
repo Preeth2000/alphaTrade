@@ -10,6 +10,7 @@ services:
     # state.db must be a HOST FILE before `docker compose up`.
     # Create it once with: touch state.db
     volumes:
+      - ./alphaTrade:/app/alphaTrade:ro
       - ./models:/app/models:ro
       - ./state.db:/app/state.db
       - ./overrides.yaml:/app/overrides.yaml:ro

@@ -13,20 +13,20 @@
 ## File Map
 
 **Create:**
-- `alphalink/api/__init__.py` — empty package marker
-- `alphalink/api/auth.py` — `make_api_key_dep(engine)` factory
-- `alphalink/api/deps.py` — `make_session_dep(engine)` factory
-- `alphalink/api/app.py` — `create_app(engine, health_state)` + `start_api_server()`
-- `alphalink/api/routers/__init__.py` — empty
-- `alphalink/api/routers/positions.py`
-- `alphalink/api/routers/orders.py`
-- `alphalink/api/routers/signals.py`
-- `alphalink/api/routers/pnl.py`
-- `alphalink/api/routers/models.py`
-- `alphalink/api/routers/backtest.py`
-- `alphalink/api/routers/health.py`
-- `alphalink/api/routers/settings.py`
-- `alphalink/store/migrations/versions/0003_bot_settings.py`
+- `alphaTrade/api/__init__.py` — empty package marker
+- `alphaTrade/api/auth.py` — `make_api_key_dep(engine)` factory
+- `alphaTrade/api/deps.py` — `make_session_dep(engine)` factory
+- `alphaTrade/api/app.py` — `create_app(engine, health_state)` + `start_api_server()`
+- `alphaTrade/api/routers/__init__.py` — empty
+- `alphaTrade/api/routers/positions.py`
+- `alphaTrade/api/routers/orders.py`
+- `alphaTrade/api/routers/signals.py`
+- `alphaTrade/api/routers/pnl.py`
+- `alphaTrade/api/routers/models.py`
+- `alphaTrade/api/routers/backtest.py`
+- `alphaTrade/api/routers/health.py`
+- `alphaTrade/api/routers/settings.py`
+- `alphaTrade/store/migrations/versions/0003_bot_settings.py`
 - `tests/unit/test_api_auth.py`
 - `tests/unit/test_api_routers.py`
 - `tests/unit/test_bot_settings_repo.py`
@@ -34,9 +34,9 @@
 
 **Modify:**
 - `pyproject.toml` — add fastapi, uvicorn deps
-- `alphalink/config.py` — add `api_port: int = 8081`
-- `alphalink/store/repos.py` — add `BotSettings` model + `BotSettingsRepo` + query methods on existing repos
-- `alphalink/main.py` — wire API server + hot-reload in tick
+- `alphaTrade/config.py` — add `api_port: int = 8081`
+- `alphaTrade/store/repos.py` — add `BotSettings` model + `BotSettingsRepo` + query methods on existing repos
+- `alphaTrade/main.py` — wire API server + hot-reload in tick
 - `tests/unit/test_migrations.py` — assert `botsettings` table exists
 
 ---
@@ -45,7 +45,7 @@
 
 **Files:**
 - Modify: `pyproject.toml`
-- Modify: `alphalink/config.py`
+- Modify: `alphaTrade/config.py`
 
 - [ ] **Step 1: Write failing test**
 
@@ -53,14 +53,14 @@
 # tests/unit/test_api_port_setting.py
 def test_settings_has_api_port(monkeypatch):
     monkeypatch.setenv("T212_API_KEY", "k")
-    from alphalink.config import Settings
+    from alphaTrade.config import Settings
     s = Settings()
     assert s.api_port == 8081
 
 def test_settings_api_port_overridable(monkeypatch):
     monkeypatch.setenv("T212_API_KEY", "k")
     monkeypatch.setenv("API_PORT", "9000")
-    import importlib, alphalink.config as m
+    import importlib, alphaTrade.config as m
     importlib.reload(m)
     s = m.Settings()
     assert s.api_port == 9000
@@ -75,7 +75,7 @@ Expected: `AttributeError: 'Settings' object has no attribute 'api_port'`
 
 - [ ] **Step 3: Add `api_port` to Settings and deps to pyproject.toml**
 
-In `alphalink/config.py`, add to the `Settings` class after `log_file`:
+In `alphaTrade/config.py`, add to the `Settings` class after `log_file`:
 ```python
     api_port: int = 8081
 ```
@@ -103,7 +103,7 @@ Expected: PASSED (2 tests)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml alphalink/config.py tests/unit/test_api_port_setting.py
+git add pyproject.toml alphaTrade/config.py tests/unit/test_api_port_setting.py
 git commit -m "feat(api): add fastapi/uvicorn deps + api_port setting"
 ```
 
@@ -112,7 +112,7 @@ git commit -m "feat(api): add fastapi/uvicorn deps + api_port setting"
 ## Task 2: BotSettings ORM + BotSettingsRepo
 
 **Files:**
-- Modify: `alphalink/store/repos.py` — append `BotSettings` SQLModel + `BotSettingsRepo`
+- Modify: `alphaTrade/store/repos.py` — append `BotSettings` SQLModel + `BotSettingsRepo`
 - Create: `tests/unit/test_bot_settings_repo.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -121,7 +121,7 @@ git commit -m "feat(api): add fastapi/uvicorn deps + api_port setting"
 # tests/unit/test_bot_settings_repo.py
 import pytest
 from sqlmodel import create_engine
-from alphalink.store.db import run_migrations
+from alphaTrade.store.db import run_migrations
 
 
 @pytest.fixture()
@@ -134,14 +134,14 @@ def engine(tmp_path):
 
 def test_get_returns_none_when_empty(engine):
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettingsRepo
+    from alphaTrade.store.repos import BotSettingsRepo
     with Session(engine) as s:
         assert BotSettingsRepo(s).get() is None
 
 
 def test_upsert_creates_row(engine):
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
         repo = BotSettingsRepo(s)
         repo.upsert(BotSettings(id=1, t212_env="live", max_positions=10))
@@ -153,7 +153,7 @@ def test_upsert_creates_row(engine):
 
 def test_upsert_is_idempotent(engine):
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
         repo = BotSettingsRepo(s)
         repo.upsert(BotSettings(id=1, max_positions=3))
@@ -164,14 +164,14 @@ def test_upsert_is_idempotent(engine):
 
 def test_default_fields(engine):
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
         repo = BotSettingsRepo(s)
         repo.upsert(BotSettings(id=1))
         row = repo.get()
     assert row.t212_env == "demo"
     assert row.size_pct == pytest.approx(0.10)
-    assert row.alphalink_api_key == ""
+    assert row.alphaTrade_api_key == ""
 ```
 
 - [ ] **Step 2: Run to confirm failure**
@@ -183,7 +183,7 @@ Expected: `ImportError` or `sqlalchemy.exc.OperationalError` (table doesn't exis
 
 - [ ] **Step 3: Add BotSettings + BotSettingsRepo to repos.py**
 
-Append to `alphalink/store/repos.py` after the last existing class:
+Append to `alphaTrade/store/repos.py` after the last existing class:
 
 ```python
 class BotSettings(SQLModel, table=True):
@@ -218,7 +218,7 @@ class BotSettings(SQLModel, table=True):
     max_positions: int = Field(default=5)
     daily_loss_halt_pct: float = Field(default=0.05)
     # API auth
-    alphalink_api_key: str = Field(default="")
+    alphaTrade_api_key: str = Field(default="")
 
 
 class BotSettingsRepo:
@@ -251,7 +251,7 @@ Expected: `sqlalchemy.exc.OperationalError: no such table: botsettings`
 - [ ] **Step 5: Commit the model (migration comes next task)**
 
 ```bash
-git add alphalink/store/repos.py tests/unit/test_bot_settings_repo.py
+git add alphaTrade/store/repos.py tests/unit/test_bot_settings_repo.py
 git commit -m "feat(store): BotSettings ORM model + BotSettingsRepo"
 ```
 
@@ -260,7 +260,7 @@ git commit -m "feat(store): BotSettings ORM model + BotSettingsRepo"
 ## Task 3: Alembic Migration 0003
 
 **Files:**
-- Create: `alphalink/store/migrations/versions/0003_bot_settings.py`
+- Create: `alphaTrade/store/migrations/versions/0003_bot_settings.py`
 - Modify: `tests/unit/test_migrations.py`
 
 - [ ] **Step 1: Add migration test**
@@ -269,7 +269,7 @@ In `tests/unit/test_migrations.py`, add to `TestAlembicMigrations`:
 
 ```python
     def test_upgrade_creates_botsettings_table(self, tmp_path):
-        from alphalink.store.db import run_migrations
+        from alphaTrade.store.db import run_migrations
         db_path = tmp_path / "test.db"
         run_migrations(db_path)
 
@@ -285,7 +285,7 @@ In `tests/unit/test_migrations.py`, add to `TestAlembicMigrations`:
 
         assert "botsettings" in tables
         assert "t212_api_key" in cols
-        assert "alphalink_api_key" in cols
+        assert "alphaTrade_api_key" in cols
         assert "daily_loss_halt_pct" in cols
 ```
 
@@ -299,7 +299,7 @@ Expected: `AssertionError: assert 'botsettings' in ...`
 - [ ] **Step 3: Create migration file**
 
 ```python
-# alphalink/store/migrations/versions/0003_bot_settings.py
+# alphaTrade/store/migrations/versions/0003_bot_settings.py
 """bot settings table
 
 Revision ID: 0003
@@ -344,7 +344,7 @@ def upgrade() -> None:
         sa.Column("extended_hours", sa.Boolean(), nullable=False, server_default="0"),
         sa.Column("max_positions", sa.Integer(), nullable=False, server_default="5"),
         sa.Column("daily_loss_halt_pct", sa.Float(), nullable=False, server_default="0.05"),
-        sa.Column("alphalink_api_key", sa.String(), nullable=False, server_default=""),
+        sa.Column("alphaTrade_api_key", sa.String(), nullable=False, server_default=""),
     )
 
 
@@ -369,7 +369,7 @@ Expected: all PASSED
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/store/migrations/versions/0003_bot_settings.py tests/unit/test_migrations.py
+git add alphaTrade/store/migrations/versions/0003_bot_settings.py tests/unit/test_migrations.py
 git commit -m "feat(store): alembic migration 0003 — botsettings table"
 ```
 
@@ -378,7 +378,7 @@ git commit -m "feat(store): alembic migration 0003 — botsettings table"
 ## Task 4: Repo Query Additions
 
 **Files:**
-- Modify: `alphalink/store/repos.py` — add `since`/`limit` to `OrderRepo` and `SignalRepo`; `list_runs` to `BacktestRepo`; `all()` to `ModelPerformanceRepo`
+- Modify: `alphaTrade/store/repos.py` — add `since`/`limit` to `OrderRepo` and `SignalRepo`; `list_runs` to `BacktestRepo`; `all()` to `ModelPerformanceRepo`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -387,7 +387,7 @@ git commit -m "feat(store): alembic migration 0003 — botsettings table"
 import pytest
 from datetime import datetime, timedelta
 from sqlmodel import create_engine, Session
-from alphalink.store.db import run_migrations
+from alphaTrade.store.db import run_migrations
 
 
 @pytest.fixture()
@@ -400,7 +400,7 @@ def session(tmp_path):
 
 
 def test_order_repo_since(session):
-    from alphalink.store.repos import Order, OrderRepo
+    from alphaTrade.store.repos import Order, OrderRepo
     repo = OrderRepo(session)
     old = Order(ts=datetime(2020, 1, 1), t212_ticker="X", side="BUY", quantity=1.0, status="filled")
     recent = Order(ts=datetime(2026, 1, 1), t212_ticker="Y", side="SELL", quantity=2.0, status="filled")
@@ -411,7 +411,7 @@ def test_order_repo_since(session):
 
 
 def test_order_repo_since_limit(session):
-    from alphalink.store.repos import Order, OrderRepo
+    from alphaTrade.store.repos import Order, OrderRepo
     repo = OrderRepo(session)
     for i in range(5):
         session.add(Order(ts=datetime(2026, 1, i+1), t212_ticker=f"T{i}", side="BUY", quantity=1.0, status="filled"))
@@ -421,7 +421,7 @@ def test_order_repo_since_limit(session):
 
 
 def test_signal_repo_since(session):
-    from alphalink.store.repos import Signal, SignalRepo
+    from alphaTrade.store.repos import Signal, SignalRepo
     repo = SignalRepo(session)
     session.add(Signal(ts=datetime(2020, 1, 1), run_name="r", ticker="A", signal="BUY"))
     session.add(Signal(ts=datetime(2026, 1, 1), run_name="r", ticker="B", signal="SELL"))
@@ -432,7 +432,7 @@ def test_signal_repo_since(session):
 
 
 def test_backtest_repo_list_runs(session):
-    from alphalink.store.repos import BacktestRepo
+    from alphaTrade.store.repos import BacktestRepo
     repo = BacktestRepo(session)
     repo.create_run("2025-01-01", "2025-12-31")
     repo.create_run("2026-01-01", "2026-12-31")
@@ -441,7 +441,7 @@ def test_backtest_repo_list_runs(session):
 
 
 def test_model_performance_repo_all(session):
-    from alphalink.store.repos import ModelPerformanceRepo
+    from alphaTrade.store.repos import ModelPerformanceRepo
     repo = ModelPerformanceRepo(session)
     repo.get_or_create("model_a")
     repo.get_or_create("model_b")
@@ -501,7 +501,7 @@ Expected: all PASSED
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/store/repos.py tests/unit/test_repo_query_additions.py
+git add alphaTrade/store/repos.py tests/unit/test_repo_query_additions.py
 git commit -m "feat(store): add since/limit query methods to repos"
 ```
 
@@ -510,10 +510,10 @@ git commit -m "feat(store): add since/limit query methods to repos"
 ## Task 5: API Foundation — auth.py and deps.py
 
 **Files:**
-- Create: `alphalink/api/__init__.py`
-- Create: `alphalink/api/auth.py`
-- Create: `alphalink/api/deps.py`
-- Create: `alphalink/api/routers/__init__.py`
+- Create: `alphaTrade/api/__init__.py`
+- Create: `alphaTrade/api/auth.py`
+- Create: `alphaTrade/api/deps.py`
+- Create: `alphaTrade/api/routers/__init__.py`
 - Create: `tests/unit/test_api_auth.py`
 
 - [ ] **Step 1: Write failing auth tests**
@@ -524,15 +524,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine
-from alphalink.store.db import run_migrations
+from alphaTrade.store.db import run_migrations
 
 
 def _make_app(tmp_path, api_key_env: str = ""):
     db = tmp_path / "test.db"
     run_migrations(db)
     engine = create_engine(f"sqlite:///{db}")
-    from alphalink.api.auth import make_api_key_dep
-    from alphalink.api.deps import make_session_dep
+    from alphaTrade.api.auth import make_api_key_dep
+    from alphaTrade.api.deps import make_session_dep
     app = FastAPI()
     dep = make_api_key_dep(engine)
 
@@ -544,34 +544,34 @@ def _make_app(tmp_path, api_key_env: str = ""):
 
 
 def test_no_key_configured_allows_all(tmp_path, monkeypatch):
-    monkeypatch.delenv("ALPHALINK_API_KEY", raising=False)
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     client, _ = _make_app(tmp_path)
     resp = client.get("/test")
     assert resp.status_code == 200
 
 
 def test_wrong_key_returns_403(tmp_path, monkeypatch):
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
 
 
 def test_correct_key_returns_200(tmp_path, monkeypatch):
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200
 
 
 def test_db_key_overrides_env(tmp_path, monkeypatch):
-    monkeypatch.delenv("ALPHALINK_API_KEY", raising=False)
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     client, engine = _make_app(tmp_path)
     # Set key via DB
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, alphalink_api_key="db-secret"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, alphaTrade_api_key="db-secret"))
     resp = client.get("/test", headers={"X-API-Key": "db-secret"})
     assert resp.status_code == 200
     resp_wrong = client.get("/test", headers={"X-API-Key": "wrong"})
@@ -583,20 +583,20 @@ def test_db_key_overrides_env(tmp_path, monkeypatch):
 ```bash
 pytest tests/unit/test_api_auth.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'alphalink.api'`
+Expected: `ModuleNotFoundError: No module named 'alphaTrade.api'`
 
 - [ ] **Step 3: Create foundation files**
 
 ```python
-# alphalink/api/__init__.py
+# alphaTrade/api/__init__.py
 ```
 
 ```python
-# alphalink/api/routers/__init__.py
+# alphaTrade/api/routers/__init__.py
 ```
 
 ```python
-# alphalink/api/auth.py
+# alphaTrade/api/auth.py
 from __future__ import annotations
 import os
 from fastapi import Header, HTTPException
@@ -606,10 +606,10 @@ from sqlalchemy.engine import Engine
 
 def make_api_key_dep(engine: Engine):
     def require_api_key(x_api_key: str = Header(default="")) -> None:
-        from alphalink.store.repos import BotSettingsRepo
+        from alphaTrade.store.repos import BotSettingsRepo
         with Session(engine) as s:
             db_s = BotSettingsRepo(s).get()
-        active_key = (db_s.alphalink_api_key if db_s else "") or os.environ.get("ALPHALINK_API_KEY", "")
+        active_key = (db_s.alphaTrade_api_key if db_s else "") or os.environ.get("alphaTrade_API_KEY", "")
         if not active_key:
             return
         if x_api_key != active_key:
@@ -618,7 +618,7 @@ def make_api_key_dep(engine: Engine):
 ```
 
 ```python
-# alphalink/api/deps.py
+# alphaTrade/api/deps.py
 from __future__ import annotations
 from collections.abc import Generator
 from sqlmodel import Session
@@ -642,7 +642,7 @@ Expected: all PASSED
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/api/__init__.py alphalink/api/auth.py alphalink/api/deps.py alphalink/api/routers/__init__.py tests/unit/test_api_auth.py
+git add alphaTrade/api/__init__.py alphaTrade/api/auth.py alphaTrade/api/deps.py alphaTrade/api/routers/__init__.py tests/unit/test_api_auth.py
 git commit -m "feat(api): auth + session deps"
 ```
 
@@ -651,8 +651,8 @@ git commit -m "feat(api): auth + session deps"
 ## Task 6: Read Routers — Positions and Health
 
 **Files:**
-- Create: `alphalink/api/routers/positions.py`
-- Create: `alphalink/api/routers/health.py`
+- Create: `alphaTrade/api/routers/positions.py`
+- Create: `alphaTrade/api/routers/health.py`
 
 Tests go in `tests/unit/test_api_routers.py` (create this file; Tasks 7-10 will append to it).
 
@@ -663,8 +663,8 @@ Tests go in `tests/unit/test_api_routers.py` (create this file; Tasks 7-10 will 
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine, Session
-from alphalink.store.db import run_migrations
-from alphalink.health import HealthState
+from alphaTrade.store.db import run_migrations
+from alphaTrade.health import HealthState
 
 
 def _engine(tmp_path):
@@ -674,7 +674,7 @@ def _engine(tmp_path):
 
 
 def _client(engine, health_state=None):
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     return TestClient(create_app(engine, health_state or HealthState()))
 
 
@@ -689,7 +689,7 @@ def test_positions_empty(tmp_path):
 
 def test_positions_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Position, PositionRepo
+    from alphaTrade.store.repos import Position, PositionRepo
     from datetime import datetime
     with Session(engine) as s:
         PositionRepo(s).upsert(Position(
@@ -722,17 +722,17 @@ def test_health_returns_state(tmp_path):
 ```bash
 pytest tests/unit/test_api_routers.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'alphalink.api.app'`
+Expected: `ModuleNotFoundError: No module named 'alphaTrade.api.app'`
 
 - [ ] **Step 3: Create positions router**
 
 ```python
-# alphalink/api/routers/positions.py
+# alphaTrade/api/routers/positions.py
 from __future__ import annotations
 from collections.abc import Callable
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
-from alphalink.store.repos import Position, PositionRepo
+from alphaTrade.store.repos import Position, PositionRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -751,11 +751,11 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 - [ ] **Step 4: Create health router**
 
 ```python
-# alphalink/api/routers/health.py
+# alphaTrade/api/routers/health.py
 from __future__ import annotations
 from collections.abc import Callable
 from fastapi import APIRouter, Depends
-from alphalink.health import HealthState
+from alphaTrade.health import HealthState
 
 
 def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
@@ -779,22 +779,22 @@ def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
 - [ ] **Step 5: Create minimal app.py (will be expanded in Task 10)**
 
 ```python
-# alphalink/api/app.py
+# alphaTrade/api/app.py
 from __future__ import annotations
 import logging
 from sqlalchemy.engine import Engine
 from fastapi import FastAPI
-from alphalink.api.auth import make_api_key_dep
-from alphalink.api.deps import make_session_dep
-from alphalink.health import HealthState
+from alphaTrade.api.auth import make_api_key_dep
+from alphaTrade.api.deps import make_session_dep
+from alphaTrade.health import HealthState
 
 log = logging.getLogger(__name__)
 
 
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, health
+    from alphaTrade.api.routers import positions, health
 
-    app = FastAPI(title="alphaLink API", version="1.0")
+    app = FastAPI(title="alphaTrade API", version="1.0")
     session_dep = make_session_dep(engine)
     api_key_dep = make_api_key_dep(engine)
 
@@ -814,7 +814,7 @@ Expected: all PASSED
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/api/routers/positions.py alphalink/api/routers/health.py alphalink/api/app.py tests/unit/test_api_routers.py
+git add alphaTrade/api/routers/positions.py alphaTrade/api/routers/health.py alphaTrade/api/app.py tests/unit/test_api_routers.py
 git commit -m "feat(api): positions + health routers"
 ```
 
@@ -823,9 +823,9 @@ git commit -m "feat(api): positions + health routers"
 ## Task 7: Read Routers — Orders and Signals
 
 **Files:**
-- Create: `alphalink/api/routers/orders.py`
-- Create: `alphalink/api/routers/signals.py`
-- Modify: `alphalink/api/app.py` — register routers
+- Create: `alphaTrade/api/routers/orders.py`
+- Create: `alphaTrade/api/routers/signals.py`
+- Modify: `alphaTrade/api/app.py` — register routers
 - Modify: `tests/unit/test_api_routers.py` — append tests
 
 - [ ] **Step 1: Append tests to test_api_routers.py**
@@ -844,7 +844,7 @@ def test_orders_empty_defaults_24h(tmp_path):
 
 def test_orders_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Order
+    from alphaTrade.store.repos import Order
     with Session(engine) as s:
         s.add(Order(ts=datetime(2020, 1, 1), t212_ticker="OLD", side="BUY", quantity=1.0, status="filled"))
         s.add(Order(ts=datetime(2026, 1, 1), t212_ticker="NEW", side="BUY", quantity=1.0, status="filled"))
@@ -858,7 +858,7 @@ def test_orders_since_filters(tmp_path):
 
 def test_signals_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Signal
+    from alphaTrade.store.repos import Signal
     with Session(engine) as s:
         s.add(Signal(ts=datetime(2020, 1, 1), run_name="r", ticker="OLD", signal="BUY"))
         s.add(Signal(ts=datetime(2026, 1, 1), run_name="r", ticker="NEW", signal="SELL"))
@@ -880,14 +880,14 @@ Expected: `404 Not Found` (route not registered yet)
 - [ ] **Step 3: Create orders router**
 
 ```python
-# alphalink/api/routers/orders.py
+# alphaTrade/api/routers/orders.py
 from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
-from alphalink.store.repos import Order, OrderRepo
+from alphaTrade.store.repos import Order, OrderRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -909,14 +909,14 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 - [ ] **Step 4: Create signals router**
 
 ```python
-# alphalink/api/routers/signals.py
+# alphaTrade/api/routers/signals.py
 from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
-from alphalink.store.repos import Signal, SignalRepo
+from alphaTrade.store.repos import Signal, SignalRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -937,13 +937,13 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 
 - [ ] **Step 5: Register routers in app.py**
 
-Replace `create_app` in `alphalink/api/app.py`:
+Replace `create_app` in `alphaTrade/api/app.py`:
 
 ```python
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, orders, signals, health
+    from alphaTrade.api.routers import positions, orders, signals, health
 
-    app = FastAPI(title="alphaLink API", version="1.0")
+    app = FastAPI(title="alphaTrade API", version="1.0")
     session_dep = make_session_dep(engine)
     api_key_dep = make_api_key_dep(engine)
 
@@ -965,7 +965,7 @@ Expected: all PASSED
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/api/routers/orders.py alphalink/api/routers/signals.py alphalink/api/app.py tests/unit/test_api_routers.py
+git add alphaTrade/api/routers/orders.py alphaTrade/api/routers/signals.py alphaTrade/api/app.py tests/unit/test_api_routers.py
 git commit -m "feat(api): orders + signals routers with since/limit"
 ```
 
@@ -974,10 +974,10 @@ git commit -m "feat(api): orders + signals routers with since/limit"
 ## Task 8: Read Routers — PnL, Models, Backtest
 
 **Files:**
-- Create: `alphalink/api/routers/pnl.py`
-- Create: `alphalink/api/routers/models.py`
-- Create: `alphalink/api/routers/backtest.py`
-- Modify: `alphalink/api/app.py`
+- Create: `alphaTrade/api/routers/pnl.py`
+- Create: `alphaTrade/api/routers/models.py`
+- Create: `alphaTrade/api/routers/backtest.py`
+- Modify: `alphaTrade/api/app.py`
 - Modify: `tests/unit/test_api_routers.py`
 
 - [ ] **Step 1: Append tests**
@@ -987,7 +987,7 @@ git commit -m "feat(api): orders + signals routers with since/limit"
 
 def test_pnl_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import PnlSnapshot, PnlSnapshotRepo
+    from alphaTrade.store.repos import PnlSnapshot, PnlSnapshotRepo
     with Session(engine) as s:
         repo = PnlSnapshotRepo(s)
         repo.upsert(PnlSnapshot(date="2020-01-01", total_equity=10000, day_pnl=0, day_pnl_pct=0, realized_pnl=0, unrealized_pnl=0))
@@ -1007,7 +1007,7 @@ def test_models_empty(tmp_path):
 
 def test_models_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import ModelPerformanceRepo
+    from alphaTrade.store.repos import ModelPerformanceRepo
     with Session(engine) as s:
         ModelPerformanceRepo(s).get_or_create("my_model")
     resp = _client(engine).get("/api/v1/models")
@@ -1030,7 +1030,7 @@ def test_backtest_trades_404_unknown_run(tmp_path):
 
 def test_backtest_trades_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import BacktestRepo
+    from alphaTrade.store.repos import BacktestRepo
     with Session(engine) as s:
         run_id = BacktestRepo(s).create_run("2025-01-01", "2025-12-31")
         BacktestRepo(s).record_trade(
@@ -1054,13 +1054,13 @@ Expected: `404 Not Found`
 - [ ] **Step 3: Create pnl router**
 
 ```python
-# alphalink/api/routers/pnl.py
+# alphaTrade/api/routers/pnl.py
 from __future__ import annotations
 from collections.abc import Callable
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
-from alphalink.store.repos import PnlSnapshot, PnlSnapshotRepo
+from alphaTrade.store.repos import PnlSnapshot, PnlSnapshotRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -1082,12 +1082,12 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 - [ ] **Step 4: Create models router**
 
 ```python
-# alphalink/api/routers/models.py
+# alphaTrade/api/routers/models.py
 from __future__ import annotations
 from collections.abc import Callable
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
-from alphalink.store.repos import ModelPerformance, ModelPerformanceRepo
+from alphaTrade.store.repos import ModelPerformance, ModelPerformanceRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -1106,12 +1106,12 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 - [ ] **Step 5: Create backtest router**
 
 ```python
-# alphalink/api/routers/backtest.py
+# alphaTrade/api/routers/backtest.py
 from __future__ import annotations
 from collections.abc import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
-from alphalink.store.repos import BacktestRun, BacktestTrade, BacktestRepo
+from alphaTrade.store.repos import BacktestRun, BacktestTrade, BacktestRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
@@ -1139,15 +1139,15 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 
 - [ ] **Step 6: Update app.py to register all routers**
 
-Replace `create_app` in `alphalink/api/app.py`:
+Replace `create_app` in `alphaTrade/api/app.py`:
 
 ```python
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import (
+    from alphaTrade.api.routers import (
         positions, orders, signals, pnl, models, backtest, health,
     )
 
-    app = FastAPI(title="alphaLink API", version="1.0")
+    app = FastAPI(title="alphaTrade API", version="1.0")
     session_dep = make_session_dep(engine)
     api_key_dep = make_api_key_dep(engine)
 
@@ -1172,7 +1172,7 @@ Expected: all PASSED
 - [ ] **Step 8: Commit**
 
 ```bash
-git add alphalink/api/routers/pnl.py alphalink/api/routers/models.py alphalink/api/routers/backtest.py alphalink/api/app.py tests/unit/test_api_routers.py
+git add alphaTrade/api/routers/pnl.py alphaTrade/api/routers/models.py alphaTrade/api/routers/backtest.py alphaTrade/api/app.py tests/unit/test_api_routers.py
 git commit -m "feat(api): pnl, models, backtest routers"
 ```
 
@@ -1181,8 +1181,8 @@ git commit -m "feat(api): pnl, models, backtest routers"
 ## Task 9: Settings Router
 
 **Files:**
-- Create: `alphalink/api/routers/settings.py`
-- Modify: `alphalink/api/app.py`
+- Create: `alphaTrade/api/routers/settings.py`
+- Modify: `alphaTrade/api/app.py`
 - Modify: `tests/unit/test_api_routers.py`
 
 - [ ] **Step 1: Append tests**
@@ -1200,13 +1200,13 @@ def test_settings_get_returns_defaults(tmp_path):
 
 def test_settings_sensitive_fields_masked(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphalink_api_key="api-key"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphaTrade_api_key="api-key"))
     resp = _client(engine).get("/api/v1/settings")
     body = resp.json()
     assert body["t212_api_key"] == "***"
-    assert body["alphalink_api_key"] == "***"
+    assert body["alphaTrade_api_key"] == "***"
 
 
 def test_settings_put_partial_update(tmp_path):
@@ -1235,18 +1235,18 @@ Expected: `404 Not Found`
 - [ ] **Step 3: Create settings router**
 
 ```python
-# alphalink/api/routers/settings.py
+# alphaTrade/api/routers/settings.py
 from __future__ import annotations
 from collections.abc import Callable
 from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
-from alphalink.store.repos import BotSettings, BotSettingsRepo
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo
 
 _SENSITIVE = frozenset({
     "t212_api_key", "polygon_api_key", "email_smtp_password",
-    "slack_webhook_url", "alphalink_api_key",
+    "slack_webhook_url", "alphaTrade_api_key",
 })
 
 
@@ -1274,7 +1274,7 @@ class BotSettingsUpdate(BaseModel):
     extended_hours: Optional[bool] = None
     max_positions: Optional[int] = None
     daily_loss_halt_pct: Optional[float] = None
-    alphalink_api_key: Optional[str] = None
+    alphaTrade_api_key: Optional[str] = None
 
 
 def _mask(s: BotSettings) -> dict:
@@ -1314,15 +1314,15 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
 
 - [ ] **Step 4: Register settings router in app.py**
 
-Replace `create_app` in `alphalink/api/app.py`:
+Replace `create_app` in `alphaTrade/api/app.py`:
 
 ```python
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import (
+    from alphaTrade.api.routers import (
         positions, orders, signals, pnl, models, backtest, health, settings,
     )
 
-    app = FastAPI(title="alphaLink API", version="1.0")
+    app = FastAPI(title="alphaTrade API", version="1.0")
     session_dep = make_session_dep(engine)
     api_key_dep = make_api_key_dep(engine)
 
@@ -1348,7 +1348,7 @@ Expected: all PASSED
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/api/routers/settings.py alphalink/api/app.py tests/unit/test_api_routers.py
+git add alphaTrade/api/routers/settings.py alphaTrade/api/app.py tests/unit/test_api_routers.py
 git commit -m "feat(api): settings GET/PUT router with field masking"
 ```
 
@@ -1357,7 +1357,7 @@ git commit -m "feat(api): settings GET/PUT router with field masking"
 ## Task 10: Add `start_api_server` to app.py
 
 **Files:**
-- Modify: `alphalink/api/app.py` — add `start_api_server` coroutine
+- Modify: `alphaTrade/api/app.py` — add `start_api_server` coroutine
 
 - [ ] **Step 1: Write test**
 
@@ -1367,7 +1367,7 @@ git commit -m "feat(api): settings GET/PUT router with field masking"
 def test_create_app_has_all_routes(tmp_path):
     engine = _engine(tmp_path)
     state = HealthState()
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     app = create_app(engine, state)
     paths = {route.path for route in app.routes}
     assert "/api/v1/positions" in paths
@@ -1390,7 +1390,7 @@ Expected: PASSED
 
 - [ ] **Step 3: Add `start_api_server` to app.py**
 
-Append to `alphalink/api/app.py`:
+Append to `alphaTrade/api/app.py`:
 
 ```python
 import asyncio
@@ -1420,7 +1420,7 @@ Expected: all PASSED
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/api/app.py tests/unit/test_api_routers.py
+git add alphaTrade/api/app.py tests/unit/test_api_routers.py
 git commit -m "feat(api): start_api_server coroutine"
 ```
 
@@ -1429,7 +1429,7 @@ git commit -m "feat(api): start_api_server coroutine"
 ## Task 11: main.py Integration — Wire API + Hot-Reload
 
 **Files:**
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 - Create: `tests/unit/test_api_hot_reload.py`
 
 ### Overview of changes
@@ -1446,8 +1446,8 @@ git commit -m "feat(api): start_api_server coroutine"
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlmodel import create_engine, Session
-from alphalink.store.db import run_migrations
-from alphalink.store.repos import BotSettings, BotSettingsRepo
+from alphaTrade.store.db import run_migrations
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo
 
 
 @pytest.fixture()
@@ -1459,8 +1459,8 @@ def engine(tmp_path):
 
 def test_hot_reload_updates_t212_client(engine):
     """apply_bot_settings reinitialises T212Client when credentials change."""
-    from alphalink.main import apply_bot_settings
-    from alphalink.broker.t212_client import T212Client
+    from alphaTrade.main import apply_bot_settings
+    from alphaTrade.broker.t212_client import T212Client
 
     original = T212Client(api_key="old-key", env="demo")
     t212_holder = [original]
@@ -1484,8 +1484,8 @@ def test_hot_reload_updates_t212_client(engine):
 
 def test_hot_reload_no_change_keeps_client(engine):
     """apply_bot_settings does not replace client when credentials unchanged."""
-    from alphalink.main import apply_bot_settings
-    from alphalink.broker.t212_client import T212Client
+    from alphaTrade.main import apply_bot_settings
+    from alphaTrade.broker.t212_client import T212Client
 
     client = T212Client(api_key="same-key", env="demo")
     t212_holder = [client]
@@ -1508,7 +1508,7 @@ def test_hot_reload_no_change_keeps_client(engine):
 
 def test_hot_reload_overlays_risk_settings(engine):
     """apply_bot_settings updates risk.max_positions from DB."""
-    from alphalink.main import apply_bot_settings
+    from alphaTrade.main import apply_bot_settings
 
     with Session(engine) as s:
         BotSettingsRepo(s).upsert(BotSettings(id=1, max_positions=12, daily_loss_halt_pct=0.08))
@@ -1533,13 +1533,13 @@ def test_hot_reload_overlays_risk_settings(engine):
 ```bash
 pytest tests/unit/test_api_hot_reload.py -v
 ```
-Expected: `ImportError: cannot import name 'apply_bot_settings' from 'alphalink.main'`
+Expected: `ImportError: cannot import name 'apply_bot_settings' from 'alphaTrade.main'`
 
 - [ ] **Step 3: Add `apply_bot_settings` to main.py and update imports**
 
-At the top of `alphalink/main.py`, add to the existing imports:
+At the top of `alphaTrade/main.py`, add to the existing imports:
 ```python
-from alphalink.store.repos import (
+from alphaTrade.store.repos import (
     ...  # existing imports
     BotSettings,
     BotSettingsRepo,
@@ -1554,7 +1554,7 @@ def apply_bot_settings(
     settings: "Settings",
     t212_holder: list,
 ) -> None:
-    from alphalink.broker.t212_client import T212Client
+    from alphaTrade.broker.t212_client import T212Client
     new_key = db_s.t212_api_key or ""
     new_env = db_s.t212_env or "demo"
     current_headers = getattr(t212_holder[0], "_headers", {})
@@ -1634,7 +1634,7 @@ After `health_runner = await start_health_server(...)`, add:
 ```python
     api_server = None
     try:
-        from alphalink.api.app import start_api_server
+        from alphaTrade.api.app import start_api_server
         api_server = await start_api_server(engine, health_state, port=settings.api_port)
     except Exception as exc:
         log.error("API server failed to start on :%d: %s", settings.api_port, exc)
@@ -1673,7 +1673,7 @@ Expected: no new failures
 - [ ] **Step 8: Commit**
 
 ```bash
-git add alphalink/main.py tests/unit/test_api_hot_reload.py
+git add alphaTrade/main.py tests/unit/test_api_hot_reload.py
 git commit -m "feat(main): wire API server + BotSettings hot-reload in tick"
 ```
 
@@ -1691,7 +1691,7 @@ Expected: all tests PASS, no errors
 - [ ] **Step 2: Verify API module imports cleanly**
 
 ```bash
-python -c "from alphalink.api.app import create_app, start_api_server; print('OK')"
+python -c "from alphaTrade.api.app import create_app, start_api_server; print('OK')"
 ```
 Expected: `OK`
 
@@ -1701,9 +1701,9 @@ Expected: `OK`
 python -c "
 import asyncio, os
 os.environ['T212_API_KEY'] = 'test'
-from alphalink.store.db import get_engine
-from alphalink.health import HealthState
-from alphalink.api.app import create_app
+from alphaTrade.store.db import get_engine
+from alphaTrade.health import HealthState
+from alphaTrade.api.app import create_app
 from fastapi.testclient import TestClient
 import tempfile, pathlib
 
@@ -1729,5 +1729,5 @@ git commit -m "test(api): final verification pass"
 - [ ] **Step 5: Close beads issue**
 
 ```bash
-bd close alphaLink-bmw --reason="FastAPI layer complete: 8 read endpoints + settings CRUD + BotSettings hot-reload"
+bd close alphaTrade-bmw --reason="FastAPI layer complete: 8 read endpoints + settings CRUD + BotSettings hot-reload"
 ```

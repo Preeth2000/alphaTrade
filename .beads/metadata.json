@@ -2,6 +2,6 @@
   "database": "dolt",
   "backend": "dolt",
   "dolt_mode": "embedded",
-  "dolt_database": "alphaLink",
+  "dolt_database": "alphaTrade",
   "project_id": "c60fce69-accb-4668-a664-c88a370993fa"
 }

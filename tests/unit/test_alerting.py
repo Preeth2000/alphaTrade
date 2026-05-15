@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alphalink.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
-from alphalink.notify.alerting import AlertManager, AlertLevel
+from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
+from alphaTrade.notify.alerting import AlertManager, AlertLevel
 
 
 def _slack_cfg(min_level="WARNING") -> AlertSlackConfig:
@@ -79,7 +79,7 @@ def test_slack_dispatch_called():
         resp.status_code = 200
         return resp
 
-    with patch("alphalink.notify.alerting.httpx") as mock_httpx:
+    with patch("alphaTrade.notify.alerting.httpx") as mock_httpx:
         mock_httpx.post.side_effect = fake_post
         am._dispatch_slack("hello slack", level=AlertLevel.WARNING)
 
@@ -92,7 +92,7 @@ def test_email_dispatch_called():
     cfg = AlertsConfig(slack=None, email=_email_cfg(min_level="INFO"))
     am = AlertManager(cfg)
 
-    with patch("alphalink.notify.alerting.smtplib") as mock_smtp:
+    with patch("alphaTrade.notify.alerting.smtplib") as mock_smtp:
         mock_server = MagicMock()
         mock_smtp.SMTP.return_value.__enter__.return_value = mock_server
         am._dispatch_email("hello email", level=AlertLevel.WARNING)

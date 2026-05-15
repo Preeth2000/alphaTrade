@@ -1,4 +1,4 @@
-"""Smoke tests for alphalink.metrics — validates metric definitions parse correctly."""
+"""Smoke tests for alphaTrade.metrics — validates metric definitions parse correctly."""
 from __future__ import annotations
 
 import asyncio
@@ -12,17 +12,17 @@ import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 from sqlmodel import SQLModel, create_engine
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.config import Settings
-from alphalink.health import HealthState
-from alphalink.main import make_tick
-from alphalink.store.repos import Position
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.config import Settings
+from alphaTrade.health import HealthState
+from alphaTrade.main import make_tick
+from alphaTrade.store.repos import Position
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
 
 
 def test_metrics_module_exports_all_expected_names():
-    import alphalink.metrics as m
+    import alphaTrade.metrics as m
 
     assert hasattr(m, "signals_total")
     assert hasattr(m, "orders_total")
@@ -36,7 +36,7 @@ def test_metrics_module_exports_all_expected_names():
 
 
 def test_metrics_generate_valid_prometheus_text():
-    import alphalink.metrics  # noqa: F401 — ensure metrics registered
+    import alphaTrade.metrics  # noqa: F401 — ensure metrics registered
 
     output = prometheus_client.generate_latest(prometheus_client.REGISTRY)
     assert len(output) > 0
@@ -58,8 +58,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
         ):
             client.get_account_summary()
 
@@ -80,8 +80,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
             patch("time.sleep"),
         ):
             with pytest.raises(Exception):
@@ -103,8 +103,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
         ):
             client.place_market_order("AAPL_US_EQ", 1)
 
@@ -123,8 +123,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
         ):
             client.cancel_order("abc123")
 
@@ -144,8 +144,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
             patch("time.sleep"),
         ):
             with pytest.raises(httpx.ConnectError):
@@ -171,8 +171,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
             patch("time.sleep"),
         ):
             with pytest.raises(Exception):
@@ -255,14 +255,14 @@ class TestTickMetrics:
         )
 
         with (
-            patch("alphalink.main.compute_features", return_value=_BUY_DF),
-            patch("alphalink.main.normalize", return_value=_BUY_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
-            patch("alphalink.main.signals_total", mock_signals_total),
-            patch("alphalink.main.metric_equity_total", mock_equity_total),
-            patch("alphalink.main.metric_open_positions", mock_open_positions),
-            patch("alphalink.main.metric_daily_pnl_pct", mock_daily_pnl_pct),
+            patch("alphaTrade.main.compute_features", return_value=_BUY_DF),
+            patch("alphaTrade.main.normalize", return_value=_BUY_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.signals_total", mock_signals_total),
+            patch("alphaTrade.main.metric_equity_total", mock_equity_total),
+            patch("alphaTrade.main.metric_open_positions", mock_open_positions),
+            patch("alphaTrade.main.metric_daily_pnl_pct", mock_daily_pnl_pct),
         ):
             await tick()
 
@@ -295,8 +295,8 @@ class TestTickMetrics:
         )
 
         with (
-            patch("alphalink.main.compute_features", side_effect=ValueError("bad features")),
-            patch("alphalink.main.inference_errors_total", mock_inference_errors),
+            patch("alphaTrade.main.compute_features", side_effect=ValueError("bad features")),
+            patch("alphaTrade.main.inference_errors_total", mock_inference_errors),
         ):
             await tick()
 

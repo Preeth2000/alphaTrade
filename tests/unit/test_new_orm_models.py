@@ -4,8 +4,8 @@ from datetime import datetime
 import pytest
 from sqlmodel import Session, select
 
-from alphalink.store.db import get_engine
-from alphalink.store.repos import (
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import (
     TradeJournal, PnlSnapshot, ModelPerformance,
     SectorCache, BacktestRun, BacktestTrade,
     TradeJournalRepo, PnlSnapshotRepo, ModelPerformanceRepo,
@@ -15,7 +15,7 @@ from alphalink.store.repos import (
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng

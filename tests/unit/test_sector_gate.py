@@ -4,16 +4,16 @@ from unittest.mock import patch, MagicMock
 import pytest
 from sqlmodel import Session
 
-from alphalink.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig, RiskConfig
-from alphalink.risk.sector import fetch_sector, check_sector_gate
-from alphalink.risk.gates import run_gates, GateResult
-from alphalink.store.db import get_engine
-from alphalink.store.repos import Position, PositionRepo, SectorCacheRepo, ModelPerformanceRepo
+from alphaTrade.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig, RiskConfig
+from alphaTrade.risk.sector import fetch_sector, check_sector_gate
+from alphaTrade.risk.gates import run_gates, GateResult
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import Position, PositionRepo, SectorCacheRepo, ModelPerformanceRepo
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng

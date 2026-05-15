@@ -1,7 +1,7 @@
 # Health Check HTTP Endpoint — Design Spec
 
 **Date:** 2026-05-10
-**Issue:** alphaLink-79k
+**Issue:** alphaTrade-79k
 **Status:** Approved
 
 ## Overview
@@ -10,7 +10,7 @@ Expose a lightweight HTTP server on `:8080` alongside the existing asyncio event
 
 ## Components
 
-### `alphalink/health.py` (new)
+### `alphaTrade/health.py` (new)
 
 **`HealthState` dataclass** — shared mutable state, no locks needed (single asyncio thread):
 
@@ -43,7 +43,7 @@ class HealthState:
 | `t212_ok` is `False` | 503 | `t212 unreachable` |
 | otherwise | 200 | `ok` |
 
-### Changes to `alphalink/main.py`
+### Changes to `alphaTrade/main.py`
 
 Data flow at startup (inside `run()`):
 
@@ -72,7 +72,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:8080/healthz || exit 1
 ```
 
-**`docker-compose.yml`** — add to `alphalink` service:
+**`docker-compose.yml`** — add to `alphaTrade` service:
 ```yaml
 ports:
   - "8080:8080"

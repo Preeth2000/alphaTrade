@@ -5,8 +5,8 @@ import logging
 
 import pandas as pd
 
-from alphalink.adapter.validators import validate_ohlcv
-from alphalink.data.provider import DataProvider
+from alphaTrade.adapter.validators import validate_ohlcv
+from alphaTrade.data.provider import DataProvider
 
 log = logging.getLogger(__name__)
 

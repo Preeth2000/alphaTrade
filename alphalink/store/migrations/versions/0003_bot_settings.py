@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column("extended_hours", sa.Boolean(), nullable=False, server_default="0"),
         sa.Column("max_positions", sa.Integer(), nullable=False, server_default="5"),
         sa.Column("daily_loss_halt_pct", sa.Float(), nullable=False, server_default="0.05"),
-        sa.Column("alphalink_api_key", sa.String(), nullable=False, server_default=""),
+        sa.Column("alphaTrade_api_key", sa.String(), nullable=False, server_default=""),
     )
 
 

@@ -1,4 +1,4 @@
-# alphaLink — Feature Reference
+# alphaTrade — Feature Reference
 
 ML-driven automated trading bot. Consumes ONNX model artifacts from alphaGen, fetches live OHLCV data, executes orders on Trading212, and monitors risk/performance via REST API.
 
@@ -8,13 +8,13 @@ ML-driven automated trading bot. Consumes ONNX model artifacts from alphaGen, fe
 
 | Command | Description |
 |---|---|
-| `alphalink run` | Start trading bot daemon with async event loop and schedulers |
-| `alphalink verify <dir>` | Dry-run a model: hash check, ONNX smoke test, live data fetch, inference |
-| `alphalink status` | Show loaded models, open positions, and day-open equity from state.db |
-| `alphalink halt` | Engage kill switch — pause order submission without stopping bot |
-| `alphalink resume` | Disengage kill switch — resume order submission |
-| `alphalink backtest <start> <end>` | Run historical backtest across all models with slippage/commission |
-| `alphalink report [--since DATE]` | Generate P&L report: daily snapshots and closed trade summary |
+| `alphaTrade run` | Start trading bot daemon with async event loop and schedulers |
+| `alphaTrade verify <dir>` | Dry-run a model: hash check, ONNX smoke test, live data fetch, inference |
+| `alphaTrade status` | Show loaded models, open positions, and day-open equity from state.db |
+| `alphaTrade halt` | Engage kill switch — pause order submission without stopping bot |
+| `alphaTrade resume` | Disengage kill switch — resume order submission |
+| `alphaTrade backtest <start> <end>` | Run historical backtest across all models with slippage/commission |
+| `alphaTrade report [--since DATE]` | Generate P&L report: daily snapshots and closed trade summary |
 
 ---
 
@@ -196,7 +196,7 @@ ML-driven automated trading bot. Consumes ONNX model artifacts from alphaGen, fe
 ## Kill Switch
 
 - **Sentinel file** — Create/remove `./HALT` file to toggle order submission
-- **Env override** — `ALPHALINK_HALT=1` pauses submission
+- **Env override** — `alphaTrade_HALT=1` pauses submission
 - **Graceful pause** — Bot stays alive; inference continues; orders don't submit
 
 ---

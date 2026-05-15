@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from alphalink.adapter.manifest import Manifest
+from alphaTrade.adapter.manifest import Manifest
 
 
 def build_input(feature_df, manifest: Manifest) -> np.ndarray:

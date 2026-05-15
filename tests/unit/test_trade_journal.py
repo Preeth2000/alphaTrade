@@ -6,16 +6,16 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel import Session, select
 
-from alphalink.broker.oco_monitor import monitor_oco
-from alphalink.store.db import get_engine
-from alphalink.store.repos import TradeJournal
-from alphalink.main import build_sell_journal_entry
-from alphalink.store.repos import Position
+from alphaTrade.broker.oco_monitor import monitor_oco
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import TradeJournal
+from alphaTrade.main import build_sell_journal_entry
+from alphaTrade.store.repos import Position
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng

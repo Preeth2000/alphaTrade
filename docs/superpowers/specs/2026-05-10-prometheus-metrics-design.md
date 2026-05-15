@@ -1,7 +1,7 @@
 # Prometheus Metrics Export — Design Spec
 
 **Date:** 2026-05-10  
-**Issue:** alphaLink-c9e  
+**Issue:** alphaTrade-c9e  
 **Priority:** P1
 
 ## Goal
@@ -36,7 +36,7 @@ Expose bot telemetry on `:9090/metrics` in Prometheus format so bot behavior is 
 
 ## Architecture
 
-### `alphalink/metrics.py`
+### `alphaTrade/metrics.py`
 
 Module-level singletons using default `prometheus_client` registry. No config, no injection — import and call.
 
@@ -58,13 +58,13 @@ t212_request_latency_seconds = Histogram("t212_request_latency_seconds", "...", 
 
 ### Instrumentation touch-points
 
-**`alphalink/broker/t212_client.py`** — `_get`, `_post`, `_delete`:
+**`alphaTrade/broker/t212_client.py`** — `_get`, `_post`, `_delete`:
 - Wrap each HTTP call with `time.perf_counter()` delta
 - Record `t212_requests_total.labels(endpoint=path, status=str(r.status_code)).inc()`
 - Record `t212_request_latency_seconds.labels(endpoint=path).observe(elapsed)`
 - On exception: record `status="error"`
 
-**`alphalink/main.py` tick():**
+**`alphaTrade/main.py` tick():**
 - `signals_total` — after `signal_repo.save(sig_rec)`
 - `orders_total` — after fill resolve (status: `filled`, `error`, `skipped_duplicate`)
 - `inference_errors_total` — in the `except` block of the inference loop
@@ -73,7 +73,7 @@ t212_request_latency_seconds = Histogram("t212_request_latency_seconds", "...", 
 
 ### Server startup
 
-In `alphalink/main.py` `run()`, before scheduler tasks:
+In `alphaTrade/main.py` `run()`, before scheduler tasks:
 
 ```python
 from prometheus_client import start_http_server
@@ -97,12 +97,12 @@ prometheus-client>=0.20
 **Why not registry isolation:** metrics are module-level singletons. Injecting a test registry requires restructuring the module. Not worth it for the coverage gained.
 
 **Smoke test** (`tests/unit/test_metrics.py`):
-- Import `alphalink.metrics`
+- Import `alphaTrade.metrics`
 - Call `prometheus_client.generate_latest()` on the default registry
 - Assert output is non-empty and parses without error
 - Confirms: no typos in metric definitions, valid Prometheus text format
 
-**Mock tests** — patch `alphalink.metrics.*` at call sites in existing tick/t212 tests:
+**Mock tests** — patch `alphaTrade.metrics.*` at call sites in existing tick/t212 tests:
 - `test_tick_*`: assert `signals_total.labels(...).inc()` called with correct ticker/signal
 - `test_t212_client`: assert `t212_requests_total.labels(endpoint=..., status="200").inc()` called
 

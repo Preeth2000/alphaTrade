@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
-from alphalink.store.repos import EquityCurve, EquityRepo
+from alphaTrade.store.repos import EquityCurve, EquityRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extend `alphalink/adapter/validators.py` with three new checks: Close-outside-range (raises), zero-volume bars (warns), and timestamp gap detection (warns).
+**Goal:** Extend `alphaTrade/adapter/validators.py` with three new checks: Close-outside-range (raises), zero-volume bars (warns), and timestamp gap detection (warns).
 
 **Architecture:** All changes are confined to two files — `validators.py` (implementation) and `test_validators.py` (tests). The existing `validate_ohlcv` function is extended in-place; no API change, no caller changes. A module-level logger is added for the two new warning checks.
 
@@ -14,7 +14,7 @@
 
 | Action | File | Responsibility |
 |--------|------|----------------|
-| Modify | `alphalink/adapter/validators.py` | Add logger + 3 new checks |
+| Modify | `alphaTrade/adapter/validators.py` | Add logger + 3 new checks |
 | Modify | `tests/unit/test_validators.py` | Add 9 new tests across 3 classes |
 
 ---
@@ -22,7 +22,7 @@
 ## Task 1: Close-outside-range check
 
 **Files:**
-- Modify: `alphalink/adapter/validators.py`
+- Modify: `alphaTrade/adapter/validators.py`
 - Modify: `tests/unit/test_validators.py`
 
 The check raises `ValueError` if any row has `Close > High` or `Close < Low`. No logger needed — it's a hard error like the existing `High < Low` check.
@@ -66,7 +66,7 @@ Expected: `FAILED` — `test_raises_close_above_high` and `test_raises_close_bel
 
 - [ ] **Step 3: Implement Close-outside-range check**
 
-In `alphalink/adapter/validators.py`, after the existing `if (df["Low"] < 0).any():` block (currently the last OHLC check, around line 68), add:
+In `alphaTrade/adapter/validators.py`, after the existing `if (df["Low"] < 0).any():` block (currently the last OHLC check, around line 68), add:
 
 ```python
     if (df["Close"] > df["High"]).any() or (df["Close"] < df["Low"]).any():
@@ -92,8 +92,8 @@ Expected: all existing tests + 4 new = all PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/adapter/validators.py tests/unit/test_validators.py
-git commit -m "feat: validate Close within [Low, High] range (alphaLink-5pw)"
+git add alphaTrade/adapter/validators.py tests/unit/test_validators.py
+git commit -m "feat: validate Close within [Low, High] range (alphaTrade-5pw)"
 ```
 
 ---
@@ -101,7 +101,7 @@ git commit -m "feat: validate Close within [Low, High] range (alphaLink-5pw)"
 ## Task 2: Zero-volume warning
 
 **Files:**
-- Modify: `alphalink/adapter/validators.py`
+- Modify: `alphaTrade/adapter/validators.py`
 - Modify: `tests/unit/test_validators.py`
 
 Adds a module-level logger and emits `log.warning` when any bar has `Volume == 0`. Does not raise — zero-volume bars are legitimate (market halt, illiquid instrument). Tests use pytest's `caplog` fixture to assert warning presence/absence.
@@ -121,13 +121,13 @@ class TestZeroVolumeWarning:
     def test_warns_on_zero_volume(self, caplog):
         df = _make_df()
         df.loc[df.index[0], "Volume"] = 0
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "zero-volume" in caplog.text
 
     def test_no_warning_all_nonzero(self, caplog):
         df = _make_df()
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "zero-volume" not in caplog.text
 ```
@@ -142,7 +142,7 @@ Expected: `test_warns_on_zero_volume` FAILS — no warning emitted yet.
 
 - [ ] **Step 3: Add logger and zero-volume warning**
 
-In `alphalink/adapter/validators.py`:
+In `alphaTrade/adapter/validators.py`:
 
 **3a.** Add `import logging` and the module logger. Change the imports block from:
 
@@ -194,8 +194,8 @@ Expected: all PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/adapter/validators.py tests/unit/test_validators.py
-git commit -m "feat: warn on zero-volume bars (alphaLink-5pw)"
+git add alphaTrade/adapter/validators.py tests/unit/test_validators.py
+git commit -m "feat: warn on zero-volume bars (alphaTrade-5pw)"
 ```
 
 ---
@@ -203,7 +203,7 @@ git commit -m "feat: warn on zero-volume bars (alphaLink-5pw)"
 ## Task 3: Timestamp gap detection
 
 **Files:**
-- Modify: `alphalink/adapter/validators.py`
+- Modify: `alphaTrade/adapter/validators.py`
 - Modify: `tests/unit/test_validators.py`
 
 Emits `log.warning` when any consecutive bar gap exceeds `interval_seconds × 3`. Uses `pd.Series(df.index).diff().dt.total_seconds()` on the DatetimeIndex. Skips silently for non-datetime indices (same guard pattern as existing staleness check).
@@ -224,20 +224,20 @@ class TestTimestampGaps:
         idx[3] = idx[3] + shift
         idx[4] = idx[4] + shift
         df.index = pd.DatetimeIndex(idx)
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" in caplog.text
 
     def test_no_warning_on_normal_gaps(self, caplog):
         df = _make_df(n=5)
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" not in caplog.text
 
     def test_skips_gap_check_for_non_datetime_index(self, caplog):
         df = _make_df()
         df.index = range(len(df))
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" not in caplog.text
 ```
@@ -252,7 +252,7 @@ Expected: `test_warns_on_gap_exceeding_3x_interval` FAILS — no gap warning emi
 
 - [ ] **Step 3: Implement gap detection**
 
-In `alphalink/adapter/validators.py`, at the very end of `validate_ohlcv` (after the entire staleness check block, as the last block before the function ends), add:
+In `alphaTrade/adapter/validators.py`, at the very end of `validate_ohlcv` (after the entire staleness check block, as the last block before the function ends), add:
 
 ```python
     # Timestamp gap detection
@@ -289,6 +289,6 @@ Expected: all 134+ tests PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/adapter/validators.py tests/unit/test_validators.py
-git commit -m "feat: timestamp gap detection warning (alphaLink-5pw)"
+git add alphaTrade/adapter/validators.py tests/unit/test_validators.py
+git commit -m "feat: timestamp gap detection warning (alphaTrade-5pw)"
 ```

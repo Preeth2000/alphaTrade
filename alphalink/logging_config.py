@@ -23,8 +23,8 @@ def make_json_formatter() -> _JsonFormatter:
 def _apply_per_module_levels() -> None:
     """Apply LOG_LEVEL_<module>=LEVEL env vars to per-logger levels.
 
-    Underscores in the suffix are converted to dots: LOG_LEVEL_alphalink_broker
-    sets the level of logging.getLogger("alphalink.broker").
+    Underscores in the suffix are converted to dots: LOG_LEVEL_alphaTrade_broker
+    sets the level of logging.getLogger("alphaTrade.broker").
     """
     for key, val in os.environ.items():
         if not key.startswith("LOG_LEVEL_"):

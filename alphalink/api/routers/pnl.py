@@ -3,7 +3,7 @@ from collections.abc import Callable
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
-from alphalink.store.repos import PnlSnapshot, PnlSnapshotRepo
+from alphaTrade.store.repos import PnlSnapshot, PnlSnapshotRepo
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:

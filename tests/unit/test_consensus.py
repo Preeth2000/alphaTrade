@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from alphalink.consensus.softmax_avg import consensus, consensus_by_ticker
+from alphaTrade.consensus.softmax_avg import consensus, consensus_by_ticker
 
 
 def test_single_model_buy():

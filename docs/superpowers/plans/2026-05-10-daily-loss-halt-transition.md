@@ -14,7 +14,7 @@
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `alphalink/main.py` | Modify | Add `_prev_halt` closure var; guard `wh.notify` + `log.warning` behind transition check |
+| `alphaTrade/main.py` | Modify | Add `_prev_halt` closure var; guard `wh.notify` + `log.warning` behind transition check |
 | `tests/unit/test_daily_loss_halt_transition.py` | Create | Three tests covering: repeated halt ticks, first-tick transition, halt re-entry |
 
 ---
@@ -23,7 +23,7 @@
 
 **Files:**
 - Create: `tests/unit/test_daily_loss_halt_transition.py`
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -41,9 +41,9 @@ import pandas as pd
 import pytest
 from sqlmodel import SQLModel, create_engine
 
-from alphalink.config import Settings
-from alphalink.health import HealthState
-from alphalink.main import make_tick
+from alphaTrade.config import Settings
+from alphaTrade.health import HealthState
+from alphaTrade.main import make_tick
 
 INTERVAL = "1d"
 
@@ -116,11 +116,11 @@ async def test_notify_fires_once_for_consecutive_halted_ticks(tmp_path):
     )
 
     with (
-        patch("alphalink.main.compute_features", return_value=_DF),
-        patch("alphalink.main.normalize", return_value=_DF),
-        patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-        patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
-        patch("alphalink.main.wh") as mock_wh,
+        patch("alphaTrade.main.compute_features", return_value=_DF),
+        patch("alphaTrade.main.normalize", return_value=_DF),
+        patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+        patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+        patch("alphaTrade.main.wh") as mock_wh,
     ):
         await tick()  # tick 1: not halted
         await tick()  # tick 2: halted → notify fires
@@ -153,12 +153,12 @@ async def test_notify_fires_on_transition_tick_not_before(tmp_path):
         static_map={"AAPL": "AAPL_US_EQ"},
     )
 
-    with patch("alphalink.main.wh") as mock_wh:
+    with patch("alphaTrade.main.wh") as mock_wh:
         with (
-            patch("alphalink.main.compute_features", return_value=_DF),
-            patch("alphalink.main.normalize", return_value=_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.compute_features", return_value=_DF),
+            patch("alphaTrade.main.normalize", return_value=_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
         ):
             await tick()  # equity=10_000, not halted → no notify
             halt_notify_count_after_tick1 = sum(
@@ -194,12 +194,12 @@ async def test_notify_fires_again_on_re_entry(tmp_path):
         static_map={"AAPL": "AAPL_US_EQ"},
     )
 
-    with patch("alphalink.main.wh") as mock_wh:
+    with patch("alphaTrade.main.wh") as mock_wh:
         with (
-            patch("alphalink.main.compute_features", return_value=_DF),
-            patch("alphalink.main.normalize", return_value=_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.compute_features", return_value=_DF),
+            patch("alphaTrade.main.normalize", return_value=_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
         ):
             await tick()  # not halted
             await tick()  # halted → notify #1
@@ -225,7 +225,7 @@ Expected: all 3 `FAILED` — notify fires every tick, not just on transition.
 
 - [ ] **Step 3: Add `_prev_halt` closure variable to make_tick()**
 
-In `alphalink/main.py`, find the line `async def tick() -> None:` inside `make_tick()`. Add one line immediately before it:
+In `alphaTrade/main.py`, find the line `async def tick() -> None:` inside `make_tick()`. Add one line immediately before it:
 
 ```python
     _prev_halt: list[bool] = [False]
@@ -278,12 +278,12 @@ Expected: all pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/main.py tests/unit/test_daily_loss_halt_transition.py
-git commit -m "fix: daily-loss-halt notify on transition only, not every tick (alphaLink-a73)"
+git add alphaTrade/main.py tests/unit/test_daily_loss_halt_transition.py
+git commit -m "fix: daily-loss-halt notify on transition only, not every tick (alphaTrade-a73)"
 ```
 
 - [ ] **Step 8: Close issue**
 
 ```bash
-bd close alphaLink-a73
+bd close alphaTrade-a73
 ```

@@ -1,10 +1,10 @@
-"""Operator kill switch: ALPHALINK_HALT env var or ./HALT sentinel file."""
+"""Operator kill switch: alphaTrade_HALT env var or ./HALT sentinel file."""
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-ENV_VAR = "ALPHALINK_HALT"
+ENV_VAR = "alphaTrade_HALT"
 SENTINEL_FILE = "HALT"
 
 _TRUTHY = {"1", "true", "yes", "on"}

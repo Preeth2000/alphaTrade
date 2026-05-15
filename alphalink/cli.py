@@ -1,4 +1,4 @@
-"""CLI: alphalink run | verify <model_dir> | status"""
+"""CLI: alphaTrade run | verify <model_dir> | status"""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(name="alphalink", add_completion=False)
+app = typer.Typer(name="alphaTrade", add_completion=False)
 console = Console()
 
 
@@ -19,8 +19,8 @@ def run(
     overrides: Path = typer.Option(Path("./overrides.yaml"), envvar="OVERRIDES_PATH"),
 ):
     """Start the trading bot daemon."""
-    from alphalink.config import Settings
-    from alphalink.main import run as _run
+    from alphaTrade.config import Settings
+    from alphaTrade.main import run as _run
 
     settings = Settings(overrides_path=overrides)
     asyncio.run(_run(settings))
@@ -33,13 +33,13 @@ def verify(
 ):
     """Hash-check, smoke-test, and dry-run inference on a model artifact."""
     import numpy as np
-    from alphalink.adapter.manifest import Manifest
-    from alphalink.adapter.inference import OnnxModel
-    from alphalink.adapter.features import compute_features
-    from alphalink.adapter.normalize import normalize
-    from alphalink.adapter.window import build_input
-    from alphalink.data.yfinance_provider import YFinanceProvider
-    from alphalink.consensus.softmax_avg import CLASS_NAMES, _softmax
+    from alphaTrade.adapter.manifest import Manifest
+    from alphaTrade.adapter.inference import OnnxModel
+    from alphaTrade.adapter.features import compute_features
+    from alphaTrade.adapter.normalize import normalize
+    from alphaTrade.adapter.window import build_input
+    from alphaTrade.data.yfinance_provider import YFinanceProvider
+    from alphaTrade.consensus.softmax_avg import CLASS_NAMES, _softmax
 
     manifest_path = model_dir / "manifest.json"
     model_path = model_dir / "model.onnx"
@@ -94,10 +94,10 @@ def verify(
 @app.command()
 def status():
     """Show loaded models, open positions, and today's PnL from state.db."""
-    from alphalink.config import Settings
-    from alphalink.store.db import get_session
-    from alphalink.store.repos import PositionRepo, EquityRepo
-    from alphalink.main import scan_models
+    from alphaTrade.config import Settings
+    from alphaTrade.store.db import get_session
+    from alphaTrade.store.repos import PositionRepo, EquityRepo
+    from alphaTrade.main import scan_models
 
     try:
         settings = Settings()
@@ -131,7 +131,7 @@ def status():
 @app.command()
 def halt():
     """Engage kill switch: create HALT sentinel file to pause order submission."""
-    from alphalink.kill_switch import SENTINEL_FILE
+    from alphaTrade.kill_switch import SENTINEL_FILE
     Path(SENTINEL_FILE).touch()
     console.print(f"[yellow]Kill switch engaged — {SENTINEL_FILE} created. Bot alive but orders paused.[/yellow]")
 
@@ -139,7 +139,7 @@ def halt():
 @app.command()
 def resume():
     """Disengage kill switch: remove HALT sentinel file to resume order submission."""
-    from alphalink.kill_switch import SENTINEL_FILE
+    from alphaTrade.kill_switch import SENTINEL_FILE
     p = Path(SENTINEL_FILE)
     if p.exists():
         p.unlink()
@@ -156,10 +156,10 @@ def backtest(
     output: str = typer.Option("text", "--output", "-o", help="Output format: text | json"),
 ):
     """Run dry-run backtester over historical data for all loaded models."""
-    from alphalink.config import Settings
-    from alphalink.backtest.engine import run_backtest
-    from alphalink.backtest.reporter import compute_summary, format_text
-    from alphalink.store.db import get_session
+    from alphaTrade.config import Settings
+    from alphaTrade.backtest.engine import run_backtest
+    from alphaTrade.backtest.reporter import compute_summary, format_text
+    from alphaTrade.store.db import get_session
 
     settings = Settings()
     mdir = models_dir or settings.models_dir
@@ -193,9 +193,9 @@ def report(
     import csv
     import sys
     from datetime import date, timedelta
-    from alphalink.config import Settings
-    from alphalink.store.db import get_session
-    from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo
+    from alphaTrade.config import Settings
+    from alphaTrade.store.db import get_session
+    from alphaTrade.store.repos import PnlSnapshotRepo, TradeJournalRepo
 
     try:
         settings = Settings()

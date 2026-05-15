@@ -6,15 +6,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from sqlmodel import Session
 
-from alphalink.backtest.engine import run_backtest
-from alphalink.backtest.reporter import compute_summary
-from alphalink.config import BacktestConfig
-from alphalink.store.db import get_engine
+from alphaTrade.backtest.engine import run_backtest
+from alphaTrade.backtest.reporter import compute_summary
+from alphaTrade.config import BacktestConfig
+from alphaTrade.store.db import get_engine
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -72,8 +72,8 @@ def test_backtest_runs_without_error(engine, tmp_path):
         tp_pct=10.0,
     )
 
-    with patch("alphalink.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
-         patch("alphalink.backtest.engine.YFinanceProvider") as MockProvider:
+    with patch("alphaTrade.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
+         patch("alphaTrade.backtest.engine.YFinanceProvider") as MockProvider:
         mock_provider = MockProvider.return_value
         mock_provider.fetch_ohlcv_range.return_value = synthetic_df
 
@@ -102,8 +102,8 @@ def test_backtest_summary_from_integration(engine, tmp_path):
     cfg = BacktestConfig(initial_equity=10_000.0, slippage_bps=5, commission_per_trade=1.0,
                          default_size_pct=0.1, sl_pct=None, tp_pct=None)
 
-    with patch("alphalink.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
-         patch("alphalink.backtest.engine.YFinanceProvider") as MockProvider:
+    with patch("alphaTrade.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
+         patch("alphaTrade.backtest.engine.YFinanceProvider") as MockProvider:
         mock_provider = MockProvider.return_value
         mock_provider.fetch_ohlcv_range.return_value = synthetic_df
 

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import pytest
 
-from alphalink.adapter.validators import validate_ohlcv
+from alphaTrade.adapter.validators import validate_ohlcv
 
 _INTERVAL = "1h"
 
@@ -132,13 +132,13 @@ class TestZeroVolumeWarning:
     def test_warns_on_zero_volume(self, caplog):
         df = _make_df()
         df.loc[df.index[0], "Volume"] = 0
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "zero-volume" in caplog.text
 
     def test_no_warning_all_nonzero(self, caplog):
         df = _make_df()
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "zero-volume" not in caplog.text
 
@@ -170,19 +170,19 @@ class TestTimestampGaps:
         idx[3] = idx[3] + shift
         idx[4] = idx[4] + shift
         df.index = pd.DatetimeIndex(idx)
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" in caplog.text
 
     def test_no_warning_on_normal_gaps(self, caplog):
         df = _make_df(n=5)
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" not in caplog.text
 
     def test_skips_gap_check_for_non_datetime_index(self, caplog):
         df = _make_df()
         df.index = range(len(df))
-        with caplog.at_level(logging.WARNING, logger="alphalink.adapter.validators"):
+        with caplog.at_level(logging.WARNING, logger="alphaTrade.adapter.validators"):
             validate_ohlcv(df, _INTERVAL)
         assert "timestamp gap" not in caplog.text

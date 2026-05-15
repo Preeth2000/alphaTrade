@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
-from alphalink.broker.orders import make_client_order_id, submit_order
-from alphalink.store.repos import Order, OrderRepo
+from alphaTrade.broker.orders import make_client_order_id, submit_order
+from alphaTrade.store.repos import Order, OrderRepo
 
 
 @pytest.fixture

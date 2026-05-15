@@ -8,15 +8,15 @@ import asyncio
 import pytest
 from sqlmodel import Session
 
-from alphalink.config import ModelRetirementConfig
-from alphalink.risk.performance import record_trade, check_retirement
-from alphalink.store.db import get_engine
-from alphalink.store.repos import ModelPerformanceRepo
+from alphaTrade.config import ModelRetirementConfig
+from alphaTrade.risk.performance import record_trade, check_retirement
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import ModelPerformanceRepo
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -107,8 +107,8 @@ def test_registry_skips_retired_model(engine, tmp_path):
         perf.retired = True
         repo.update(perf)
 
-    with patch("alphalink.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
-        from alphalink.model_registry import ModelRegistry
+    with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
+        from alphaTrade.model_registry import ModelRegistry
         registry = ModelRegistry(engine=engine)
         asyncio.run(registry.refresh(Path("/fake"), {}))
 

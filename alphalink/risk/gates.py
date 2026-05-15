@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from alphalink.store.repos import PositionRepo
+from alphaTrade.store.repos import PositionRepo
 
 
 @dataclass
@@ -50,7 +50,7 @@ def run_gates(
 
     # Sector gate (BUY only)
     if signal == "BUY" and yf_ticker and sector_repo is not None and risk_cfg is not None:
-        from alphalink.risk.sector import check_sector_gate
+        from alphaTrade.risk.sector import check_sector_gate
         rejection = check_sector_gate(
             yf_ticker=yf_ticker,
             signal=signal,

@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alphalink.risk.gates import run_gates, GateResult
-from alphalink.store.repos import Position
+from alphaTrade.risk.gates import run_gates, GateResult
+from alphaTrade.store.repos import Position
 
 
 def _mock_repo(positions: list[Position] | None = None, ticker_pos: Position | None = None):

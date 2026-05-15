@@ -17,7 +17,7 @@ def _alembic_ini_path() -> str:
     if env:
         return env
     with pkg_resources.as_file(
-        pkg_resources.files("alphalink.store").joinpath("alembic.ini")
+        pkg_resources.files("alphaTrade.store").joinpath("alembic.ini")
     ) as p:
         return str(p)
 

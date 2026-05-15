@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from unittest.mock import patch
 
-from alphalink.data.yfinance_provider import YFinanceProvider
+from alphaTrade.data.yfinance_provider import YFinanceProvider
 
 _COLS = ["Open", "High", "Low", "Close", "Volume"]
 _N = 10

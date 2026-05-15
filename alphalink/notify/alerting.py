@@ -15,7 +15,7 @@ try:
 except ImportError:
     httpx = None  # type: ignore[assignment]
 
-from alphalink.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
+from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
 
 log = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class AlertManager:
         email_cfg = self._cfg.email
         if email_cfg is None:
             return
-        subject = f"[alphaLink {level.name}] Alert"
+        subject = f"[alphaTrade {level.name}] Alert"
         msg = MIMEText(message)
         msg["Subject"] = subject
         msg["From"] = email_cfg.from_addr

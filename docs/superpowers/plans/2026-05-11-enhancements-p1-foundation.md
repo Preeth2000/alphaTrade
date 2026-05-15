@@ -14,11 +14,11 @@
 
 | Action | File |
 |---|---|
-| Create | `alphalink/store/migrations/versions/0002_enhancement_tables.py` |
-| Modify | `alphalink/store/repos.py` — add 6 ORM models + 6 repo classes |
-| Modify | `alphalink/config.py` — add 9 new config classes, extend RiskConfig + Settings |
-| Modify | `alphalink/broker/oco_monitor.py` — accept entry/exit context, write TradeJournal on close |
-| Modify | `alphalink/main.py` — pass entry context to monitor_oco, write TradeJournal on SELL |
+| Create | `alphaTrade/store/migrations/versions/0002_enhancement_tables.py` |
+| Modify | `alphaTrade/store/repos.py` — add 6 ORM models + 6 repo classes |
+| Modify | `alphaTrade/config.py` — add 9 new config classes, extend RiskConfig + Settings |
+| Modify | `alphaTrade/broker/oco_monitor.py` — accept entry/exit context, write TradeJournal on close |
+| Modify | `alphaTrade/main.py` — pass entry context to monitor_oco, write TradeJournal on SELL |
 | Modify | `tests/unit/test_logging_config.py` — no change needed |
 | Create | `tests/unit/test_trade_journal.py` |
 | Create | `tests/unit/test_config_extensions.py` |
@@ -28,7 +28,7 @@
 ### Task 1: Alembic migration for 6 new tables
 
 **Files:**
-- Create: `alphalink/store/migrations/versions/0002_enhancement_tables.py`
+- Create: `alphaTrade/store/migrations/versions/0002_enhancement_tables.py`
 
 - [ ] **Step 1: Write the migration file**
 
@@ -150,9 +150,9 @@ def downgrade() -> None:
 - [ ] **Step 2: Run migration against a test DB to verify it applies cleanly**
 
 ```bash
-cd /home/preeth/projects/alphaLink
+cd /home/preeth/projects/alphaTrade
 python -c "
-from alphalink.store.db import run_migrations
+from alphaTrade.store.db import run_migrations
 import tempfile, os
 with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
     db = f.name
@@ -167,7 +167,7 @@ Expected: `Migration OK: /tmp/tmpXXXXXX.db`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add alphalink/store/migrations/versions/0002_enhancement_tables.py
+git add alphaTrade/store/migrations/versions/0002_enhancement_tables.py
 git commit -m "feat(store): add enhancement tables via alembic migration 0002"
 ```
 
@@ -176,7 +176,7 @@ git commit -m "feat(store): add enhancement tables via alembic migration 0002"
 ### Task 2: ORM models in repos.py
 
 **Files:**
-- Modify: `alphalink/store/repos.py`
+- Modify: `alphaTrade/store/repos.py`
 
 - [ ] **Step 1: Write failing test for new ORM models**
 
@@ -190,8 +190,8 @@ from datetime import datetime
 import pytest
 from sqlmodel import Session
 
-from alphalink.store.db import get_engine
-from alphalink.store.repos import (
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import (
     TradeJournal, PnlSnapshot, ModelPerformance,
     SectorCache, BacktestRun, BacktestTrade,
 )
@@ -200,8 +200,8 @@ from alphalink.store.repos import (
 @pytest.fixture
 def engine(tmp_path):
     db = tmp_path / "test.db"
-    from alphalink.store.db import _engine as _e
-    import alphalink.store.db as _db
+    from alphaTrade.store.db import _engine as _e
+    import alphaTrade.store.db as _db
     _db._engine = None  # reset module-level singleton
     eng = get_engine(db)
     yield eng
@@ -277,11 +277,11 @@ def test_backtest_run_round_trip(engine):
 pytest tests/unit/test_new_orm_models.py -v 2>&1 | head -20
 ```
 
-Expected: `ImportError: cannot import name 'TradeJournal' from 'alphalink.store.repos'`
+Expected: `ImportError: cannot import name 'TradeJournal' from 'alphaTrade.store.repos'`
 
 - [ ] **Step 3: Add ORM models to repos.py**
 
-Append to `alphalink/store/repos.py` after the `InstrumentCache` class:
+Append to `alphaTrade/store/repos.py` after the `InstrumentCache` class:
 
 ```python
 class TradeJournal(SQLModel, table=True):
@@ -375,7 +375,7 @@ Expected: all 4 tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/store/repos.py tests/unit/test_new_orm_models.py
+git add alphaTrade/store/repos.py tests/unit/test_new_orm_models.py
 git commit -m "feat(store): add 6 new ORM models for enhancement tables"
 ```
 
@@ -384,14 +384,14 @@ git commit -m "feat(store): add 6 new ORM models for enhancement tables"
 ### Task 3: Repo classes in repos.py
 
 **Files:**
-- Modify: `alphalink/store/repos.py`
+- Modify: `alphaTrade/store/repos.py`
 
 - [ ] **Step 1: Write failing tests**
 
 Add to `tests/unit/test_new_orm_models.py`:
 
 ```python
-from alphalink.store.repos import (
+from alphaTrade.store.repos import (
     TradeJournalRepo, PnlSnapshotRepo, ModelPerformanceRepo,
     SectorCacheRepo, BacktestRepo,
 )
@@ -501,7 +501,7 @@ Expected: `ImportError: cannot import name 'TradeJournalRepo'`
 
 - [ ] **Step 3: Add repo classes to repos.py**
 
-Append to `alphalink/store/repos.py` after the `InstrumentCacheRepo` class:
+Append to `alphaTrade/store/repos.py` after the `InstrumentCacheRepo` class:
 
 ```python
 class TradeJournalRepo:
@@ -626,7 +626,7 @@ Expected: all 10 tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/store/repos.py tests/unit/test_new_orm_models.py
+git add alphaTrade/store/repos.py tests/unit/test_new_orm_models.py
 git commit -m "feat(store): add 6 repo classes for new enhancement tables"
 ```
 
@@ -635,7 +635,7 @@ git commit -m "feat(store): add 6 repo classes for new enhancement tables"
 ### Task 4: Config extensions
 
 **Files:**
-- Modify: `alphalink/config.py`
+- Modify: `alphaTrade/config.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -643,7 +643,7 @@ Create `tests/unit/test_config_extensions.py`:
 
 ```python
 """Verify new config classes parse from dicts (simulates overrides.yaml loading)."""
-from alphalink.config import (
+from alphaTrade.config import (
     AlertsConfig, AlertSlackConfig, AlertEmailConfig,
     BacktestConfig, ModelRetirementConfig,
     AtrSizingConfig, VixSizingConfig,
@@ -842,7 +842,7 @@ Expected: no new failures
 - [ ] **Step 8: Commit**
 
 ```bash
-git add alphalink/config.py tests/unit/test_config_extensions.py
+git add alphaTrade/config.py tests/unit/test_config_extensions.py
 git commit -m "feat(config): add config classes for risk enhancements, alerts, backtest"
 ```
 
@@ -851,8 +851,8 @@ git commit -m "feat(config): add config classes for risk enhancements, alerts, b
 ### Task 5: Trade journal writes in oco_monitor.py
 
 **Files:**
-- Modify: `alphalink/broker/oco_monitor.py`
-- Modify: `alphalink/main.py` (caller change only — pass new params to monitor_oco)
+- Modify: `alphaTrade/broker/oco_monitor.py`
+- Modify: `alphaTrade/main.py` (caller change only — pass new params to monitor_oco)
 
 - [ ] **Step 1: Write failing test**
 
@@ -867,14 +867,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlmodel import Session, select
 
-from alphalink.broker.oco_monitor import monitor_oco
-from alphalink.store.db import get_engine
-from alphalink.store.repos import TradeJournal
+from alphaTrade.broker.oco_monitor import monitor_oco
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import TradeJournal
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -974,9 +974,9 @@ from typing import Optional
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.notify import webhook as wh
-from alphalink.store.repos import Position, PositionRepo, TradeJournal, TradeJournalRepo
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.notify import webhook as wh
+from alphaTrade.store.repos import Position, PositionRepo, TradeJournal, TradeJournalRepo
 
 log = logging.getLogger(__name__)
 
@@ -1103,7 +1103,7 @@ def _close_position(
 
 - [ ] **Step 4: Update monitor_oco call site in main.py**
 
-In `alphalink/main.py`, find the `asyncio.create_task(monitor_oco(...))` call (around line 356) and add the new params:
+In `alphaTrade/main.py`, find the `asyncio.create_task(monitor_oco(...))` call (around line 356) and add the new params:
 
 ```python
                             _task = asyncio.create_task(monitor_oco(
@@ -1141,7 +1141,7 @@ Expected: no new failures
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/broker/oco_monitor.py alphalink/main.py tests/unit/test_trade_journal.py
+git add alphaTrade/broker/oco_monitor.py alphaTrade/main.py tests/unit/test_trade_journal.py
 git commit -m "feat(broker): write trade journal on OCO position close"
 ```
 
@@ -1150,19 +1150,19 @@ git commit -m "feat(broker): write trade journal on OCO position close"
 ### Task 6: Trade journal write on SELL in main.py
 
 **Files:**
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 - [ ] **Step 1: Add failing test for SELL journal write**
 
 Add to `tests/unit/test_trade_journal.py`:
 
 ```python
-from alphalink.store.repos import Position
+from alphaTrade.store.repos import Position
 
 
 def test_sell_writes_trade_journal(engine):
     """Journal entry created when build_sell_journal_entry is called with SELL params."""
-    from alphalink.main import build_sell_journal_entry
+    from alphaTrade.main import build_sell_journal_entry
 
     now = datetime.utcnow()
     pos = Position(
@@ -1191,11 +1191,11 @@ def test_sell_writes_trade_journal(engine):
 pytest tests/unit/test_trade_journal.py::test_sell_writes_trade_journal -v 2>&1 | head -10
 ```
 
-Expected: `ImportError: cannot import name 'build_sell_journal_entry' from 'alphalink.main'`
+Expected: `ImportError: cannot import name 'build_sell_journal_entry' from 'alphaTrade.main'`
 
 - [ ] **Step 3: Add build_sell_journal_entry helper to main.py**
 
-Add after the `scan_models` function in `alphalink/main.py`:
+Add after the `scan_models` function in `alphaTrade/main.py`:
 
 ```python
 def build_sell_journal_entry(
@@ -1205,7 +1205,7 @@ def build_sell_journal_entry(
     quantity: float,
     position: "Position",
 ) -> "TradeJournal":
-    from alphalink.store.repos import TradeJournal
+    from alphaTrade.store.repos import TradeJournal
     entry_price = position.avg_entry
     realized_pnl = (exit_price - entry_price) * quantity
     pnl_pct = (exit_price - entry_price) / entry_price if entry_price else 0.0
@@ -1230,7 +1230,7 @@ In the `elif signal == "SELL":` block in `make_tick`, after `pos_repo.remove(t21
 ```python
                         # Write trade journal for SELL
                         if pos:
-                            from alphalink.store.repos import TradeJournalRepo
+                            from alphaTrade.store.repos import TradeJournalRepo
                             fill_price_raw = resp.get("fillPrice")
                             exit_p = float(fill_price_raw) if fill_price_raw else current_price
                             journal_repo = TradeJournalRepo(session)
@@ -1276,6 +1276,6 @@ Expected: no new failures
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/main.py tests/unit/test_trade_journal.py
+git add alphaTrade/main.py tests/unit/test_trade_journal.py
 git commit -m "feat(main): write trade journal on SELL fill"
 ```

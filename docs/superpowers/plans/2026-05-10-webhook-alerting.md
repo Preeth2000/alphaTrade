@@ -4,7 +4,7 @@
 
 **Goal:** Push critical trading bot events (daily-loss halt, order failures, startup/shutdown) to Discord or Slack via webhook with per-category rate limiting.
 
-**Architecture:** New `alphalink/notify/webhook.py` exposes `configure(url)` + `notify(level, msg, category)`. A `WebhookHandler` logging handler bridges existing `log.*` calls into the webhook. Wire-up happens in `main.py` after `basicConfig`.
+**Architecture:** New `alphaTrade/notify/webhook.py` exposes `configure(url)` + `notify(level, msg, category)`. A `WebhookHandler` logging handler bridges existing `log.*` calls into the webhook. Wire-up happens in `main.py` after `basicConfig`.
 
 **Tech Stack:** Python 3.11, httpx (already in deps), pytest + respx for mocking.
 
@@ -14,25 +14,25 @@
 
 | Action | Path | Responsibility |
 |---|---|---|
-| Create | `alphalink/notify/__init__.py` | Package marker |
-| Create | `alphalink/notify/webhook.py` | `configure()`, `notify()`, `WebhookHandler` |
+| Create | `alphaTrade/notify/__init__.py` | Package marker |
+| Create | `alphaTrade/notify/webhook.py` | `configure()`, `notify()`, `WebhookHandler` |
 | Create | `tests/unit/test_webhook.py` | All unit tests |
-| Modify | `alphalink/config.py` | Add `webhook_url`, `webhook_levels` fields |
-| Modify | `alphalink/main.py` | Wire handler + explicit `notify()` alert calls |
+| Modify | `alphaTrade/config.py` | Add `webhook_url`, `webhook_levels` fields |
+| Modify | `alphaTrade/main.py` | Wire handler + explicit `notify()` alert calls |
 
 ---
 
 ### Task 1: Scaffold notify module with stub and failing tests
 
 **Files:**
-- Create: `alphalink/notify/__init__.py`
-- Create: `alphalink/notify/webhook.py` (stub)
+- Create: `alphaTrade/notify/__init__.py`
+- Create: `alphaTrade/notify/webhook.py` (stub)
 - Create: `tests/unit/test_webhook.py`
 
 - [ ] **Step 1: Create the package marker**
 
 ```python
-# alphalink/notify/__init__.py
+# alphaTrade/notify/__init__.py
 ```
 
 (Empty file — just makes it a package.)
@@ -40,7 +40,7 @@
 - [ ] **Step 2: Create stub webhook.py**
 
 ```python
-# alphalink/notify/webhook.py
+# alphaTrade/notify/webhook.py
 from __future__ import annotations
 
 import logging
@@ -81,7 +81,7 @@ import pytest
 import respx
 import httpx
 
-from alphalink.notify import webhook
+from alphaTrade.notify import webhook
 
 
 @pytest.fixture(autouse=True)
@@ -197,7 +197,7 @@ def test_handler_uses_category_from_extra():
     with respx.mock() as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         record = logging.LogRecord(
-            name="alphalink.main", level=logging.ERROR,
+            name="alphaTrade.main", level=logging.ERROR,
             pathname="", lineno=0, msg="Order failed for AAPL",
             args=(), exc_info=None,
         )
@@ -212,24 +212,24 @@ def test_handler_falls_back_to_logger_name_as_category():
     with respx.mock() as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         record = logging.LogRecord(
-            name="alphalink.broker", level=logging.ERROR,
+            name="alphaTrade.broker", level=logging.ERROR,
             pathname="", lineno=0, msg="Some error",
             args=(), exc_info=None,
         )
-        # No category on record — should fall back to "alphalink.broker"
+        # No category on record — should fall back to "alphaTrade.broker"
         handler.emit(record)
     assert len(mock.calls) == 1
     # Second call for same logger name should be rate-limited
     with respx.mock() as mock2:
         mock2.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         handler.emit(record)
-    assert len(mock2.calls) == 0  # rate-limited under "alphalink.broker"
+    assert len(mock2.calls) == 0  # rate-limited under "alphaTrade.broker"
 ```
 
 - [ ] **Step 4: Run tests — verify they all fail**
 
 ```bash
-cd /home/preeth/projects/alphaLink
+cd /home/preeth/projects/alphaTrade
 python -m pytest tests/unit/test_webhook.py -v 2>&1 | head -40
 ```
 
@@ -240,14 +240,14 @@ Expected: all tests `FAILED` or `ERROR` with `NotImplementedError`.
 ### Task 2: Implement `configure()` and `notify()`
 
 **Files:**
-- Modify: `alphalink/notify/webhook.py`
+- Modify: `alphaTrade/notify/webhook.py`
 
 - [ ] **Step 1: Replace stubs with real implementation**
 
-Replace the entire content of `alphalink/notify/webhook.py`:
+Replace the entire content of `alphaTrade/notify/webhook.py`:
 
 ```python
-# alphalink/notify/webhook.py
+# alphaTrade/notify/webhook.py
 from __future__ import annotations
 
 import logging
@@ -300,7 +300,7 @@ Expected: all non-handler tests `PASSED`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add alphalink/notify/__init__.py alphalink/notify/webhook.py tests/unit/test_webhook.py
+git add alphaTrade/notify/__init__.py alphaTrade/notify/webhook.py tests/unit/test_webhook.py
 git commit -m "feat: add notify() and configure() to webhook module"
 ```
 
@@ -309,11 +309,11 @@ git commit -m "feat: add notify() and configure() to webhook module"
 ### Task 3: Implement `WebhookHandler`
 
 **Files:**
-- Modify: `alphalink/notify/webhook.py`
+- Modify: `alphaTrade/notify/webhook.py`
 
 - [ ] **Step 1: Replace the WebhookHandler stub**
 
-Replace only the `WebhookHandler` class in `alphalink/notify/webhook.py`:
+Replace only the `WebhookHandler` class in `alphaTrade/notify/webhook.py`:
 
 ```python
 class WebhookHandler(logging.Handler):
@@ -345,7 +345,7 @@ Expected: all tests `PASSED`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add alphalink/notify/webhook.py
+git add alphaTrade/notify/webhook.py
 git commit -m "feat: add WebhookHandler logging handler"
 ```
 
@@ -354,12 +354,12 @@ git commit -m "feat: add WebhookHandler logging handler"
 ### Task 4: Config fields and main.py wire-up
 
 **Files:**
-- Modify: `alphalink/config.py:41-56` (Settings class)
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/config.py:41-56` (Settings class)
+- Modify: `alphaTrade/main.py`
 
 - [ ] **Step 1: Add webhook fields to Settings**
 
-In `alphalink/config.py`, add two fields to the `Settings` class after `overrides_path`:
+In `alphaTrade/config.py`, add two fields to the `Settings` class after `overrides_path`:
 
 ```python
     webhook_url: str = ""
@@ -382,15 +382,15 @@ The full `Settings` class field block should look like:
 
 - [ ] **Step 2: Add webhook import to main.py**
 
-At the top of `alphalink/main.py`, add after the existing imports:
+At the top of `alphaTrade/main.py`, add after the existing imports:
 
 ```python
-from alphalink.notify import webhook as wh
+from alphaTrade.notify import webhook as wh
 ```
 
 - [ ] **Step 3: Wire up handler + send startup alert**
 
-In `alphalink/main.py`, find the `run()` function. Replace:
+In `alphaTrade/main.py`, find the `run()` function. Replace:
 
 ```python
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -405,12 +405,12 @@ With:
         _wh = wh.WebhookHandler()
         _wh.setLevel(settings.webhook_levels)
         logging.getLogger().addHandler(_wh)
-        wh.notify("INFO", "alphaLink bot started", category="startup")
+        wh.notify("INFO", "alphaTrade bot started", category="startup")
 ```
 
 - [ ] **Step 4: Add daily-loss-halt explicit alert**
 
-In `alphalink/main.py`, find inside `tick()`:
+In `alphaTrade/main.py`, find inside `tick()`:
 
 ```python
                 if daily_loss_halted:
@@ -431,7 +431,7 @@ Replace with:
 
 - [ ] **Step 5: Add reconcile-divergence explicit alert**
 
-In `alphalink/main.py`, inside `reconcile_positions()`, find:
+In `alphaTrade/main.py`, inside `reconcile_positions()`, find:
 
 ```python
                 log.info("Reconcile: removing stale position %s (not in T212 portfolio)", local_pos.t212_ticker)
@@ -459,7 +459,7 @@ Expected: all tests `PASSED`.
 - [ ] **Step 7: Verify import is clean**
 
 ```bash
-python -c "from alphalink.notify import webhook; print('OK')"
+python -c "from alphaTrade.notify import webhook; print('OK')"
 ```
 
 Expected: `OK`
@@ -467,8 +467,8 @@ Expected: `OK`
 - [ ] **Step 8: Commit**
 
 ```bash
-git add alphalink/config.py alphalink/main.py
-git commit -m "feat: wire WebhookHandler into main loop with startup and alert calls (alphaLink-dac)"
+git add alphaTrade/config.py alphaTrade/main.py
+git commit -m "feat: wire WebhookHandler into main loop with startup and alert calls (alphaTrade-dac)"
 ```
 
-> **Note:** Shutdown alert (`category="shutdown"`) is deferred to alphaLink-55n (graceful shutdown / kill switch issue), which will add SIGTERM/SIGINT handling where the `wh.notify("INFO", "alphaLink bot stopped", category="shutdown")` call belongs.
+> **Note:** Shutdown alert (`category="shutdown"`) is deferred to alphaTrade-55n (graceful shutdown / kill switch issue), which will add SIGTERM/SIGINT handling where the `wh.notify("INFO", "alphaTrade bot stopped", category="shutdown")` call belongs.

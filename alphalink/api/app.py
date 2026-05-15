@@ -5,17 +5,17 @@ from sqlalchemy.engine import Engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from alphalink.api.auth import make_api_key_dep
-from alphalink.api.deps import make_session_dep
-from alphalink.health import HealthState
+from alphaTrade.api.auth import make_api_key_dep
+from alphaTrade.api.deps import make_session_dep
+from alphaTrade.health import HealthState
 
 log = logging.getLogger(__name__)
 
 
 def create_app(engine: Engine, health_state: HealthState) -> FastAPI:
-    from alphalink.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity, trades, stream, kill_switch
+    from alphaTrade.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity, trades, stream, kill_switch
 
-    app = FastAPI(title="alphaLink API", version="1.0")
+    app = FastAPI(title="alphaTrade API", version="1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

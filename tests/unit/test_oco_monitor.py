@@ -7,13 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from alphalink.broker.oco_monitor import monitor_oco
-from alphalink.store.repos import Position, PositionRepo
+from alphaTrade.broker.oco_monitor import monitor_oco
+from alphaTrade.store.repos import Position, PositionRepo
 
 
 @pytest.fixture(autouse=True)
 def _patch_wh():
-    with patch("alphalink.broker.oco_monitor.wh"):
+    with patch("alphaTrade.broker.oco_monitor.wh"):
         yield
 
 

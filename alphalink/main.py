@@ -14,26 +14,26 @@ from pathlib import Path
 from sqlmodel import Session
 
 # first-party (alphabetical)
-from alphalink.adapter.features import compute_features
-from alphalink.adapter.inference import OnnxModel
-from alphalink.adapter.manifest import Manifest
-from alphalink.adapter.normalize import normalize
-from alphalink.adapter.window import build_input
-from alphalink.broker.instrument_map import InstrumentMap
-from alphalink.broker.oco_monitor import monitor_oco
-from alphalink.broker.orders import make_client_order_id, submit_order_async
-from alphalink.broker.t212_client import T212Client
-from alphalink.config import Settings
-from alphalink.consensus.softmax_avg import consensus_by_ticker
-from alphalink.data.provider import DataProvider
-from alphalink.notify import webhook as wh
-from alphalink.notify.alerting import AlertManager, AlertLevel
-from alphalink.risk.gates import GateResult, run_gates
-from alphalink.risk.sizing import compute_quantity
-from alphalink.kill_switch import is_halted
-from alphalink.scheduler.bar_close import schedule_bar_close
-from alphalink.store.db import get_engine
-from alphalink.store.repos import (
+from alphaTrade.adapter.features import compute_features
+from alphaTrade.adapter.inference import OnnxModel
+from alphaTrade.adapter.manifest import Manifest
+from alphaTrade.adapter.normalize import normalize
+from alphaTrade.adapter.window import build_input
+from alphaTrade.broker.instrument_map import InstrumentMap
+from alphaTrade.broker.oco_monitor import monitor_oco
+from alphaTrade.broker.orders import make_client_order_id, submit_order_async
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.config import Settings
+from alphaTrade.consensus.softmax_avg import consensus_by_ticker
+from alphaTrade.data.provider import DataProvider
+from alphaTrade.notify import webhook as wh
+from alphaTrade.notify.alerting import AlertManager, AlertLevel
+from alphaTrade.risk.gates import GateResult, run_gates
+from alphaTrade.risk.sizing import compute_quantity
+from alphaTrade.kill_switch import is_halted
+from alphaTrade.scheduler.bar_close import schedule_bar_close
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import (
     BotSettings,
     BotSettingsRepo,
     EquityRepo,
@@ -48,8 +48,8 @@ from alphalink.store.repos import (
     Signal,
     SignalRepo,
 )
-from alphalink.health import HealthState, start_health_server
-from alphalink.metrics import (
+from alphaTrade.health import HealthState, start_health_server
+from alphaTrade.metrics import (
     daily_pnl_pct as metric_daily_pnl_pct,
     equity_total as metric_equity_total,
     inference_errors_total,
@@ -71,7 +71,7 @@ def apply_bot_settings(
     settings: Settings,
     t212_holder: list,
 ) -> None:
-    from alphalink.broker.t212_client import T212Client
+    from alphaTrade.broker.t212_client import T212Client
     new_key = db_s.t212_api_key or ""
     new_env = db_s.t212_env or "demo"
     current_headers = getattr(t212_holder[0], "_headers", {})
@@ -105,9 +105,9 @@ def apply_bot_settings(
 
 def _build_data_provider(settings: Settings) -> DataProvider:
     if settings.data_provider == "polygon":
-        from alphalink.data.polygon_provider import PolygonProvider
+        from alphaTrade.data.polygon_provider import PolygonProvider
         return PolygonProvider(api_key=settings.polygon_api_key)
-    from alphalink.data.yfinance_provider import YFinanceProvider
+    from alphaTrade.data.yfinance_provider import YFinanceProvider
     return YFinanceProvider()
 
 
@@ -141,7 +141,7 @@ def build_sell_journal_entry(
     quantity: float,
     position: "Position",
 ) -> "TradeJournal":
-    from alphalink.store.repos import TradeJournal
+    from alphaTrade.store.repos import TradeJournal
     entry_price = position.avg_entry
     realized_pnl = (exit_price - entry_price) * quantity
     pnl_pct = (exit_price - entry_price) / entry_price if entry_price else 0.0
@@ -216,8 +216,8 @@ def _preresolve_tickers(
 ) -> None:
     """Populate instrument cache for all registry tickers before tick loop starts."""
     from sqlmodel import Session
-    from alphalink.broker.instrument_map import InstrumentMap
-    from alphalink.store.repos import InstrumentCacheRepo
+    from alphaTrade.broker.instrument_map import InstrumentMap
+    from alphaTrade.store.repos import InstrumentCacheRepo
 
     with Session(engine) as session:
         cache = InstrumentCacheRepo(session)
@@ -247,7 +247,7 @@ def make_tick(
     All T212Client HTTP calls run via asyncio.to_thread so the event loop
     stays responsive to health checks and OCO monitor tasks during latency spikes.
     """
-    from alphalink.api import stream_bus as _sb
+    from alphaTrade.api import stream_bus as _sb
     # Tracks halt state for edge-triggered alerting across ticks.
     # Survives UTC day boundaries; relies on today_open reset producing
     # a non-halted tick before any re-halt for next-day re-entry alert.
@@ -522,7 +522,7 @@ def make_tick(
                         ))
                         metric_open_positions.set(len(pos_repo.all()))
                         if pos:
-                            from alphalink.store.repos import TradeJournalRepo
+                            from alphaTrade.store.repos import TradeJournalRepo
                             fill_price_raw = resp.get("fillPrice") if isinstance(resp, dict) else None
                             exit_p = float(fill_price_raw) if fill_price_raw else current_price
                             journal_repo = TradeJournalRepo(session)
@@ -534,7 +534,7 @@ def make_tick(
                                 position=pos,
                             ))
                             # Update model performance tracking
-                            from alphalink.risk.performance import record_trade, check_retirement
+                            from alphaTrade.risk.performance import record_trade, check_retirement
                             pnl_for_perf = (exit_p - pos.avg_entry) * qty
                             record_trade(session, model_id=manifest.run_name,
                                          realized_pnl=pnl_for_perf,
@@ -565,7 +565,7 @@ def make_tick(
 
 
 async def run(settings: Settings) -> None:
-    from alphalink.logging_config import configure_logging
+    from alphaTrade.logging_config import configure_logging
     configure_logging(log_file=settings.log_file)
     _oco_tasks: set[asyncio.Task] = set()
     stop_event = asyncio.Event()
@@ -579,7 +579,7 @@ async def run(settings: Settings) -> None:
         root = logging.getLogger()
         if not any(isinstance(h, wh.WebhookHandler) for h in root.handlers):
             root.addHandler(_wh)
-        wh.notify("INFO", "alphaLink bot started", category="startup")
+        wh.notify("INFO", "alphaTrade bot started", category="startup")
 
     from prometheus_client import start_http_server as _start_metrics
     try:
@@ -604,7 +604,7 @@ async def run(settings: Settings) -> None:
 
     alert_manager = AlertManager(settings.alerts)
 
-    from alphalink.model_registry import ModelRegistry
+    from alphaTrade.model_registry import ModelRegistry
     registry = ModelRegistry(engine=engine)
     await registry.refresh(settings.models_dir, settings.model_overrides)
     if not registry.by_run_name:
@@ -681,7 +681,7 @@ async def run(settings: Settings) -> None:
 
     api_server = None
     try:
-        from alphalink.api.app import start_api_server
+        from alphaTrade.api.app import start_api_server
         api_server = await start_api_server(engine, health_state, port=settings.api_port)
     except Exception as exc:
         log.error("API server failed to start on :%d: %s", settings.api_port, exc)
@@ -712,7 +712,7 @@ async def run(settings: Settings) -> None:
     async def daily_close_callback() -> None:
         """Fires at NYSE close: write PnlSnapshot + send daily summary alert."""
         from datetime import date
-        from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo, PositionRepo, PnlSnapshot, EquityRepo
+        from alphaTrade.store.repos import PnlSnapshotRepo, TradeJournalRepo, PositionRepo, PnlSnapshot, EquityRepo
 
         today_str = date.today().isoformat()
         try:

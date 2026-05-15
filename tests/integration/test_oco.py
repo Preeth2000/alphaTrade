@@ -10,7 +10,7 @@ import httpx
 import pytest
 import respx
 
-from alphalink.broker.t212_client import T212Client
+from alphaTrade.broker.t212_client import T212Client
 from tests.integration.mock_t212.responses import mount
 
 

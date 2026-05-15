@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from alphalink.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
-from alphalink.store.repos import PositionRepo, SectorCacheRepo
+from alphaTrade.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
+from alphaTrade.store.repos import PositionRepo, SectorCacheRepo
 
 log = logging.getLogger(__name__)
 

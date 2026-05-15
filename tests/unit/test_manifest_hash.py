@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from alphalink.adapter.manifest import Manifest
+from alphaTrade.adapter.manifest import Manifest
 
 
 MINIMAL_MANIFEST = {

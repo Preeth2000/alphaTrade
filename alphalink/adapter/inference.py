@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from alphalink.adapter.manifest import Manifest
+from alphaTrade.adapter.manifest import Manifest
 
 
 class OnnxModel:

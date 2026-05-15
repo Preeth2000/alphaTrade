@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from alphalink.broker.t212_client import T212Client
+from alphaTrade.broker.t212_client import T212Client
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
 

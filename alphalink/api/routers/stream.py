@@ -10,15 +10,15 @@ from sqlmodel import Session
 
 
 def make_router(engine: Engine, api_key_dep: Callable) -> APIRouter:
-    from alphalink.api import stream_bus
+    from alphaTrade.api import stream_bus
 
     router = APIRouter()
 
     def _check_key(key: str) -> None:
-        from alphalink.store.repos import BotSettingsRepo
+        from alphaTrade.store.repos import BotSettingsRepo
         with Session(engine) as s:
             db_s = BotSettingsRepo(s).get()
-        active_key = (db_s.alphalink_api_key if db_s else "") or os.environ.get("ALPHALINK_API_KEY", "")
+        active_key = (db_s.alphaTrade_api_key if db_s else "") or os.environ.get("alphaTrade_API_KEY", "")
         if not active_key:
             return
         if key != active_key:

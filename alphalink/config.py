@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     overrides_path: Path = Path("./overrides.yaml")
     webhook_url: str = ""
     webhook_level: str = "WARNING"
-    log_file: Path = Path("./alphalink.log")
+    log_file: Path = Path("./alphaTrade.log")
     api_port: int = 8081
 
     # Populated from overrides.yaml after load

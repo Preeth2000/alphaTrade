@@ -5,8 +5,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine, Session
-from alphalink.store.db import run_migrations
-from alphalink.health import HealthState
+from alphaTrade.store.db import run_migrations
+from alphaTrade.health import HealthState
 
 
 def _engine(tmp_path):
@@ -16,7 +16,7 @@ def _engine(tmp_path):
 
 
 def _client(engine, health_state=None):
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     return TestClient(create_app(engine, health_state or HealthState()))
 
 
@@ -27,7 +27,7 @@ def _client(engine, health_state=None):
 @pytest.fixture(autouse=True)
 def _clear_bus():
     """Reset stream_bus subscriber set between tests."""
-    from alphalink.api import stream_bus
+    from alphaTrade.api import stream_bus
     stream_bus._subscribers.clear()
     yield
     stream_bus._subscribers.clear()
@@ -35,7 +35,7 @@ def _clear_bus():
 
 @pytest.mark.asyncio
 async def test_publish_delivers_to_subscriber():
-    from alphalink.api import stream_bus
+    from alphaTrade.api import stream_bus
     q = stream_bus.subscribe()
     stream_bus.publish({"type": "tick_complete", "interval": "1m"})
     event = q.get_nowait()
@@ -45,7 +45,7 @@ async def test_publish_delivers_to_subscriber():
 
 @pytest.mark.asyncio
 async def test_multiple_subscribers_both_receive():
-    from alphalink.api import stream_bus
+    from alphaTrade.api import stream_bus
     q1 = stream_bus.subscribe()
     q2 = stream_bus.subscribe()
     stream_bus.publish({"type": "signal_fired", "ticker": "AAPL"})
@@ -55,7 +55,7 @@ async def test_multiple_subscribers_both_receive():
 
 @pytest.mark.asyncio
 async def test_unsubscribe_stops_delivery():
-    from alphalink.api import stream_bus
+    from alphaTrade.api import stream_bus
     q = stream_bus.subscribe()
     stream_bus.unsubscribe(q)
     stream_bus.publish({"type": "tick_complete"})
@@ -67,7 +67,7 @@ async def test_unsubscribe_stops_delivery():
 # ---------------------------------------------------------------------------
 
 def test_stream_route_registered(tmp_path):
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     app = create_app(_engine(tmp_path), HealthState())
     paths = {route.path for route in app.routes}
     assert "/api/v1/stream" in paths
@@ -76,7 +76,7 @@ def test_stream_route_registered(tmp_path):
 @pytest.mark.asyncio
 async def test_stream_returns_text_event_stream(tmp_path):
     """StreamingResponse from /stream endpoint has text/event-stream media type."""
-    from alphalink.api.routers.stream import make_router
+    from alphaTrade.api.routers.stream import make_router
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)
     stream_route = next(r for r in router.routes if r.path == "/stream")
@@ -86,7 +86,7 @@ async def test_stream_returns_text_event_stream(tmp_path):
 
 
 def test_stream_auth_rejects_bad_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     client = _client(_engine(tmp_path))
     resp = client.get("/api/v1/stream?key=wrong")
     assert resp.status_code == 403
@@ -95,8 +95,8 @@ def test_stream_auth_rejects_bad_key(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_auth_no_key_configured_allows_all(tmp_path, monkeypatch):
     from fastapi import HTTPException
-    from alphalink.api.routers.stream import make_router
-    monkeypatch.delenv("ALPHALINK_API_KEY", raising=False)
+    from alphaTrade.api.routers.stream import make_router
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)
     stream_route = next(r for r in router.routes if r.path == "/stream")
@@ -108,8 +108,8 @@ async def test_stream_auth_no_key_configured_allows_all(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_auth_correct_key_passes(tmp_path, monkeypatch):
-    from alphalink.api.routers.stream import make_router
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    from alphaTrade.api.routers.stream import make_router
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)
     stream_route = next(r for r in router.routes if r.path == "/stream")
@@ -121,8 +121,8 @@ async def test_stream_auth_correct_key_passes(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_emits_signal_fired_event(tmp_path):
     """Events published to stream_bus appear as SSE data frames in the generator."""
-    from alphalink.api import stream_bus
-    from alphalink.api.routers.stream import make_router
+    from alphaTrade.api import stream_bus
+    from alphaTrade.api.routers.stream import make_router
 
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)

@@ -9,9 +9,9 @@ import pandas as pd
 import pytest
 from sqlmodel import SQLModel, create_engine
 
-from alphalink.config import Settings
-from alphalink.health import HealthState
-from alphalink.main import make_tick
+from alphaTrade.config import Settings
+from alphaTrade.health import HealthState
+from alphaTrade.main import make_tick
 
 INTERVAL = "1d"
 
@@ -78,11 +78,11 @@ async def test_notify_fires_once_for_consecutive_halted_ticks(tmp_path):
     )
 
     with (
-        patch("alphalink.main.compute_features", return_value=_DF),
-        patch("alphalink.main.normalize", return_value=_DF),
-        patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-        patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
-        patch("alphalink.main.wh") as mock_wh,
+        patch("alphaTrade.main.compute_features", return_value=_DF),
+        patch("alphaTrade.main.normalize", return_value=_DF),
+        patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+        patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+        patch("alphaTrade.main.wh") as mock_wh,
     ):
         await tick()  # tick 1: not halted
         await tick()  # tick 2: halted → notify fires
@@ -115,12 +115,12 @@ async def test_notify_fires_on_transition_tick_not_before(tmp_path):
         static_map={"AAPL": "AAPL_US_EQ"},
     )
 
-    with patch("alphalink.main.wh") as mock_wh:
+    with patch("alphaTrade.main.wh") as mock_wh:
         with (
-            patch("alphalink.main.compute_features", return_value=_DF),
-            patch("alphalink.main.normalize", return_value=_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.compute_features", return_value=_DF),
+            patch("alphaTrade.main.normalize", return_value=_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
         ):
             await tick()  # equity=10_000, not halted → no notify
             halt_notify_count_after_tick1 = sum(
@@ -156,12 +156,12 @@ async def test_notify_fires_again_on_re_entry(tmp_path):
         static_map={"AAPL": "AAPL_US_EQ"},
     )
 
-    with patch("alphalink.main.wh") as mock_wh:
+    with patch("alphaTrade.main.wh") as mock_wh:
         with (
-            patch("alphalink.main.compute_features", return_value=_DF),
-            patch("alphalink.main.normalize", return_value=_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.compute_features", return_value=_DF),
+            patch("alphaTrade.main.normalize", return_value=_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
         ):
             await tick()  # not halted
             await tick()  # halted → notify #1

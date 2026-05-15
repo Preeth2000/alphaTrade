@@ -8,9 +8,9 @@ Before promoting to live, demo run must satisfy ALL:
 - [ ] ≥ 20 completed tick cycles with orders filled
 - [ ] Daily loss halt never triggered (or triggered and recovered correctly)
 - [ ] OCO monitor cancelled orphaned legs correctly on every partial fill
-- [ ] Kill switch (`alphalink halt` / `alphalink resume`) tested manually
+- [ ] Kill switch (`alphaTrade halt` / `alphaTrade resume`) tested manually
 - [ ] No duplicate orders in DB (verify `client_order_id` uniqueness)
-- [ ] `alphalink status` shows correct positions matching T212 demo account
+- [ ] `alphaTrade status` shows correct positions matching T212 demo account
 - [ ] Webhook notifications firing for fills and halts
 
 ## 2. Daily Demo Review Checklist
@@ -18,9 +18,9 @@ Before promoting to live, demo run must satisfy ALL:
 Run each morning before market open:
 
 ```bash
-alphalink status                         # positions + PnL
-grep -i "error\|exception" alphalink.log | tail -20
-grep "Kill switch\|daily loss halt" alphalink.log | tail -10
+alphaTrade status                         # positions + PnL
+grep -i "error\|exception" alphaTrade.log | tail -20
+grep "Kill switch\|daily loss halt" alphaTrade.log | tail -10
 ```
 
 Check:
@@ -51,7 +51,7 @@ Apply and verify:
 ```bash
 cp overrides.yaml overrides.yaml.demo-backup
 # Edit overrides.yaml with values above
-alphalink verify <model_dir>             # smoke test each model
+alphaTrade verify <model_dir>             # smoke test each model
 ```
 
 ## 4. Live Cutover Steps
@@ -60,7 +60,7 @@ alphalink verify <model_dir>             # smoke test each model
 
 1. Engage kill switch to freeze any running demo bot:
    ```bash
-   alphalink halt
+   alphaTrade halt
    ```
 
 2. Set live environment:
@@ -77,13 +77,13 @@ alphalink verify <model_dir>             # smoke test each model
 
 4. Clear kill switch and start:
    ```bash
-   alphalink resume
-   alphalink run --overrides overrides.yaml
+   alphaTrade resume
+   alphaTrade run --overrides overrides.yaml
    ```
 
 5. Watch first tick:
    ```bash
-   tail -f alphalink.log | grep -E "Filled|Signal|error|Kill switch"
+   tail -f alphaTrade.log | grep -E "Filled|Signal|error|Kill switch"
    ```
 
 6. Verify first fill in T212 live account UI matches log output.
@@ -94,13 +94,13 @@ If anything looks wrong after cutover:
 
 **Immediate halt (< 30 seconds):**
 ```bash
-alphalink halt                           # freeze orders, bot stays alive
+alphaTrade halt                           # freeze orders, bot stays alive
 ```
 
 **Full rollback:**
 ```bash
 # 1. Stop bot
-pkill -f "alphalink run"
+pkill -f "alphaTrade run"
 
 # 2. Revert environment
 export T212_ENV=demo
@@ -110,10 +110,10 @@ export T212_API_KEY=<demo-api-key>
 cp overrides.yaml.demo-backup overrides.yaml
 
 # 4. Clear kill switch
-alphalink resume
+alphaTrade resume
 
 # 5. Restart in demo
-alphalink run --overrides overrides.yaml
+alphaTrade run --overrides overrides.yaml
 ```
 
 **After rollback:** Check T212 live account for any partially-filled orders and cancel manually if open.
@@ -121,4 +121,4 @@ alphalink run --overrides overrides.yaml
 ## 6. Contacts / Escalation
 
 - T212 API status: https://trading212.com (check announcements)
-- Kill switch: `ALPHALINK_HALT=1` env var or `./HALT` sentinel file
+- Kill switch: `alphaTrade_HALT=1` env var or `./HALT` sentinel file

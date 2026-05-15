@@ -9,9 +9,9 @@ from typing import Optional
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.notify import webhook as wh
-from alphalink.store.repos import Position, PositionRepo, TradeJournal, TradeJournalRepo
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.notify import webhook as wh
+from alphaTrade.store.repos import Position, PositionRepo, TradeJournal, TradeJournalRepo
 
 log = logging.getLogger(__name__)
 
@@ -141,8 +141,8 @@ def _close_position(
             ))
             # Record performance for retirement evaluation (uses defaults; tick loop enforces policy)
             try:
-                from alphalink.risk.performance import record_trade as _record_trade
-                from alphalink.config import ModelRetirementConfig
+                from alphaTrade.risk.performance import record_trade as _record_trade
+                from alphaTrade.config import ModelRetirementConfig
                 _record_trade(session, model_id=model_id, realized_pnl=realized_pnl,
                               cfg=ModelRetirementConfig())
             except Exception as exc:

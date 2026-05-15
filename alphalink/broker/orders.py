@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.store.repos import Order, OrderRepo
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.store.repos import Order, OrderRepo
 
 
 def make_client_order_id(run_name: str, ticker: str, bar_close_iso: str, side: str) -> str:

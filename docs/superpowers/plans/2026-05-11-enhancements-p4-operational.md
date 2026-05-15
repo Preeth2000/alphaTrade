@@ -16,18 +16,18 @@
 
 | Action | File |
 |---|---|
-| Create | `alphalink/notify/alerting.py` |
-| Modify | `alphalink/main.py` — pass AlertManager to engine, wire alert events |
-| Modify | `alphalink/scheduler/bar_close.py` — add NYSE-close daily-summary callback hook |
-| Modify | `alphalink/cli.py` — add `report` subcommand |
+| Create | `alphaTrade/notify/alerting.py` |
+| Modify | `alphaTrade/main.py` — pass AlertManager to engine, wire alert events |
+| Modify | `alphaTrade/scheduler/bar_close.py` — add NYSE-close daily-summary callback hook |
+| Modify | `alphaTrade/cli.py` — add `report` subcommand |
 | Create | `tests/unit/test_alerting.py` |
 
 ---
 
-### Task 1: AlertManager (alphalink/notify/alerting.py)
+### Task 1: AlertManager (alphaTrade/notify/alerting.py)
 
 **Files:**
-- Create: `alphalink/notify/alerting.py`
+- Create: `alphaTrade/notify/alerting.py`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -41,8 +41,8 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from alphalink.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
-from alphalink.notify.alerting import AlertManager, AlertLevel
+from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
+from alphaTrade.notify.alerting import AlertManager, AlertLevel
 
 
 def _slack_cfg(min_level="WARNING") -> AlertSlackConfig:
@@ -105,7 +105,7 @@ def test_slack_dispatch_called(monkeypatch):
         resp.status_code = 200
         return resp
 
-    with patch("alphalink.notify.alerting.httpx") as mock_httpx:
+    with patch("alphaTrade.notify.alerting.httpx") as mock_httpx:
         mock_httpx.post.side_effect = fake_post
         am._dispatch_slack("hello slack", level=AlertLevel.WARNING)
 
@@ -117,7 +117,7 @@ def test_email_dispatch_called(monkeypatch):
     cfg = AlertsConfig(slack=None, email=_email_cfg(min_level="INFO"))
     am = AlertManager(cfg)
 
-    with patch("alphalink.notify.alerting.smtplib") as mock_smtp:
+    with patch("alphaTrade.notify.alerting.smtplib") as mock_smtp:
         mock_server = MagicMock()
         mock_smtp.SMTP.return_value.__enter__.return_value = mock_server
         am._dispatch_email("hello email", level=AlertLevel.WARNING)
@@ -134,7 +134,7 @@ def test_alerts_disabled_when_no_config():
 
 - [ ] **Step 2: Write the alerting module**
 
-Create `alphalink/notify/alerting.py`:
+Create `alphaTrade/notify/alerting.py`:
 
 ```python
 """Non-blocking Slack + email alerts. Same bounded-queue pattern as webhook.py."""
@@ -163,7 +163,7 @@ try:
 except ImportError:
     smtplib = None  # type: ignore[assignment]
 
-from alphalink.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
+from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
 
 log = logging.getLogger(__name__)
 
@@ -261,7 +261,7 @@ class AlertManager:
         email_cfg = self._cfg.email
         if email_cfg is None or smtplib is None:
             return
-        subject = f"[alphaLink {level.name}] Alert"
+        subject = f"[alphaTrade {level.name}] Alert"
         msg = MIMEText(message)
         msg["Subject"] = subject
         msg["From"] = email_cfg.from_addr
@@ -286,7 +286,7 @@ pytest tests/unit/test_alerting.py -v
 ### Task 2: Wire alerts into main.py
 
 **Files:**
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 Alert events to wire:
 
@@ -303,10 +303,10 @@ Alert events to wire:
 
 - [ ] **Step 1: Instantiate AlertManager in run()**
 
-In `alphalink/main.py`, inside the `run()` function, after settings are loaded:
+In `alphaTrade/main.py`, inside the `run()` function, after settings are loaded:
 
 ```python
-from alphalink.notify.alerting import AlertManager, AlertLevel
+from alphaTrade.notify.alerting import AlertManager, AlertLevel
 alert_manager = AlertManager(settings.alerts)
 ```
 
@@ -381,8 +381,8 @@ alert_manager.shutdown(timeout=5.0)
 ### Task 3: Daily summary + P&L snapshot at NYSE close
 
 **Files:**
-- Modify: `alphalink/scheduler/bar_close.py`
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/scheduler/bar_close.py`
+- Modify: `alphaTrade/main.py`
 
 Design:
 - `schedule_bar_close` already fires a callback on each bar close.
@@ -391,14 +391,14 @@ Design:
 
 - [ ] **Step 1: Add daily-close callback wiring in run()**
 
-In `alphalink/main.py`, inside `run()`, alongside the existing bar-close schedulers, add:
+In `alphaTrade/main.py`, inside `run()`, alongside the existing bar-close schedulers, add:
 
 ```python
 async def daily_close_callback() -> None:
     """Fires at NYSE close: write PnlSnapshot, send daily summary alert."""
     from datetime import date
-    from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo, PositionRepo
-    from alphalink.notify.alerting import AlertLevel
+    from alphaTrade.store.repos import PnlSnapshotRepo, TradeJournalRepo, PositionRepo
+    from alphaTrade.notify.alerting import AlertLevel
 
     today_str = date.today().isoformat()
     try:
@@ -475,8 +475,8 @@ async def test_daily_close_callback_fires():
     async def dummy_callback():
         fired.append(True)
 
-    from alphalink.scheduler.bar_close import schedule_bar_close
-    import alphalink.scheduler.bar_close as bc
+    from alphaTrade.scheduler.bar_close import schedule_bar_close
+    import alphaTrade.scheduler.bar_close as bc
 
     future = datetime.now(timezone.utc) + timedelta(seconds=0.05)
     with patch.object(bc, "next_bar_close", return_value=future):
@@ -494,7 +494,7 @@ async def test_daily_close_callback_fires():
 ### Task 4: CLI `report` subcommand
 
 **Files:**
-- Modify: `alphalink/cli.py`
+- Modify: `alphaTrade/cli.py`
 
 - [ ] **Step 1: Add `report` command**
 
@@ -511,9 +511,9 @@ def report(
     import csv
     import sys
     from datetime import date, timedelta
-    from alphalink.config import Settings
-    from alphalink.store.db import get_session
-    from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo
+    from alphaTrade.config import Settings
+    from alphaTrade.store.db import get_session
+    from alphaTrade.store.repos import PnlSnapshotRepo, TradeJournalRepo
 
     settings = Settings()
     since_date = since or (date.today() - timedelta(days=30)).isoformat()
@@ -581,7 +581,7 @@ def report(
 - [ ] **Step 2: Verify CLI wires correctly**
 
 ```bash
-python -m alphalink.cli report --help
+python -m alphaTrade.cli report --help
 ```
 
 Expected: shows `--since`, `--output` args without import errors.
@@ -592,7 +592,7 @@ Expected: shows `--since`, `--output` args without import errors.
 
 - [ ] **Step 1: Audit AlertSlackConfig and AlertEmailConfig**
 
-Confirm in `alphalink/config.py` (added in Plan P1) that:
+Confirm in `alphaTrade/config.py` (added in Plan P1) that:
 - `AlertSlackConfig.webhook_url` has no default (required field or `None`)
 - `AlertEmailConfig.smtp_password` has no default (required or `None`)
 - `AlertEmailConfig.to_addrs` is a list parsed from env var (e.g. `ALERT_EMAIL_TO_ADDRS="a@b.com,c@d.com"`)
@@ -625,9 +625,9 @@ If missing, add them.
 
 ## Acceptance Criteria
 
-- [ ] `alphalink report` runs without error, prints table or JSON
-- [ ] `alphalink report --output json` prints valid JSON with `snapshots` + `trades` keys
-- [ ] `alphalink report --output csv` prints CSV rows
+- [ ] `alphaTrade report` runs without error, prints table or JSON
+- [ ] `alphaTrade report --output json` prints valid JSON with `snapshots` + `trades` keys
+- [ ] `alphaTrade report --output csv` prints CSV rows
 - [ ] Unit tests pass: `pytest tests/unit/test_alerting.py -v`
 - [ ] AlertManager below-min-level messages are NOT enqueued (confirmed by unit test)
 - [ ] AlertManager queue-full condition drops message without raising

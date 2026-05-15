@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from alphalink.adapter.normalize import normalize
-from alphalink.adapter.manifest import Manifest, NormStats
+from alphaTrade.adapter.normalize import normalize
+from alphaTrade.adapter.manifest import Manifest, NormStats
 
 BASE = {
     "manifest_version": "1.0.0", "run_name": "t", "model_arch": "mlp", "opset": 17,

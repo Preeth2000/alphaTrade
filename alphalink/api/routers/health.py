@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections.abc import Callable
 from fastapi import APIRouter, Depends
-from alphalink.health import HealthState
+from alphaTrade.health import HealthState
 
 
 def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:

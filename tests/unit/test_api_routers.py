@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine, Session
-from alphalink.store.db import run_migrations
-from alphalink.health import HealthState
+from alphaTrade.store.db import run_migrations
+from alphaTrade.health import HealthState
 
 
 def _engine(tmp_path):
@@ -12,7 +12,7 @@ def _engine(tmp_path):
 
 
 def _client(engine, health_state=None):
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     return TestClient(create_app(engine, health_state or HealthState()))
 
 
@@ -27,7 +27,7 @@ def test_positions_empty(tmp_path):
 
 def test_positions_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Position, PositionRepo
+    from alphaTrade.store.repos import Position, PositionRepo
     from datetime import datetime
     with Session(engine) as s:
         PositionRepo(s).upsert(Position(
@@ -68,7 +68,7 @@ def test_orders_empty_defaults_24h(tmp_path):
 
 def test_orders_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Order
+    from alphaTrade.store.repos import Order
     with Session(engine) as s:
         s.add(Order(ts=datetime(2020, 1, 1), t212_ticker="OLD", side="BUY", quantity=1.0, status="filled"))
         s.add(Order(ts=datetime(2026, 1, 1), t212_ticker="NEW", side="BUY", quantity=1.0, status="filled"))
@@ -84,7 +84,7 @@ def test_orders_since_filters(tmp_path):
 
 def test_signals_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import Signal
+    from alphaTrade.store.repos import Signal
     with Session(engine) as s:
         s.add(Signal(ts=datetime(2020, 1, 1), run_name="r", ticker="OLD", signal="BUY"))
         s.add(Signal(ts=datetime(2026, 1, 1), run_name="r", ticker="NEW", signal="SELL"))
@@ -100,7 +100,7 @@ def test_signals_since_filters(tmp_path):
 
 def test_pnl_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import PnlSnapshot, PnlSnapshotRepo
+    from alphaTrade.store.repos import PnlSnapshot, PnlSnapshotRepo
     with Session(engine) as s:
         repo = PnlSnapshotRepo(s)
         repo.upsert(PnlSnapshot(date="2020-01-01", total_equity=10000, day_pnl=0, day_pnl_pct=0, realized_pnl=0, unrealized_pnl=0))
@@ -122,7 +122,7 @@ def test_models_empty(tmp_path):
 
 def test_models_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import ModelPerformanceRepo
+    from alphaTrade.store.repos import ModelPerformanceRepo
     with Session(engine) as s:
         ModelPerformanceRepo(s).get_or_create("my_model")
     resp = _client(engine).get("/api/v1/models")
@@ -147,7 +147,7 @@ def test_backtest_trades_404_unknown_run(tmp_path):
 
 def test_backtest_trades_returns_rows(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import BacktestRepo
+    from alphaTrade.store.repos import BacktestRepo
     with Session(engine) as s:
         run_id = BacktestRepo(s).create_run("2025-01-01", "2025-12-31")
         BacktestRepo(s).record_trade(
@@ -173,13 +173,13 @@ def test_settings_get_returns_defaults(tmp_path):
 
 def test_settings_sensitive_fields_masked(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphalink_api_key="api-key"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphaTrade_api_key="api-key"))
     resp = _client(engine).get("/api/v1/settings", headers={"X-API-Key": "api-key"})
     body = resp.json()
     assert body["t212_api_key"] == "***"
-    assert body["alphalink_api_key"] == "***"
+    assert body["alphaTrade_api_key"] == "***"
 
 
 def test_settings_put_partial_update(tmp_path):
@@ -203,7 +203,7 @@ def test_settings_put_sensitive_masked_in_response(tmp_path):
 def test_create_app_has_all_routes(tmp_path):
     engine = _engine(tmp_path)
     state = HealthState()
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     app = create_app(engine, state)
     paths = {route.path for route in app.routes}
     assert "/api/v1/positions" in paths
@@ -231,7 +231,7 @@ def test_kill_switch_status_not_halted(tmp_path, monkeypatch):
     resp = _client(_engine(tmp_path)).get("/api/v1/kill-switch")
     assert resp.status_code == 200
     assert resp.json()["halted"] is False
-
+alphaTrade
 
 def test_halt_endpoint_creates_sentinel(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -255,7 +255,7 @@ def test_resume_endpoint_removes_sentinel(tmp_path, monkeypatch):
 def test_halt_idempotent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     client = _client(_engine(tmp_path))
-    client.post("/api/v1/halt")
+    clienalphaTradeapi/v1/halt")
     resp = client.post("/api/v1/halt")
     assert resp.status_code == 200
     assert resp.json()["halted"] is True
@@ -276,7 +276,7 @@ def test_kill_switch_round_trip(tmp_path, monkeypatch):
     assert client.get("/api/v1/kill-switch").json()["halted"] is True
     client.post("/api/v1/resume")
     assert client.get("/api/v1/kill-switch").json()["halted"] is False
-
+alphaTrade
 
 # --- Trades ---
 
@@ -288,10 +288,10 @@ def test_trades_empty(tmp_path):
 
 def test_trades_since_filters(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import TradeJournal, TradeJournalRepo
+    from alphaTrade.store.repos import TradeJournal, TradeJournalRepo
     with Session(engine) as s:
         repo = TradeJournalRepo(s)
-        repo.save(TradeJournal(
+        ralphaTradeTradeJournal(
             ts=datetime(2020, 1, 1), model_id="m1", ticker="AAPL",
             entry_price=100.0, exit_price=110.0, quantity=1.0,
             entry_time=datetime(2020, 1, 1), exit_time=datetime(2020, 1, 2),
@@ -312,7 +312,7 @@ def test_trades_since_filters(tmp_path):
 
 def test_trades_model_id_filter(tmp_path):
     engine = _engine(tmp_path)
-    from alphalink.store.repos import TradeJournal, TradeJournalRepo
+    from alphaTrade.store.repos import TradeJournal, TradeJournalRepo
     with Session(engine) as s:
         repo = TradeJournalRepo(s)
         for ticker, model in [("AAPL", "model_a"), ("TSLA", "model_b")]:
@@ -333,7 +333,7 @@ def test_trades_model_id_filter(tmp_path):
 
 def test_cors_preflight_returns_allow_origin(tmp_path):
     from fastapi.testclient import TestClient
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     client = TestClient(create_app(_engine(tmp_path), HealthState()))
     resp = client.options(
         "/api/v1/positions",
@@ -348,7 +348,7 @@ def test_cors_preflight_returns_allow_origin(tmp_path):
 
 def test_cors_get_response_has_allow_origin(tmp_path):
     from fastapi.testclient import TestClient
-    from alphalink.api.app import create_app
+    from alphaTrade.api.app import create_app
     client = TestClient(create_app(_engine(tmp_path), HealthState()))
     resp = client.get("/api/v1/positions", headers={"Origin": "http://localhost:3000"})
     assert resp.status_code == 200

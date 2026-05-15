@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.config import Settings
-from alphalink.main import reconcile_positions
-from alphalink.store.repos import (
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.config import Settings
+from alphaTrade.main import reconcile_positions
+from alphaTrade.store.repos import (
     EquityCurve, InstrumentCache, Order, Position, PositionRepo, Signal,
 )
 
@@ -38,7 +38,7 @@ class TestGetPositionsUsesToThread:
         t212 = MagicMock(spec=T212Client)
         t212.get_positions.return_value = []
 
-        with patch("alphalink.main.asyncio") as mock_asyncio:
+        with patch("alphaTrade.main.asyncio") as mock_asyncio:
             mock_asyncio.to_thread = AsyncMock(return_value=[])
             await reconcile_positions(t212, _settings(tmp_path))
 
@@ -61,7 +61,7 @@ class TestGetPositionsUsesToThread:
 
 class TestReconcileDivergenceNotify:
     def _engine(self, tmp_path: Path):
-        from alphalink.store.db import get_engine
+        from alphaTrade.store.db import get_engine
         return get_engine(tmp_path / "state.db")
 
     async def test_notify_fires_for_stale_local_position(self, tmp_path):
@@ -84,7 +84,7 @@ class TestReconcileDivergenceNotify:
         t212 = MagicMock(spec=T212Client)
         t212.get_positions.return_value = []
 
-        with patch("alphalink.main.wh.notify") as mock_notify:
+        with patch("alphaTrade.main.wh.notify") as mock_notify:
             await reconcile_positions(t212, settings)
 
         divergence_calls = [
@@ -104,7 +104,7 @@ class TestReconcileDivergenceNotify:
             {"ticker": "AAPL_US_EQ", "quantity": 10.0, "averagePricePaid": 150.0}
         ]
 
-        with patch("alphalink.main.wh.notify") as mock_notify:
+        with patch("alphaTrade.main.wh.notify") as mock_notify:
             await reconcile_positions(t212, settings)
 
         divergence_calls = [

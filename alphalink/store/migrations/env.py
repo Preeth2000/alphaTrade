@@ -4,7 +4,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Import models so SQLModel metadata is populated for autogenerate
-import alphalink.store.repos  # noqa: F401
+import alphaTrade.store.repos  # noqa: F401
 from sqlmodel import SQLModel
 
 config = context.config

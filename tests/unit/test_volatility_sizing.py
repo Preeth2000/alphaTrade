@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch
 
-from alphalink.risk.sizing import compute_quantity
+from alphaTrade.risk.sizing import compute_quantity
 
 
 def test_fixed_mode_unchanged():

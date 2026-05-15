@@ -1,12 +1,12 @@
 # OHLCV Gap and Volume Validation — Design Spec
 
 **Date:** 2026-05-10
-**Issue:** alphaLink-5pw
+**Issue:** alphaTrade-5pw
 **Status:** Approved
 
 ## Overview
 
-Extend `alphalink/adapter/validators.py` with three new checks. Two are warnings (logged, inference continues); one is a hard error (raises, inference aborts). No API change — callers unaffected.
+Extend `alphaTrade/adapter/validators.py` with three new checks. Two are warnings (logged, inference continues); one is a hard error (raises, inference aborts). No API change — callers unaffected.
 
 ## Existing Checks (unchanged)
 
@@ -63,7 +63,7 @@ if hasattr(df.index, "to_pydatetime"):
 
 ## Module Changes
 
-**File:** `alphalink/adapter/validators.py`
+**File:** `alphaTrade/adapter/validators.py`
 
 1. Add `import logging` and `log = logging.getLogger(__name__)` at module level.
 2. Add Close-outside-range check after the existing High < Low check (both are OHLC consistency checks — group them together).

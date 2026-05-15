@@ -9,8 +9,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from alphalink.adapter.validators import validate_ohlcv
-from alphalink.data.provider import DataProvider
+from alphaTrade.adapter.validators import validate_ohlcv
+from alphaTrade.data.provider import DataProvider
 
 
 # Map manifest["interval"] (yfinance format) → (multiplier, timespan) for Polygon

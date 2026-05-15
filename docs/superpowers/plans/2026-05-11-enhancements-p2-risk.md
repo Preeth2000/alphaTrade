@@ -4,7 +4,7 @@
 
 **Goal:** Add three risk enhancements: automatic model retirement based on rolling P&L performance, sector/correlation position limits with balanced/unbalanced modes, and volatility-based position sizing (ATR or VIX).
 
-**Architecture:** All changes confined to `alphalink/risk/` and thin wiring in `alphalink/model_registry.py` and `alphalink/broker/instrument_map.py`. Gates extend the existing `run_gates` function signature. Sizing modes extend `compute_quantity`. No changes to `adapter/`, `consensus/`, `broker/t212_client.py`.
+**Architecture:** All changes confined to `alphaTrade/risk/` and thin wiring in `alphaTrade/model_registry.py` and `alphaTrade/broker/instrument_map.py`. Gates extend the existing `run_gates` function signature. Sizing modes extend `compute_quantity`. No changes to `adapter/`, `consensus/`, `broker/t212_client.py`.
 
 **Tech Stack:** SQLModel (existing), yfinance (sector fetch), pytest-asyncio
 
@@ -16,13 +16,13 @@
 
 | Action | File |
 |---|---|
-| Create | `alphalink/risk/performance.py` |
-| Create | `alphalink/risk/sector.py` |
-| Modify | `alphalink/risk/sizing.py` — add atr + vix modes |
-| Modify | `alphalink/risk/gates.py` — add retirement check + sector gate |
-| Modify | `alphalink/model_registry.py` — skip retired models |
-| Modify | `alphalink/broker/instrument_map.py` — populate sector_cache on resolve |
-| Modify | `alphalink/main.py` — pass new gate params, pass ATR to compute_quantity |
+| Create | `alphaTrade/risk/performance.py` |
+| Create | `alphaTrade/risk/sector.py` |
+| Modify | `alphaTrade/risk/sizing.py` — add atr + vix modes |
+| Modify | `alphaTrade/risk/gates.py` — add retirement check + sector gate |
+| Modify | `alphaTrade/model_registry.py` — skip retired models |
+| Modify | `alphaTrade/broker/instrument_map.py` — populate sector_cache on resolve |
+| Modify | `alphaTrade/main.py` — pass new gate params, pass ATR to compute_quantity |
 | Create | `tests/unit/test_model_performance.py` |
 | Create | `tests/unit/test_sector_gate.py` |
 | Create | `tests/unit/test_volatility_sizing.py` |
@@ -32,7 +32,7 @@
 ### Task 1: Model performance tracking + retirement (risk/performance.py)
 
 **Files:**
-- Create: `alphalink/risk/performance.py`
+- Create: `alphaTrade/risk/performance.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -46,15 +46,15 @@ from datetime import datetime
 import pytest
 from sqlmodel import Session
 
-from alphalink.config import ModelRetirementConfig
-from alphalink.risk.performance import record_trade, check_retirement
-from alphalink.store.db import get_engine
-from alphalink.store.repos import ModelPerformanceRepo
+from alphaTrade.config import ModelRetirementConfig
+from alphaTrade.risk.performance import record_trade, check_retirement
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import ModelPerformanceRepo
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -142,9 +142,9 @@ def test_check_retirement_not_triggered_when_not_enough_trades(engine):
 pytest tests/unit/test_model_performance.py -v 2>&1 | head -5
 ```
 
-Expected: `ModuleNotFoundError: No module named 'alphalink.risk.performance'`
+Expected: `ModuleNotFoundError: No module named 'alphaTrade.risk.performance'`
 
-- [ ] **Step 3: Create alphalink/risk/performance.py**
+- [ ] **Step 3: Create alphaTrade/risk/performance.py**
 
 ```python
 """Rolling model performance tracking and auto-retirement."""
@@ -156,8 +156,8 @@ from datetime import datetime
 
 from sqlmodel import Session
 
-from alphalink.config import ModelRetirementConfig
-from alphalink.store.repos import ModelPerformanceRepo
+from alphaTrade.config import ModelRetirementConfig
+from alphaTrade.store.repos import ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ Expected: all 6 tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/risk/performance.py tests/unit/test_model_performance.py
+git add alphaTrade/risk/performance.py tests/unit/test_model_performance.py
 git commit -m "feat(risk): add model performance tracking and auto-retirement"
 ```
 
@@ -241,7 +241,7 @@ git commit -m "feat(risk): add model performance tracking and auto-retirement"
 ### Task 2: Skip retired models in ModelRegistry
 
 **Files:**
-- Modify: `alphalink/model_registry.py`
+- Modify: `alphaTrade/model_registry.py`
 
 - [ ] **Step 1: Write failing test**
 
@@ -252,7 +252,7 @@ import asyncio
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-from alphalink.model_registry import ModelRegistry
+from alphaTrade.model_registry import ModelRegistry
 
 
 def test_registry_skips_retired_model(engine, tmp_path):
@@ -274,7 +274,7 @@ def test_registry_skips_retired_model(engine, tmp_path):
         perf.retired = True
         repo.update(perf)
 
-    with patch("alphalink.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
+    with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
         registry = ModelRegistry(engine=engine)
         asyncio.run(registry.refresh(Path("/fake"), {}))
 
@@ -292,7 +292,7 @@ Expected: `TypeError: ModelRegistry.__init__() got an unexpected keyword argumen
 
 - [ ] **Step 3: Modify ModelRegistry to accept engine and check retirement**
 
-Replace `alphalink/model_registry.py` with:
+Replace `alphaTrade/model_registry.py` with:
 
 ```python
 """Hot-reloadable model registry. Rescans models_dir each tick, diffs, adds/removes."""
@@ -307,9 +307,9 @@ from typing import Any, Optional
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from alphalink.adapter.inference import OnnxModel
-from alphalink.adapter.manifest import Manifest
-from alphalink.main import scan_models
+from alphaTrade.adapter.inference import OnnxModel
+from alphaTrade.adapter.manifest import Manifest
+from alphaTrade.main import scan_models
 
 log = logging.getLogger(__name__)
 
@@ -353,7 +353,7 @@ class ModelRegistry:
     def _is_retired(self, run_name: str) -> bool:
         if self._engine is None:
             return False
-        from alphalink.store.repos import ModelPerformanceRepo
+        from alphaTrade.store.repos import ModelPerformanceRepo
         try:
             with Session(self._engine) as s:
                 return ModelPerformanceRepo(s).is_retired(run_name)
@@ -371,7 +371,7 @@ class ModelRegistry:
 
 - [ ] **Step 4: Update main.py to pass engine to ModelRegistry**
 
-In `alphalink/main.py` `run()` function, find:
+In `alphaTrade/main.py` `run()` function, find:
 ```python
     registry = ModelRegistry()
 ```
@@ -384,7 +384,7 @@ Note: `engine` is assigned before `registry` in `run()` (line ~450 `engine = get
 ```python
     engine = get_engine(settings.state_db_path)
 
-    from alphalink.model_registry import ModelRegistry
+    from alphaTrade.model_registry import ModelRegistry
     registry = ModelRegistry(engine=engine)
     await registry.refresh(settings.models_dir, settings.model_overrides)
 ```
@@ -408,7 +408,7 @@ Expected: no new failures
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/model_registry.py alphalink/main.py tests/unit/test_model_performance.py
+git add alphaTrade/model_registry.py alphaTrade/main.py tests/unit/test_model_performance.py
 git commit -m "feat(registry): skip retired models in ModelRegistry.refresh"
 ```
 
@@ -417,8 +417,8 @@ git commit -m "feat(registry): skip retired models in ModelRegistry.refresh"
 ### Task 3: Sector cache population + sector gate (risk/sector.py)
 
 **Files:**
-- Create: `alphalink/risk/sector.py`
-- Modify: `alphalink/broker/instrument_map.py`
+- Create: `alphaTrade/risk/sector.py`
+- Modify: `alphaTrade/broker/instrument_map.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -431,15 +431,15 @@ from unittest.mock import patch, MagicMock
 import pytest
 from sqlmodel import Session
 
-from alphalink.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
-from alphalink.risk.sector import fetch_sector, check_sector_gate
-from alphalink.store.db import get_engine
-from alphalink.store.repos import Position, PositionRepo, SectorCache, SectorCacheRepo
+from alphaTrade.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
+from alphaTrade.risk.sector import fetch_sector, check_sector_gate
+from alphaTrade.store.db import get_engine
+from alphaTrade.store.repos import Position, PositionRepo, SectorCache, SectorCacheRepo
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -587,9 +587,9 @@ def test_sell_always_passes_sector_gate(engine):
 pytest tests/unit/test_sector_gate.py -v 2>&1 | head -5
 ```
 
-Expected: `ModuleNotFoundError: No module named 'alphalink.risk.sector'`
+Expected: `ModuleNotFoundError: No module named 'alphaTrade.risk.sector'`
 
-- [ ] **Step 3: Create alphalink/risk/sector.py**
+- [ ] **Step 3: Create alphaTrade/risk/sector.py**
 
 ```python
 """Sector/correlation position limit gate."""
@@ -598,8 +598,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from alphalink.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
-from alphalink.store.repos import PositionRepo, SectorCacheRepo
+from alphaTrade.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig
+from alphaTrade.store.repos import PositionRepo, SectorCacheRepo
 
 log = logging.getLogger(__name__)
 
@@ -683,7 +683,7 @@ def check_sector_gate(
 
 - [ ] **Step 4: Add sector population to instrument_map.py**
 
-In `alphalink/broker/instrument_map.py`, add sector population after T212 resolution:
+In `alphaTrade/broker/instrument_map.py`, add sector population after T212 resolution:
 
 ```python
 """yfinance ticker → T212 instrument_ticker resolution.
@@ -694,8 +694,8 @@ Fails loud if unresolvable.
 from __future__ import annotations
 from typing import Optional
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.store.repos import InstrumentCacheRepo, SectorCacheRepo
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.store.repos import InstrumentCacheRepo, SectorCacheRepo
 
 
 class InstrumentMap:
@@ -724,7 +724,7 @@ class InstrumentMap:
 
         # Opportunistically populate sector cache on first resolution
         if self._sector_repo:
-            from alphalink.risk.sector import fetch_sector
+            from alphaTrade.risk.sector import fetch_sector
             fetch_sector(yf_ticker, self._sector_repo)
 
         return t212_ticker
@@ -757,7 +757,7 @@ Expected: all 7 tests PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/risk/sector.py alphalink/broker/instrument_map.py tests/unit/test_sector_gate.py
+git add alphaTrade/risk/sector.py alphaTrade/broker/instrument_map.py tests/unit/test_sector_gate.py
 git commit -m "feat(risk): add sector exposure gate (balanced/unbalanced modes)"
 ```
 
@@ -766,21 +766,21 @@ git commit -m "feat(risk): add sector exposure gate (balanced/unbalanced modes)"
 ### Task 4: Wire sector gate + retirement check into gates.py
 
 **Files:**
-- Modify: `alphalink/risk/gates.py`
+- Modify: `alphaTrade/risk/gates.py`
 
 - [ ] **Step 1: Write failing test**
 
 Add to `tests/unit/test_sector_gate.py`:
 
 ```python
-from alphalink.config import RiskConfig
-from alphalink.risk.gates import run_gates
+from alphaTrade.config import RiskConfig
+from alphaTrade.risk.gates import run_gates
 
 
 def test_gates_blocks_retired_model(engine):
     cfg = RiskConfig()
     with Session(engine) as s:
-        from alphalink.store.repos import ModelPerformanceRepo
+        from alphaTrade.store.repos import ModelPerformanceRepo
         repo = ModelPerformanceRepo(s)
         perf = repo.get_or_create("model_z")
         perf.retired = True
@@ -831,7 +831,7 @@ pytest tests/unit/test_sector_gate.py::test_gates_blocks_retired_model -v 2>&1 |
 
 Expected: `TypeError: run_gates() got an unexpected keyword argument 'model_id'`
 
-- [ ] **Step 3: Replace alphalink/risk/gates.py**
+- [ ] **Step 3: Replace alphaTrade/risk/gates.py**
 
 ```python
 """Risk gate pipeline. Applied per signal before order submission.
@@ -853,7 +853,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from alphalink.store.repos import PositionRepo
+from alphaTrade.store.repos import PositionRepo
 
 
 @dataclass
@@ -898,7 +898,7 @@ def run_gates(
 
     # Sector gate (BUY only)
     if signal == "BUY" and yf_ticker and sector_repo is not None and risk_cfg is not None:
-        from alphalink.risk.sector import check_sector_gate
+        from alphaTrade.risk.sector import check_sector_gate
         rejection = check_sector_gate(
             yf_ticker=yf_ticker,
             signal=signal,
@@ -930,7 +930,7 @@ def run_gates(
 
 - [ ] **Step 4: Update main.py to pass new gate params**
 
-In `alphalink/main.py` `make_tick`, find the `run_gates(...)` call and extend it:
+In `alphaTrade/main.py` `make_tick`, find the `run_gates(...)` call and extend it:
 
 ```python
                 gate: GateResult = run_gates(
@@ -950,7 +950,7 @@ In `alphalink/main.py` `make_tick`, find the `run_gates(...)` call and extend it
 
 Also add imports at top of main.py:
 ```python
-from alphalink.store.repos import (
+from alphaTrade.store.repos import (
     ...existing imports...
     ModelPerformanceRepo,
     SectorCacheRepo,
@@ -989,7 +989,7 @@ Expected: no new failures
 - [ ] **Step 8: Commit**
 
 ```bash
-git add alphalink/risk/gates.py alphalink/main.py tests/unit/test_sector_gate.py
+git add alphaTrade/risk/gates.py alphaTrade/main.py tests/unit/test_sector_gate.py
 git commit -m "feat(risk): add retirement and sector gates to run_gates pipeline"
 ```
 
@@ -998,8 +998,8 @@ git commit -m "feat(risk): add retirement and sector gates to run_gates pipeline
 ### Task 5: Wire performance record_trade into tick loop
 
 **Files:**
-- Modify: `alphalink/main.py`
-- Modify: `alphalink/broker/oco_monitor.py`
+- Modify: `alphaTrade/main.py`
+- Modify: `alphaTrade/broker/oco_monitor.py`
 
 - [ ] **Step 1: Add record_trade + check_retirement calls after SELL fill in main.py**
 
@@ -1007,7 +1007,7 @@ In the `elif signal == "SELL":` block in `make_tick`, after the trade journal wr
 
 ```python
                         # Update model performance on SELL close
-                        from alphalink.risk.performance import record_trade, check_retirement
+                        from alphaTrade.risk.performance import record_trade, check_retirement
                         fill_price_for_perf = float(resp.get("fillPrice") or current_price)
                         pnl_for_perf = (fill_price_for_perf - (pos.avg_entry if pos else fill_price_for_perf)) * qty
                         record_trade(session, model_id=manifest.run_name,
@@ -1020,14 +1020,14 @@ In the `elif signal == "SELL":` block in `make_tick`, after the trade journal wr
 
 - [ ] **Step 2: Add record_trade call in oco_monitor.py _close_position**
 
-In `alphalink/broker/oco_monitor.py` `_close_position`, add after `journal_repo.save(...)`:
+In `alphaTrade/broker/oco_monitor.py` `_close_position`, add after `journal_repo.save(...)`:
 
 ```python
         # Record performance for retirement evaluation
         # engine-level import to avoid circular dep
         try:
-            from alphalink.risk.performance import record_trade, check_retirement
-            from alphalink.config import ModelRetirementConfig
+            from alphaTrade.risk.performance import record_trade, check_retirement
+            from alphaTrade.config import ModelRetirementConfig
             record_trade(session, model_id=model_id, realized_pnl=realized_pnl,
                          cfg=ModelRetirementConfig())  # uses defaults; overridden at startup via settings
         except Exception as exc:
@@ -1047,7 +1047,7 @@ Expected: no failures
 - [ ] **Step 4: Commit**
 
 ```bash
-git add alphalink/main.py alphalink/broker/oco_monitor.py
+git add alphaTrade/main.py alphaTrade/broker/oco_monitor.py
 git commit -m "feat(risk): wire record_trade into tick loop and OCO close"
 ```
 
@@ -1056,8 +1056,8 @@ git commit -m "feat(risk): wire record_trade into tick loop and OCO close"
 ### Task 6: Volatility-based position sizing (risk/sizing.py)
 
 **Files:**
-- Modify: `alphalink/risk/sizing.py`
-- Modify: `alphalink/main.py` — pass ATR value and sizing_mode to compute_quantity
+- Modify: `alphaTrade/risk/sizing.py`
+- Modify: `alphaTrade/main.py` — pass ATR value and sizing_mode to compute_quantity
 
 - [ ] **Step 1: Write failing tests**
 
@@ -1068,7 +1068,7 @@ Create `tests/unit/test_volatility_sizing.py`:
 import pytest
 from unittest.mock import patch, MagicMock
 
-from alphalink.risk.sizing import compute_quantity
+from alphaTrade.risk.sizing import compute_quantity
 
 
 def test_fixed_mode_unchanged():
@@ -1153,7 +1153,7 @@ pytest tests/unit/test_volatility_sizing.py -v 2>&1 | head -10
 
 Expected: `TypeError: compute_quantity() got an unexpected keyword argument 'mode'`
 
-- [ ] **Step 3: Replace alphalink/risk/sizing.py**
+- [ ] **Step 3: Replace alphaTrade/risk/sizing.py**
 
 ```python
 """Position sizing: fixed, ATR-based, and VIX-based modes."""
@@ -1285,6 +1285,6 @@ Expected: no failures
 - [ ] **Step 7: Commit**
 
 ```bash
-git add alphalink/risk/sizing.py alphalink/main.py tests/unit/test_volatility_sizing.py
+git add alphaTrade/risk/sizing.py alphaTrade/main.py tests/unit/test_volatility_sizing.py
 git commit -m "feat(risk): add ATR and VIX volatility-based position sizing"
 ```

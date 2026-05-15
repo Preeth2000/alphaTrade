@@ -7,8 +7,8 @@ from datetime import datetime
 
 from sqlmodel import Session
 
-from alphalink.config import ModelRetirementConfig
-from alphalink.store.repos import ModelPerformanceRepo
+from alphaTrade.config import ModelRetirementConfig
+from alphaTrade.store.repos import ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
 

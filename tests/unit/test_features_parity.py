@@ -1,7 +1,7 @@
 """Feature pipeline parity test vs alphaGen inference_reference.py.
 
 Loads the aapl_daily_mlp_example reference artifact, fetches live OHLCV,
-runs both alphaGen's canonical pipeline and alphaLink's pipeline on the
+runs both alphaGen's canonical pipeline and alphaTrade's pipeline on the
 same data, and asserts the input tensors and logits match to ≤1e-4.
 
 This is the highest-risk test per HANDOVER §5 — any deviation here means
@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-ALPHALINK_ROOT = Path(__file__).parent.parent.parent
-ALPHAGEN_ROOT = ALPHALINK_ROOT.parent / "alphaGen"
+alphaTrade_ROOT = Path(__file__).parent.parent.parent
+ALPHAGEN_ROOT = alphaTrade_ROOT.parent / "alphaGen"
 ARTIFACT_DIR = ALPHAGEN_ROOT / "artifacts" / "aapl_daily_mlp_example"
 REFERENCE_SCRIPT = ALPHAGEN_ROOT / "examples" / "inference_reference.py"
 
@@ -51,9 +51,9 @@ def _load_reference_module():
 def shared_ohlcv():
     """Fetch OHLCV once and share across tests in this module."""
     _skip_if_missing()
-    from alphalink.adapter.manifest import Manifest
+    from alphaTrade.adapter.manifest import Manifest
     manifest = Manifest.load(ARTIFACT_DIR / "manifest.json")
-    from alphalink.data.yfinance_provider import YFinanceProvider
+    from alphaTrade.data.yfinance_provider import YFinanceProvider
     df = YFinanceProvider().fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
     return df
 
@@ -61,7 +61,7 @@ def shared_ohlcv():
 @pytest.fixture(scope="module")
 def manifest():
     _skip_if_missing()
-    from alphalink.adapter.manifest import Manifest
+    from alphaTrade.adapter.manifest import Manifest
     return Manifest.load(ARTIFACT_DIR / "manifest.json")
 
 
@@ -72,13 +72,13 @@ def ref():
 
 
 def test_feature_tensor_matches_reference(shared_ohlcv, manifest, ref):
-    """alphaLink feature tensor == alphaGen reference tensor to ≤1e-4."""
+    """alphaTrade feature tensor == alphaGen reference tensor to ≤1e-4."""
     import json
 
-    # alphaLink pipeline
-    from alphalink.adapter.features import compute_features
-    from alphalink.adapter.normalize import normalize
-    from alphalink.adapter.window import build_input
+    # alphaTrade pipeline
+    from alphaTrade.adapter.features import compute_features
+    from alphaTrade.adapter.normalize import normalize
+    from alphaTrade.adapter.window import build_input
 
     al_features = compute_features(shared_ohlcv, manifest.feature_names)
     al_features = al_features.dropna()
@@ -93,21 +93,21 @@ def test_feature_tensor_matches_reference(shared_ohlcv, manifest, ref):
 
     np.testing.assert_allclose(
         al_tensor, ag_tensor, atol=1e-4,
-        err_msg="alphaLink input tensor diverges from alphaGen reference. "
+        err_msg="alphaTrade input tensor diverges from alphaGen reference. "
                 "Check features.py, normalize.py, window.py for deviations."
     )
 
 
 def test_logits_match_reference(shared_ohlcv, manifest, ref):
-    """alphaLink logits == alphaGen reference logits to ≤1e-4."""
+    """alphaTrade logits == alphaGen reference logits to ≤1e-4."""
     import json
 
-    from alphalink.adapter.features import compute_features
-    from alphalink.adapter.normalize import normalize
-    from alphalink.adapter.window import build_input
-    from alphalink.adapter.inference import OnnxModel
+    from alphaTrade.adapter.features import compute_features
+    from alphaTrade.adapter.normalize import normalize
+    from alphaTrade.adapter.window import build_input
+    from alphaTrade.adapter.inference import OnnxModel
 
-    # alphaLink
+    # alphaTrade
     al_features = compute_features(shared_ohlcv, manifest.feature_names)
     al_features = al_features.dropna()
     al_features = normalize(al_features, manifest)
@@ -127,17 +127,17 @@ def test_logits_match_reference(shared_ohlcv, manifest, ref):
 
     np.testing.assert_allclose(
         al_logits, ag_logits, atol=1e-4,
-        err_msg="alphaLink logits diverge from alphaGen reference logits."
+        err_msg="alphaTrade logits diverge from alphaGen reference logits."
     )
 
 
 def test_signal_is_valid(shared_ohlcv, manifest):
     """End-to-end: pipeline produces a valid BUY/SELL/HOLD signal."""
-    from alphalink.adapter.features import compute_features
-    from alphalink.adapter.normalize import normalize
-    from alphalink.adapter.window import build_input
-    from alphalink.adapter.inference import OnnxModel
-    from alphalink.consensus.softmax_avg import CLASS_NAMES
+    from alphaTrade.adapter.features import compute_features
+    from alphaTrade.adapter.normalize import normalize
+    from alphaTrade.adapter.window import build_input
+    from alphaTrade.adapter.inference import OnnxModel
+    from alphaTrade.consensus.softmax_avg import CLASS_NAMES
 
     features = compute_features(shared_ohlcv, manifest.feature_names)
     features = features.dropna()

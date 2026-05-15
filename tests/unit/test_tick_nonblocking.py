@@ -16,11 +16,11 @@ import pandas as pd
 import pytest
 from sqlmodel import SQLModel, create_engine
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.config import Settings
-from alphalink.health import HealthState
-from alphalink.main import make_tick
-from alphalink.store.repos import EquityCurve, InstrumentCache, Order, Position, Signal
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.config import Settings
+from alphaTrade.health import HealthState
+from alphaTrade.main import make_tick
+from alphaTrade.store.repos import EquityCurve, InstrumentCache, Order, Position, Signal
 
 INTERVAL = "1d"
 
@@ -103,10 +103,10 @@ async def test_get_total_equity_runs_in_worker_thread(tmp_path):
     )
 
     with (
-        patch("alphalink.main.compute_features", return_value=_HOLD_DF),
-        patch("alphalink.main.normalize", return_value=_HOLD_DF),
-        patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-        patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+        patch("alphaTrade.main.compute_features", return_value=_HOLD_DF),
+        patch("alphaTrade.main.normalize", return_value=_HOLD_DF),
+        patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+        patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
     ):
         bg = asyncio.create_task(concurrent())
         await tick()

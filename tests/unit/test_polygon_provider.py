@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alphalink.data.polygon_provider import PolygonProvider
+from alphaTrade.data.polygon_provider import PolygonProvider
 
 _COLS = ["Open", "High", "Low", "Close", "Volume"]
 _N = 10

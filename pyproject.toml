@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "alphalink"
+name = "alphaTrade"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.scripts]
-alphalink = "alphalink.cli:app"
+alphaTrade = "alphaTrade.cli:app"
 
 [project.optional-dependencies]
 dev = [
@@ -48,12 +48,12 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["alphalink"]
+packages = ["alphaTrade"]
 
 [tool.hatch.build.targets.wheel.shared-data]
 
 [tool.hatch.build.targets.sdist]
-include = ["alphalink/store/alembic.ini", "alphalink/store/migrations/**"]
+include = ["alphaTrade/store/alembic.ini", "alphaTrade/store/migrations/**"]
 
 [tool.setuptools.package-data]
-"alphalink.store" = ["alembic.ini", "migrations/**/*"]
+"alphaTrade.store" = ["alembic.ini", "migrations/**/*"]

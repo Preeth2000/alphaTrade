@@ -1,10 +1,10 @@
 import sys
-sys.path.insert(0, '/home/preeth/projects/alphaLink')
+sys.path.insert(0, '/home/preeth/projects/alphaTrade')
 
 import pytest
 import respx
 import httpx
-from alphalink.notify import webhook
+from alphaTrade.notify import webhook
 
 def test_simple():
     print(f"\n_webhook_url = {repr(webhook._webhook_url)}")

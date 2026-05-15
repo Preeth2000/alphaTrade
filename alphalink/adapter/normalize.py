@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from alphalink.adapter.manifest import Manifest, NormStats
+from alphaTrade.adapter.manifest import Manifest, NormStats
 
 
 def normalize(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:

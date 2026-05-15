@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from alphalink.notify import webhook
+from alphaTrade.notify import webhook
 
 DISCORD_URL = "https://discord.com/api/webhooks/123/abc"
 

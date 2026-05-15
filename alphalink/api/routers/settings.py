@@ -4,11 +4,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
-from alphalink.store.repos import BotSettings, BotSettingsRepo
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo
 
 _SENSITIVE = frozenset({
     "t212_api_key", "polygon_api_key", "email_smtp_password",
-    "slack_webhook_url", "alphalink_api_key",
+    "slack_webhook_url", "alphaTrade_api_key",
 })
 
 
@@ -36,7 +36,7 @@ class BotSettingsUpdate(BaseModel):
     extended_hours: Optional[bool] = None
     max_positions: Optional[int] = None
     daily_loss_halt_pct: Optional[float] = None
-    alphalink_api_key: Optional[str] = None
+    alphaTrade_api_key: Optional[str] = None
 
 
 def _mask(s: BotSettings) -> dict:

@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.store.repos import (
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.store.repos import (
     EquityCurve, InstrumentCache, InstrumentCacheRepo, Order, Position, Signal,
 )
 
@@ -45,13 +45,13 @@ def _registry(*tickers: str) -> MagicMock:
 
 class TestPreresolveTickers:
     def test_function_is_importable(self):
-        """_preresolve_tickers must exist in alphalink.main."""
-        from alphalink.main import _preresolve_tickers
+        """_preresolve_tickers must exist in alphaTrade.main."""
+        from alphaTrade.main import _preresolve_tickers
         assert callable(_preresolve_tickers)
 
     def test_resolve_called_for_each_registry_ticker(self):
         """_preresolve_tickers calls resolve for every ticker in registry."""
-        from alphalink.main import _preresolve_tickers
+        from alphaTrade.main import _preresolve_tickers
         eng = _engine()
         t212 = _t212()
         registry = _registry("AAPL", "MSFT")
@@ -66,8 +66,8 @@ class TestPreresolveTickers:
 
     def test_preresolve_prevents_api_call_during_tick(self):
         """After preresolve, resolve() skips get_instruments (cache hit)."""
-        from alphalink.main import _preresolve_tickers
-        from alphalink.broker.instrument_map import InstrumentMap
+        from alphaTrade.main import _preresolve_tickers
+        from alphaTrade.broker.instrument_map import InstrumentMap
         eng = _engine()
         t212 = _t212()
         registry = _registry("AAPL")
@@ -85,7 +85,7 @@ class TestPreresolveTickers:
 
     def test_preresolve_skips_static_overrides(self):
         """Tickers in static_map are skipped — override takes precedence."""
-        from alphalink.main import _preresolve_tickers
+        from alphaTrade.main import _preresolve_tickers
         eng = _engine()
         t212 = _t212()
         registry = _registry("AAPL")
@@ -97,7 +97,7 @@ class TestPreresolveTickers:
 
     def test_preresolve_logs_warning_on_resolve_failure(self, caplog):
         """Failed resolution logs warning and continues (does not raise)."""
-        from alphalink.main import _preresolve_tickers
+        from alphaTrade.main import _preresolve_tickers
         eng = _engine()
         t212 = MagicMock(spec=T212Client)
         t212.get_instruments.return_value = []  # no match → RuntimeError

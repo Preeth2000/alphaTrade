@@ -458,7 +458,7 @@ class BotSettings(SQLModel, table=True):
     extended_hours: bool = Field(default=False)
     max_positions: int = Field(default=5)
     daily_loss_halt_pct: float = Field(default=0.05)
-    alphalink_api_key: str = Field(default="")
+    alphaTrade_api_key: str = Field(default="")
 
 
 class BotSettingsRepo:

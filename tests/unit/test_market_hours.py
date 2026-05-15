@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from alphalink.scheduler.bar_close import is_market_open, schedule_bar_close
+from alphaTrade.scheduler.bar_close import is_market_open, schedule_bar_close
 
 
 # ---------------------------------------------------------------------------
@@ -70,9 +70,9 @@ class TestScheduleBarCloseMarketGating:
         asyncio.get_event_loop().call_soon(stop.set)
 
         with (
-            patch("alphalink.scheduler.bar_close.next_bar_close",
+            patch("alphaTrade.scheduler.bar_close.next_bar_close",
                   side_effect=lambda *a, **kw: datetime.now(timezone.utc)),
-            patch("alphalink.scheduler.bar_close.is_market_open", return_value=False),
+            patch("alphaTrade.scheduler.bar_close.is_market_open", return_value=False),
         ):
             await schedule_bar_close("1h", callback, stop_event=stop, extended_hours=False)
 
@@ -88,9 +88,9 @@ class TestScheduleBarCloseMarketGating:
             stop.set()
 
         with (
-            patch("alphalink.scheduler.bar_close.next_bar_close",
+            patch("alphaTrade.scheduler.bar_close.next_bar_close",
                   side_effect=lambda *a, **kw: datetime.now(timezone.utc)),
-            patch("alphalink.scheduler.bar_close.is_market_open", return_value=True),
+            patch("alphaTrade.scheduler.bar_close.is_market_open", return_value=True),
         ):
             await schedule_bar_close("1h", callback, stop_event=stop, extended_hours=False)
 
@@ -106,9 +106,9 @@ class TestScheduleBarCloseMarketGating:
             stop.set()
 
         with (
-            patch("alphalink.scheduler.bar_close.next_bar_close",
+            patch("alphaTrade.scheduler.bar_close.next_bar_close",
                   side_effect=lambda *a, **kw: datetime.now(timezone.utc)),
-            patch("alphalink.scheduler.bar_close.is_market_open", return_value=False),
+            patch("alphaTrade.scheduler.bar_close.is_market_open", return_value=False),
         ):
             await schedule_bar_close("1h", callback, stop_event=stop, extended_hours=True)
 
@@ -125,9 +125,9 @@ class TestScheduleBarCloseMarketGating:
             stop.set()
 
         with (
-            patch("alphalink.scheduler.bar_close.next_bar_close",
+            patch("alphaTrade.scheduler.bar_close.next_bar_close",
                   side_effect=lambda *a, **kw: datetime.now(timezone.utc)),
-            patch("alphalink.scheduler.bar_close.is_market_open", return_value=False),
+            patch("alphaTrade.scheduler.bar_close.is_market_open", return_value=False),
         ):
             await schedule_bar_close("1d", callback, stop_event=stop, extended_hours=False)
 

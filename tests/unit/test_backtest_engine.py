@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alphalink.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState
+from alphaTrade.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState
 
 
 def test_simulate_fill_buy_adds_slippage():
@@ -68,7 +68,7 @@ def test_backtest_state_pnl_short():
 
 
 # Reporter tests
-from alphalink.backtest.reporter import compute_summary, format_text
+from alphaTrade.backtest.reporter import compute_summary, format_text
 
 
 def test_compute_summary_empty():

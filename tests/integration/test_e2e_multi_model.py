@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alphalink.consensus.softmax_avg import consensus_by_ticker
+from alphaTrade.consensus.softmax_avg import consensus_by_ticker
 
 
 def test_two_models_same_ticker_consensus():

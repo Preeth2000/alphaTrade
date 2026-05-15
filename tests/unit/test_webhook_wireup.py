@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from alphalink.notify import webhook as wh
+from alphaTrade.notify import webhook as wh
 
 
 def _settings(tmp_path: Path, webhook_url: str = "https://discord.com/api/webhooks/123/abc"):
-    from alphalink.config import Settings
+    from alphaTrade.config import Settings
     return Settings(
         t212_api_key="test-key",
         state_db_path=tmp_path / "state.db",
@@ -44,31 +44,31 @@ def _mock_t212():
 def _base_patches():
     """Minimal patches to make run() exit cleanly with no real I/O."""
     return [
-        patch("alphalink.model_registry.ModelRegistry", return_value=_mock_registry()),
-        patch("alphalink.main.T212Client", return_value=_mock_t212()),
-        patch("alphalink.main._build_data_provider", return_value=MagicMock()),
-        patch("alphalink.main._preresolve_tickers"),
-        patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+        patch("alphaTrade.model_registry.ModelRegistry", return_value=_mock_registry()),
+        patch("alphaTrade.main.T212Client", return_value=_mock_t212()),
+        patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
+        patch("alphaTrade.main._preresolve_tickers"),
+        patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
         patch("prometheus_client.start_http_server"),
-        patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
+        patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
     ]
 
 
 class TestStartupNotify:
     async def test_startup_notify_fires_with_startup_category(self, tmp_path):
         """wh.notify called with category='startup' when webhook_url is set."""
-        from alphalink.main import run
+        from alphaTrade.main import run
         settings = _settings(tmp_path)
 
         with (
-            patch("alphalink.model_registry.ModelRegistry", return_value=_mock_registry()),
-            patch("alphalink.main.T212Client", return_value=_mock_t212()),
-            patch("alphalink.main._build_data_provider", return_value=MagicMock()),
-            patch("alphalink.main._preresolve_tickers"),
-            patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+            patch("alphaTrade.model_registry.ModelRegistry", return_value=_mock_registry()),
+            patch("alphaTrade.main.T212Client", return_value=_mock_t212()),
+            patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
+            patch("alphaTrade.main._preresolve_tickers"),
+            patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
             patch("prometheus_client.start_http_server"),
-            patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
-            patch("alphalink.main.wh.notify") as mock_notify,
+            patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
+            patch("alphaTrade.main.wh.notify") as mock_notify,
         ):
             await run(settings)
 
@@ -81,18 +81,18 @@ class TestStartupNotify:
 
     async def test_startup_notify_not_fired_without_webhook_url(self, tmp_path):
         """wh.notify must NOT be called when webhook_url is empty."""
-        from alphalink.main import run
+        from alphaTrade.main import run
         settings = _settings(tmp_path, webhook_url="")
 
         with (
-            patch("alphalink.model_registry.ModelRegistry", return_value=_mock_registry()),
-            patch("alphalink.main.T212Client", return_value=_mock_t212()),
-            patch("alphalink.main._build_data_provider", return_value=MagicMock()),
-            patch("alphalink.main._preresolve_tickers"),
-            patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+            patch("alphaTrade.model_registry.ModelRegistry", return_value=_mock_registry()),
+            patch("alphaTrade.main.T212Client", return_value=_mock_t212()),
+            patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
+            patch("alphaTrade.main._preresolve_tickers"),
+            patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
             patch("prometheus_client.start_http_server"),
-            patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
-            patch("alphalink.main.wh.notify") as mock_notify,
+            patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
+            patch("alphaTrade.main.wh.notify") as mock_notify,
         ):
             await run(settings)
 
@@ -123,7 +123,7 @@ class TestHandlerIdempotency:
 
     async def test_run_does_not_double_attach_handler(self, tmp_path):
         """Calling run() twice attaches WebhookHandler exactly once."""
-        from alphalink.main import run
+        from alphaTrade.main import run
 
         root = logging.getLogger()
         root.handlers = [h for h in root.handlers if not isinstance(h, wh.WebhookHandler)]
@@ -132,14 +132,14 @@ class TestHandlerIdempotency:
 
         async def _run_once():
             with (
-                patch("alphalink.model_registry.ModelRegistry", return_value=_mock_registry()),
-                patch("alphalink.main.T212Client", return_value=_mock_t212()),
-                patch("alphalink.main._build_data_provider", return_value=MagicMock()),
-                patch("alphalink.main._preresolve_tickers"),
-                patch("alphalink.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+                patch("alphaTrade.model_registry.ModelRegistry", return_value=_mock_registry()),
+                patch("alphaTrade.main.T212Client", return_value=_mock_t212()),
+                patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
+                patch("alphaTrade.main._preresolve_tickers"),
+                patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
                 patch("prometheus_client.start_http_server"),
-                patch("alphalink.main.schedule_bar_close", new=AsyncMock()),
-                patch("alphalink.main.wh.notify"),  # suppress actual delivery
+                patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
+                patch("alphaTrade.main.wh.notify"),  # suppress actual delivery
             ):
                 await run(settings)
 

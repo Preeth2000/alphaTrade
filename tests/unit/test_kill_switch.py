@@ -1,4 +1,4 @@
-"""Tests for operator kill switch: ALPHALINK_HALT env var + ./HALT sentinel file."""
+"""Tests for operator kill switch: alphaTrade_HALT env var + ./HALT sentinel file."""
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from alphalink.kill_switch import is_halted, SENTINEL_FILE, ENV_VAR
+from alphaTrade.kill_switch import is_halted, SENTINEL_FILE, ENV_VAR
 
 
 class TestIsHalted:
@@ -59,7 +59,7 @@ class TestIsHalted:
 # ---------------------------------------------------------------------------
 
 from typer.testing import CliRunner
-from alphalink.cli import app
+from alphaTrade.cli import app
 
 
 class TestCLIHaltResume:

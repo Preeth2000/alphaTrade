@@ -14,9 +14,9 @@
 
 | Action | File | Responsibility |
 |--------|------|----------------|
-| Create | `alphalink/health.py` | `HealthState`, `make_app`, `start_health_server` |
+| Create | `alphaTrade/health.py` | `HealthState`, `make_app`, `start_health_server` |
 | Create | `tests/unit/test_health.py` | Unit tests for both endpoints |
-| Modify | `alphalink/main.py` | Wire HealthState: startup probe, per-tick updates, start server |
+| Modify | `alphaTrade/main.py` | Wire HealthState: startup probe, per-tick updates, start server |
 | Modify | `pyproject.toml` | Add `aiohttp>=3.9` dependency |
 | Modify | `Dockerfile` | Add `HEALTHCHECK` directive |
 | Modify | `docker-compose.yml` | Expose port 8080 |
@@ -71,7 +71,7 @@ from datetime import datetime, timezone, timedelta
 
 from aiohttp.test_utils import TestClient, TestServer
 
-from alphalink.health import HealthState, make_app
+from alphaTrade.health import HealthState, make_app
 
 
 @pytest.fixture
@@ -141,18 +141,18 @@ async def test_readyz_ok(health_client):
 pytest tests/unit/test_health.py -v
 ```
 
-Expected: `ImportError: cannot import name 'HealthState' from 'alphalink.health'` (module doesn't exist yet).
+Expected: `ImportError: cannot import name 'HealthState' from 'alphaTrade.health'` (module doesn't exist yet).
 
 ---
 
 ## Task 3: Implement health.py — make tests pass
 
 **Files:**
-- Create: `alphalink/health.py`
+- Create: `alphaTrade/health.py`
 
 - [ ] **Step 1: Create the module**
 
-Create `alphalink/health.py`:
+Create `alphaTrade/health.py`:
 
 ```python
 from __future__ import annotations
@@ -220,8 +220,8 @@ Expected: 6 tests PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add alphalink/health.py tests/unit/test_health.py
-git commit -m "feat: health endpoint module with /healthz and /readyz (alphaLink-79k)"
+git add alphaTrade/health.py tests/unit/test_health.py
+git commit -m "feat: health endpoint module with /healthz and /readyz (alphaTrade-79k)"
 ```
 
 ---
@@ -229,19 +229,19 @@ git commit -m "feat: health endpoint module with /healthz and /readyz (alphaLink
 ## Task 4: Wire HealthState into main.py
 
 **Files:**
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 - [ ] **Step 1: Add import**
 
-At the top of `alphalink/main.py`, add after the existing first-party imports block (after line 43 `from alphalink.store.repos import ...`):
+At the top of `alphaTrade/main.py`, add after the existing first-party imports block (after line 43 `from alphaTrade.store.repos import ...`):
 
 ```python
-from alphalink.health import HealthState, start_health_server
+from alphaTrade.health import HealthState, start_health_server
 ```
 
 - [ ] **Step 2: Create HealthState and startup T212 probe in run()**
 
-In `alphalink/main.py`, inside `async def run(settings: Settings) -> None:`, after the line `t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)` (line 147), add:
+In `alphaTrade/main.py`, inside `async def run(settings: Settings) -> None:`, after the line `t212 = T212Client(api_key=settings.t212_api_key, env=settings.t212_env)` (line 147), add:
 
 ```python
     health_state = HealthState()
@@ -350,8 +350,8 @@ Expected: all unit tests PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add alphalink/main.py
-git commit -m "feat: wire HealthState into main loop (alphaLink-79k)"
+git add alphaTrade/main.py
+git commit -m "feat: wire HealthState into main loop (alphaTrade-79k)"
 ```
 
 ---
@@ -383,17 +383,17 @@ ENV PYTHONUNBUFFERED=1 \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:8080/healthz || exit 1
 
-ENTRYPOINT ["alphalink"]
+ENTRYPOINT ["alphaTrade"]
 CMD ["run"]
 ```
 
 - [ ] **Step 2: Expose port in docker-compose.yml**
 
-In `docker-compose.yml`, add `ports` to the `alphalink` service after `restart: unless-stopped`:
+In `docker-compose.yml`, add `ports` to the `alphaTrade` service after `restart: unless-stopped`:
 
 ```yaml
 services:
-  alphalink:
+  alphaTrade:
     build: .
     env_file: .env
     environment:
@@ -422,5 +422,5 @@ Expected: all tests PASS.
 
 ```bash
 git add Dockerfile docker-compose.yml
-git commit -m "feat: Docker HEALTHCHECK + expose :8080 (alphaLink-79k)"
+git commit -m "feat: Docker HEALTHCHECK + expose :8080 (alphaTrade-79k)"
 ```

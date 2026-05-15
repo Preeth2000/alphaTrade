@@ -1,6 +1,6 @@
 """Verify new config classes parse correctly."""
 import pytest
-from alphalink.config import (
+from alphaTrade.config import (
     AlertsConfig, AlertSlackConfig, AlertEmailConfig,
     BacktestConfig, ModelRetirementConfig,
     AtrSizingConfig, VixSizingConfig,

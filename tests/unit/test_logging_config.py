@@ -10,33 +10,33 @@ from pathlib import Path
 
 import pytest
 
-from alphalink.logging_config import configure_logging, LOG_MAX_BYTES, LOG_BACKUP_COUNT
+from alphaTrade.logging_config import configure_logging, LOG_MAX_BYTES, LOG_BACKUP_COUNT
 
 
 class TestConfigureLogging:
     def test_adds_rotating_file_handler(self, tmp_path):
-        log_file = tmp_path / "alphalink.log"
+        log_file = tmp_path / "alphaTrade.log"
         configure_logging(log_file=log_file)
         root = logging.getLogger()
         rfh = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
         assert rfh, "RotatingFileHandler must be attached to root logger"
 
     def test_rotating_handler_max_bytes(self, tmp_path):
-        log_file = tmp_path / "alphalink.log"
+        log_file = tmp_path / "alphaTrade.log"
         configure_logging(log_file=log_file)
         root = logging.getLogger()
         rfh = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
         assert rfh.maxBytes == LOG_MAX_BYTES
 
     def test_rotating_handler_backup_count(self, tmp_path):
-        log_file = tmp_path / "alphalink.log"
+        log_file = tmp_path / "alphaTrade.log"
         configure_logging(log_file=log_file)
         root = logging.getLogger()
         rfh = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
         assert rfh.backupCount == LOG_BACKUP_COUNT
 
     def test_stdout_stream_handler_present(self, tmp_path):
-        log_file = tmp_path / "alphalink.log"
+        log_file = tmp_path / "alphaTrade.log"
         configure_logging(log_file=log_file)
         root = logging.getLogger()
         stream_handlers = [
@@ -52,7 +52,7 @@ class TestConfigureLogging:
         assert not rfh, "No RotatingFileHandler when log_file=None"
 
     def test_idempotent_multiple_calls(self, tmp_path):
-        log_file = tmp_path / "alphalink.log"
+        log_file = tmp_path / "alphaTrade.log"
         configure_logging(log_file=log_file)
         handler_count_before = len(logging.getLogger().handlers)
         configure_logging(log_file=log_file)
@@ -75,11 +75,11 @@ class TestJsonOutput:
     """Verify the JSON formatter produces required keys."""
 
     def _capture(self, extra: dict | None = None) -> dict:
-        from alphalink.logging_config import make_json_formatter as _make_json_formatter
+        from alphaTrade.logging_config import make_json_formatter as _make_json_formatter
         buf = io.StringIO()
         sh = logging.StreamHandler(buf)
         sh.setFormatter(_make_json_formatter())
-        logger = logging.getLogger("_alphalink_test_json")
+        logger = logging.getLogger("_alphaTrade_test_json")
         logger.propagate = False
         logger.addHandler(sh)
         logger.setLevel(logging.DEBUG)
@@ -116,7 +116,7 @@ class TestPerModuleLogLevel:
 
     @pytest.fixture(autouse=True)
     def reset_loggers(self):
-        loggers_to_reset = ["alphalink.broker", "alphalink.data"]
+        loggers_to_reset = ["alphaTrade.broker", "alphaTrade.data"]
         saved = {n: logging.getLogger(n).level for n in loggers_to_reset}
         root = logging.getLogger()
         orig_handlers = root.handlers[:]
@@ -126,25 +126,25 @@ class TestPerModuleLogLevel:
             logging.getLogger(name).setLevel(lvl)
 
     def test_env_var_sets_module_level(self, monkeypatch):
-        monkeypatch.setenv("LOG_LEVEL_alphalink_broker", "DEBUG")
+        monkeypatch.setenv("LOG_LEVEL_alphaTrade_broker", "DEBUG")
         configure_logging(log_file=None)
-        assert logging.getLogger("alphalink.broker").level == logging.DEBUG
+        assert logging.getLogger("alphaTrade.broker").level == logging.DEBUG
 
     def test_multiple_env_vars(self, monkeypatch):
-        monkeypatch.setenv("LOG_LEVEL_alphalink_broker", "DEBUG")
-        monkeypatch.setenv("LOG_LEVEL_alphalink_data", "WARNING")
+        monkeypatch.setenv("LOG_LEVEL_alphaTrade_broker", "DEBUG")
+        monkeypatch.setenv("LOG_LEVEL_alphaTrade_data", "WARNING")
         configure_logging(log_file=None)
-        assert logging.getLogger("alphalink.broker").level == logging.DEBUG
-        assert logging.getLogger("alphalink.data").level == logging.WARNING
+        assert logging.getLogger("alphaTrade.broker").level == logging.DEBUG
+        assert logging.getLogger("alphaTrade.data").level == logging.WARNING
 
     def test_invalid_level_ignored(self, monkeypatch):
-        monkeypatch.setenv("LOG_LEVEL_alphalink_broker", "NOTLEVEL")
-        before = logging.getLogger("alphalink.broker").level
+        monkeypatch.setenv("LOG_LEVEL_alphaTrade_broker", "NOTLEVEL")
+        before = logging.getLogger("alphaTrade.broker").level
         configure_logging(log_file=None)
-        assert logging.getLogger("alphalink.broker").level == before
+        assert logging.getLogger("alphaTrade.broker").level == before
 
     def test_unrelated_env_var_ignored(self, monkeypatch):
         monkeypatch.setenv("OTHER_VAR", "DEBUG")
-        before = logging.getLogger("alphalink.broker").level
+        before = logging.getLogger("alphaTrade.broker").level
         configure_logging(log_file=None)
-        assert logging.getLogger("alphalink.broker").level == before
+        assert logging.getLogger("alphaTrade.broker").level == before

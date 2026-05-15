@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from alphalink.broker.t212_client import T212Client
-from alphalink.store.repos import InstrumentCacheRepo, SectorCacheRepo
+from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.store.repos import InstrumentCacheRepo, SectorCacheRepo
 
 
 class InstrumentMap:
@@ -37,7 +37,7 @@ class InstrumentMap:
 
         # Opportunistically populate sector cache on first resolution
         if self._sector_repo is not None:
-            from alphalink.risk.sector import fetch_sector
+            from alphaTrade.risk.sector import fetch_sector
             fetch_sector(yf_ticker, self._sector_repo)
 
         return t212_ticker

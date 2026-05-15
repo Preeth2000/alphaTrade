@@ -10,7 +10,7 @@ import pytest
 class TestAlembicMigrations:
     def test_upgrade_head_creates_all_tables(self, tmp_path):
         """alembic upgrade head on empty DB produces all expected tables."""
-        from alphalink.store.db import run_migrations
+        from alphaTrade.store.db import run_migrations
         db_path = tmp_path / "test.db"
         run_migrations(db_path)
 
@@ -26,14 +26,14 @@ class TestAlembicMigrations:
 
     def test_upgrade_idempotent(self, tmp_path):
         """Running upgrade head twice does not error."""
-        from alphalink.store.db import run_migrations
+        from alphaTrade.store.db import run_migrations
         db_path = tmp_path / "test.db"
         run_migrations(db_path)
         run_migrations(db_path)  # second call must not raise
 
     def test_order_table_has_client_order_id(self, tmp_path):
         """client_order_id column present after migration."""
-        from alphalink.store.db import run_migrations
+        from alphaTrade.store.db import run_migrations
         db_path = tmp_path / "test.db"
         run_migrations(db_path)
 
@@ -49,10 +49,10 @@ class TestAlembicMigrations:
         calls = []
         monkeypatch.setattr(SQLModel.metadata, "create_all", lambda *a, **kw: calls.append(1))
 
-        from alphalink.store import db as db_mod
+        from alphaTrade.store import db as db_mod
         monkeypatch.setattr(db_mod, "_engines", {})
 
-        from alphalink.store.db import get_engine
+        from alphaTrade.store.db import get_engine
         get_engine(tmp_path / "test.db")
 
         assert calls == [], "create_all must not be called when Alembic is used"

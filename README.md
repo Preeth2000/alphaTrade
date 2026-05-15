@@ -1,4 +1,4 @@
-# alphaLink
+# alphaTrade
 
 Trading bot that consumes ML model artifacts from [alphaGen](../alphaGen), fetches live OHLCV, and executes orders on Trading212.
 
@@ -80,7 +80,7 @@ models:
 ## Verify a model before deploying
 
 ```bash
-alphalink verify ./models/aapl_daily_mlp_example/
+alphaTrade verify ./models/aapl_daily_mlp_example/
 ```
 
 Runs: hash check → ONNX smoke test → live OHLCV fetch → inference → prints signal + confidence.
@@ -88,9 +88,9 @@ Runs: hash check → ONNX smoke test → live OHLCV fetch → inference → prin
 ## CLI
 
 ```bash
-alphalink run               # start daemon
-alphalink verify <dir>      # dry-run a model artifact
-alphalink status            # open positions + day-open equity
+alphaTrade run               # start daemon
+alphaTrade verify <dir>      # dry-run a model artifact
+alphaTrade status            # open positions + day-open equity
 ```
 
 ## Data providers

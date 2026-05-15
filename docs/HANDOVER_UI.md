@@ -1,12 +1,12 @@
-# alphaLink — UI Handover Document
+# alphaTrade — UI Handover Document
 
 > For the agent building the frontend UI. Read this top-to-bottom before writing any code.
 
 ---
 
-## 1. What alphaLink Is
+## 1. What alphaTrade Is
 
-alphaLink is a production ML-driven trading bot. It loads ONNX model artifacts, fetches live OHLCV market data, runs inference + multi-model consensus, applies risk gates, and executes orders on Trading212. It persists signals, orders, positions, equity curve, and trade journals in SQLite.
+alphaTrade is a production ML-driven trading bot. It loads ONNX model artifacts, fetches live OHLCV market data, runs inference + multi-model consensus, applies risk gates, and executes orders on Trading212. It persists signals, orders, positions, equity curve, and trade journals in SQLite.
 
 The UI's job is a **read-mostly monitoring dashboard**: show live bot state, stream live events, display performance history, and expose a settings panel. The API is almost entirely read-only — order placement and position management happen inside the bot, not from the UI.
 
@@ -19,7 +19,7 @@ The UI's job is a **read-mostly monitoring dashboard**: show live bot state, str
                 │  REST (polling) │  SSE (streaming)
                 ▼                 ▼
 ┌─────────────────────────────────────────────────────┐
-│         alphaLink FastAPI  :8081/api/v1             │
+│         alphaTrade FastAPI  :8081/api/v1             │
 ├─────────────────────────────────────────────────────┤
 │  Scheduler → Inference → Consensus → Risk → T212    │
 │  SQLite state ← orders, positions, equity, trades   │
@@ -40,7 +40,7 @@ The UI's job is a **read-mostly monitoring dashboard**: show live bot state, str
 http://localhost:8081/api/v1
 ```
 
-Store in an env var (e.g. `VITE_ALPHALINK_API_URL`). Docker Compose maps `8081:8081`.
+Store in an env var (e.g. `VITE_alphaTrade_API_URL`). Docker Compose maps `8081:8081`.
 
 ### CORS
 
@@ -48,7 +48,7 @@ Store in an env var (e.g. `VITE_ALPHALINK_API_URL`). Docker Compose maps `8081:8
 
 ### Authentication
 
-All `/api/v1/*` endpoints check for auth if `ALPHALINK_API_KEY` env var or the `alphalink_api_key` DB setting is configured. If neither is set, auth is disabled (useful for local dev).
+All `/api/v1/*` endpoints check for auth if `alphaTrade_API_KEY` env var or the `alphaTrade_api_key` DB setting is configured. If neither is set, auth is disabled (useful for local dev).
 
 | Transport | How to pass key |
 |---|---|
@@ -285,7 +285,7 @@ In-API health state. Distinct from aiohttp `/healthz`.
 ### GET `/settings` → BotSettings (masked)
 
 Returns current config. Sensitive fields replaced with `"***"`:
-`t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphalink_api_key`.
+`t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphaTrade_api_key`.
 
 ### PUT `/settings` → BotSettings (masked)
 
@@ -318,7 +318,7 @@ Mutable fields:
 | `extended_hours` | bool |
 | `max_positions` | int |
 | `daily_loss_halt_pct` | float |
-| `alphalink_api_key` | str |
+| `alphaTrade_api_key` | str |
 
 **UI note:** Mask sensitive fields client-side too — don't render `***` in an editable input. Use placeholder text instead and only PUT when user edits them.
 
@@ -433,7 +433,7 @@ These features do **not** have API endpoints. Build UI affordances only if user 
 
 ```bash
 # Start bot (pick one)
-alphalink run
+alphaTrade run
 docker compose up
 
 # Verify REST API

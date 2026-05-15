@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a bar-by-bar dry-run backtester that reuses the production adapter/consensus pipeline unchanged, simulates fills at next-bar open, checks SL/TP as price levels, and writes results to `backtest_run` + `backtest_trade` DB tables. Expose via `alphalink backtest` CLI subcommand.
+**Goal:** Add a bar-by-bar dry-run backtester that reuses the production adapter/consensus pipeline unchanged, simulates fills at next-bar open, checks SL/TP as price levels, and writes results to `backtest_run` + `backtest_trade` DB tables. Expose via `alphaTrade backtest` CLI subcommand.
 
-**Architecture:** New `alphalink/backtest/` package. Engine fetches full OHLCV history, walks bars forward (no lookahead), runs identical features→normalize→window→ONNX→consensus chain. Fills are simulated at next-bar open ± slippage. No paper orders sent to T212.
+**Architecture:** New `alphaTrade/backtest/` package. Engine fetches full OHLCV history, walks bars forward (no lookahead), runs identical features→normalize→window→ONNX→consensus chain. Fills are simulated at next-bar open ± slippage. No paper orders sent to T212.
 
 **Tech Stack:** yfinance (historical data), onnxruntime (existing), SQLModel (existing), pytest
 
@@ -16,20 +16,20 @@
 
 | Action | File |
 |---|---|
-| Create | `alphalink/backtest/__init__.py` |
-| Create | `alphalink/backtest/engine.py` |
-| Create | `alphalink/backtest/reporter.py` |
-| Modify | `alphalink/cli.py` — add `backtest` subcommand |
+| Create | `alphaTrade/backtest/__init__.py` |
+| Create | `alphaTrade/backtest/engine.py` |
+| Create | `alphaTrade/backtest/reporter.py` |
+| Modify | `alphaTrade/cli.py` — add `backtest` subcommand |
 | Create | `tests/unit/test_backtest_engine.py` |
 | Create | `tests/integration/test_backtest_integration.py` |
 
 ---
 
-### Task 1: Backtest engine (alphalink/backtest/engine.py)
+### Task 1: Backtest engine (alphaTrade/backtest/engine.py)
 
 **Files:**
-- Create: `alphalink/backtest/__init__.py` (empty)
-- Create: `alphalink/backtest/engine.py`
+- Create: `alphaTrade/backtest/__init__.py` (empty)
+- Create: `alphaTrade/backtest/engine.py`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -41,7 +41,7 @@ import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alphalink.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState
+from alphaTrade.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState
 
 
 def test_simulate_fill_buy_adds_slippage():
@@ -106,9 +106,9 @@ def test_backtest_state_pnl_short():
 
 - [ ] **Step 2: Write the engine module**
 
-Create `alphalink/backtest/__init__.py` (empty file).
+Create `alphaTrade/backtest/__init__.py` (empty file).
 
-Create `alphalink/backtest/engine.py`:
+Create `alphaTrade/backtest/engine.py`:
 
 ```python
 """Bar-by-bar backtester. Reuses production pipeline; no T212 calls."""
@@ -122,16 +122,16 @@ from typing import Any
 
 from sqlmodel import Session
 
-from alphalink.adapter.features import compute_features
-from alphalink.adapter.inference import OnnxModel
-from alphalink.adapter.manifest import Manifest
-from alphalink.adapter.normalize import normalize
-from alphalink.adapter.window import build_input
-from alphalink.config import BacktestConfig
-from alphalink.consensus.softmax_avg import CLASS_NAMES, softmax_vote
-from alphalink.data.yfinance_provider import YFinanceProvider
-from alphalink.main import scan_models
-from alphalink.store.repos import BacktestRepo
+from alphaTrade.adapter.features import compute_features
+from alphaTrade.adapter.inference import OnnxModel
+from alphaTrade.adapter.manifest import Manifest
+from alphaTrade.adapter.normalize import normalize
+from alphaTrade.adapter.window import build_input
+from alphaTrade.config import BacktestConfig
+from alphaTrade.consensus.softmax_avg import CLASS_NAMES, softmax_vote
+from alphaTrade.data.yfinance_provider import YFinanceProvider
+from alphaTrade.main import scan_models
+from alphaTrade.store.repos import BacktestRepo
 
 log = logging.getLogger(__name__)
 
@@ -346,11 +346,11 @@ def _build_trade(
     }
 ```
 
-**Notes on `YFinanceProvider.fetch_ohlcv_range`:** This method does not yet exist — it must be added to `alphalink/data/yfinance_provider.py` as part of this task. Signature: `fetch_ohlcv_range(ticker, interval, start, end, extra_bars=50) -> pd.DataFrame | None`. Fetches from `start - (extra_bars × interval_duration)` through `end`. Returns bars sorted ascending by datetime index.
+**Notes on `YFinanceProvider.fetch_ohlcv_range`:** This method does not yet exist — it must be added to `alphaTrade/data/yfinance_provider.py` as part of this task. Signature: `fetch_ohlcv_range(ticker, interval, start, end, extra_bars=50) -> pd.DataFrame | None`. Fetches from `start - (extra_bars × interval_duration)` through `end`. Returns bars sorted ascending by datetime index.
 
 - [ ] **Step 3: Add `fetch_ohlcv_range` to YFinanceProvider**
 
-Open `alphalink/data/yfinance_provider.py`. Add:
+Open `alphaTrade/data/yfinance_provider.py`. Add:
 
 ```python
 def fetch_ohlcv_range(
@@ -394,14 +394,14 @@ pytest tests/unit/test_backtest_engine.py -v
 
 ---
 
-### Task 2: Backtest reporter (alphalink/backtest/reporter.py)
+### Task 2: Backtest reporter (alphaTrade/backtest/reporter.py)
 
 **Files:**
-- Create: `alphalink/backtest/reporter.py`
+- Create: `alphaTrade/backtest/reporter.py`
 
 - [ ] **Step 1: Write the reporter module**
 
-Create `alphalink/backtest/reporter.py`:
+Create `alphaTrade/backtest/reporter.py`:
 
 ```python
 """Compute and format backtest summary statistics from trade list."""
@@ -499,7 +499,7 @@ def format_text(summary: dict[str, Any]) -> str:
 Add to `tests/unit/test_backtest_engine.py`:
 
 ```python
-from alphalink.backtest.reporter import compute_summary, format_text
+from alphaTrade.backtest.reporter import compute_summary, format_text
 
 
 def test_compute_summary_empty():
@@ -552,7 +552,7 @@ pytest tests/unit/test_backtest_engine.py -v -k "reporter or summary or format"
 ### Task 3: CLI `backtest` subcommand
 
 **Files:**
-- Modify: `alphalink/cli.py`
+- Modify: `alphaTrade/cli.py`
 
 - [ ] **Step 1: Add `backtest` command to cli.py**
 
@@ -568,10 +568,10 @@ def backtest(
 ):
     """Run dry-run backtester over historical data for all loaded models."""
     import json as _json
-    from alphalink.config import Settings
-    from alphalink.backtest.engine import run_backtest
-    from alphalink.backtest.reporter import compute_summary, format_text
-    from alphalink.store.db import get_session
+    from alphaTrade.config import Settings
+    from alphaTrade.backtest.engine import run_backtest
+    from alphaTrade.backtest.reporter import compute_summary, format_text
+    from alphaTrade.store.db import get_session
 
     settings = Settings()
     mdir = models_dir or settings.models_dir
@@ -599,7 +599,7 @@ def backtest(
 - [ ] **Step 2: Verify CLI wires correctly**
 
 ```bash
-python -m alphalink.cli backtest --help
+python -m alphaTrade.cli backtest --help
 ```
 
 Expected: shows `start`, `end`, `--models-dir`, `--output` args with no import errors.
@@ -624,15 +624,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from sqlmodel import Session
 
-from alphalink.backtest.engine import run_backtest
-from alphalink.backtest.reporter import compute_summary
-from alphalink.config import BacktestConfig
-from alphalink.store.db import get_engine
+from alphaTrade.backtest.engine import run_backtest
+from alphaTrade.backtest.reporter import compute_summary
+from alphaTrade.config import BacktestConfig
+from alphaTrade.store.db import get_engine
 
 
 @pytest.fixture
 def engine(tmp_path):
-    import alphalink.store.db as _db
+    import alphaTrade.store.db as _db
     _db._engine = None
     eng = get_engine(tmp_path / "test.db")
     yield eng
@@ -687,8 +687,8 @@ def test_backtest_runs_without_error(engine, tmp_path):
         tp_pct=10.0,
     )
 
-    with patch("alphalink.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
-         patch("alphalink.backtest.engine.YFinanceProvider") as MockProvider:
+    with patch("alphaTrade.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
+         patch("alphaTrade.backtest.engine.YFinanceProvider") as MockProvider:
         mock_provider = MockProvider.return_value
         mock_provider.fetch_ohlcv_range.return_value = synthetic_df
 
@@ -717,8 +717,8 @@ def test_backtest_summary_from_integration(engine, tmp_path):
     cfg = BacktestConfig(initial_equity=10_000.0, slippage_bps=5, commission_per_trade=1.0,
                          default_size_pct=0.1, sl_pct=None, tp_pct=None)
 
-    with patch("alphalink.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
-         patch("alphalink.backtest.engine.YFinanceProvider") as MockProvider:
+    with patch("alphaTrade.backtest.engine.scan_models", return_value=[(stub_manifest, stub_model)]), \
+         patch("alphaTrade.backtest.engine.YFinanceProvider") as MockProvider:
         mock_provider = MockProvider.return_value
         mock_provider.fetch_ohlcv_range.return_value = synthetic_df
 
@@ -746,7 +746,7 @@ pytest tests/integration/test_backtest_integration.py -v
 - [ ] **Step 1: Verify BacktestRepo methods exist**
 
 ```bash
-grep -n "create_run\|record_trade" alphalink/store/repos.py
+grep -n "create_run\|record_trade" alphaTrade/store/repos.py
 ```
 
 If missing, P1 is not complete. Block this plan on P1.
@@ -755,8 +755,8 @@ If missing, P1 is not complete. Block this plan on P1.
 
 ## Acceptance Criteria
 
-- [ ] `alphalink backtest 2024-01-01 2024-12-31` runs without error (may need real ONNX models present)
-- [ ] `alphalink backtest 2024-01-01 2024-12-31 --output json` prints valid JSON
+- [ ] `alphaTrade backtest 2024-01-01 2024-12-31` runs without error (may need real ONNX models present)
+- [ ] `alphaTrade backtest 2024-01-01 2024-12-31 --output json` prints valid JSON
 - [ ] Unit tests all pass: `pytest tests/unit/test_backtest_engine.py -v`
 - [ ] Integration tests all pass: `pytest tests/integration/test_backtest_integration.py -v`
 - [ ] No lookahead: inference at bar `i` only uses bars `0..i` (enforced by `window_df = df.iloc[...:i+1]`)

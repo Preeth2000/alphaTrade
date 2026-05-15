@@ -1,7 +1,7 @@
 # Daily-Loss-Halt: Alert on Transition Only — Design Spec
 
 **Date:** 2026-05-10  
-**Issue:** alphaLink-a73  
+**Issue:** alphaTrade-a73  
 **Priority:** P2
 
 ## Problem
@@ -20,7 +20,7 @@ Add a closure variable `_prev_halt: list[bool] = [False]` in `make_tick()`, befo
 
 ## Change
 
-**File:** `alphalink/main.py`
+**File:** `alphaTrade/main.py`
 
 Before `async def tick():` in `make_tick()`, add:
 ```python

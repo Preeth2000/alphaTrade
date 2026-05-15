@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 from aiohttp.test_utils import TestClient, TestServer
 
-from alphalink.health import HealthState, make_app
+from alphaTrade.health import HealthState, make_app
 
 
 @pytest.fixture

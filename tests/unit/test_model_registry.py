@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alphalink.model_registry import ModelRegistry
+from alphaTrade.model_registry import ModelRegistry
 
 
 def _make_manifest(run_name: str, interval: str = "1d", ticker: str = "AAPL") -> MagicMock:
@@ -30,7 +30,7 @@ class TestModelRegistry:
         model = _make_model()
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={})
 
         assert "aapl_mlp" in registry.by_run_name
@@ -39,13 +39,13 @@ class TestModelRegistry:
     async def test_new_model_hot_added(self, tmp_path):
         """Model added to disk appears after next refresh."""
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[]):
             await registry.refresh(tmp_path, overrides={})
         assert len(registry.by_run_name) == 0
 
         manifest = _make_manifest("msft_mlp")
         model = _make_model()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={})
 
         assert "msft_mlp" in registry.by_run_name
@@ -57,11 +57,11 @@ class TestModelRegistry:
         model = _make_model()
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={})
         assert "aapl_mlp" in registry.by_run_name
 
-        with patch("alphalink.model_registry.scan_models", return_value=[]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[]):
             await registry.refresh(tmp_path, overrides={})
 
         assert "aapl_mlp" not in registry.by_run_name
@@ -76,7 +76,7 @@ class TestModelRegistry:
         override.enabled = False
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={"aapl_mlp": override})
 
         assert "aapl_mlp" not in registry.by_run_name
@@ -91,7 +91,7 @@ class TestModelRegistry:
         override.enabled = True
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={"aapl_mlp": override})
 
         assert "aapl_mlp" in registry.by_run_name
@@ -104,7 +104,7 @@ class TestModelRegistry:
         mod = _make_model()
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(m1, mod), (m2, mod)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(m1, mod), (m2, mod)]):
             await registry.refresh(tmp_path, overrides={})
 
         by_interval = registry.snapshot_by_interval()
@@ -120,10 +120,10 @@ class TestModelRegistry:
         model = _make_model()
 
         registry = ModelRegistry()
-        with patch("alphalink.model_registry.scan_models", return_value=[(manifest, model)]):
+        with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest, model)]):
             await registry.refresh(tmp_path, overrides={})
 
-        with patch("alphalink.model_registry.scan_models", side_effect=Exception("disk error")):
+        with patch("alphaTrade.model_registry.scan_models", side_effect=Exception("disk error")):
             await registry.refresh(tmp_path, overrides={})
 
         assert "aapl_mlp" in registry.by_run_name

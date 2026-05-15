@@ -10,9 +10,9 @@ from typing import Any, Optional
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from alphalink.adapter.inference import OnnxModel
-from alphalink.adapter.manifest import Manifest
-from alphalink.main import scan_models
+from alphaTrade.adapter.inference import OnnxModel
+from alphaTrade.adapter.manifest import Manifest
+from alphaTrade.main import scan_models
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class ModelRegistry:
     def _is_retired(self, run_name: str) -> bool:
         if self._engine is None:
             return False
-        from alphalink.store.repos import ModelPerformanceRepo
+        from alphaTrade.store.repos import ModelPerformanceRepo
         try:
             with Session(self._engine) as s:
                 return ModelPerformanceRepo(s).is_retired(run_name)

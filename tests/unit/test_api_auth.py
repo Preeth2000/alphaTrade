@@ -2,14 +2,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine
-from alphalink.store.db import run_migrations
+from alphaTrade.store.db import run_migrations
 
 
 def _make_app(tmp_path, api_key_env: str = ""):
     db = tmp_path / "test.db"
     run_migrations(db)
     engine = create_engine(f"sqlite:///{db}")
-    from alphalink.api.auth import make_api_key_dep
+    from alphaTrade.api.auth import make_api_key_dep
     app = FastAPI()
     dep = make_api_key_dep(engine)
 
@@ -21,33 +21,33 @@ def _make_app(tmp_path, api_key_env: str = ""):
 
 
 def test_no_key_configured_allows_all(tmp_path, monkeypatch):
-    monkeypatch.delenv("ALPHALINK_API_KEY", raising=False)
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     client, _ = _make_app(tmp_path)
     resp = client.get("/test")
     assert resp.status_code == 200
 
 
 def test_wrong_key_returns_403(tmp_path, monkeypatch):
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
 
 
 def test_correct_key_returns_200(tmp_path, monkeypatch):
-    monkeypatch.setenv("ALPHALINK_API_KEY", "secret")
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200
 
 
 def test_db_key_overrides_env(tmp_path, monkeypatch):
-    monkeypatch.delenv("ALPHALINK_API_KEY", raising=False)
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     client, engine = _make_app(tmp_path)
     from sqlmodel import Session
-    from alphalink.store.repos import BotSettings, BotSettingsRepo
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, alphalink_api_key="db-secret"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, alphaTrade_api_key="db-secret"))
     resp = client.get("/test", headers={"X-API-Key": "db-secret"})
     assert resp.status_code == 200
     resp_wrong = client.get("/test", headers={"X-API-Key": "wrong"})

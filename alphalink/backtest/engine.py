@@ -9,17 +9,17 @@ from typing import Any
 
 from sqlmodel import Session
 
-from alphalink.adapter.features import compute_features
-from alphalink.adapter.inference import OnnxModel
-from alphalink.adapter.manifest import Manifest
-from alphalink.adapter.normalize import normalize
-from alphalink.adapter.window import build_input
-from alphalink.config import BacktestConfig
-from alphalink.consensus.softmax_avg import CLASS_NAMES
-from alphalink.consensus.softmax_avg import consensus as softmax_vote
-from alphalink.data.yfinance_provider import YFinanceProvider
-from alphalink.main import scan_models
-from alphalink.store.repos import BacktestRepo
+from alphaTrade.adapter.features import compute_features
+from alphaTrade.adapter.inference import OnnxModel
+from alphaTrade.adapter.manifest import Manifest
+from alphaTrade.adapter.normalize import normalize
+from alphaTrade.adapter.window import build_input
+from alphaTrade.config import BacktestConfig
+from alphaTrade.consensus.softmax_avg import CLASS_NAMES
+from alphaTrade.consensus.softmax_avg import consensus as softmax_vote
+from alphaTrade.data.yfinance_provider import YFinanceProvider
+from alphaTrade.main import scan_models
+from alphaTrade.store.repos import BacktestRepo
 
 log = logging.getLogger(__name__)
 

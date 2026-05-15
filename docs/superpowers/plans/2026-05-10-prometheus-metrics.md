@@ -4,7 +4,7 @@
 
 **Goal:** Expose bot telemetry (signals, orders, inference, T212 HTTP calls, equity) on `:9090/metrics` in Prometheus format.
 
-**Architecture:** Module-level singletons in `alphalink/metrics.py` using the default prometheus_client registry. T212Client records request counts and latency inside `_get/_post/_delete`. `tick()` in `main.py` records business metrics. `start_http_server(9090)` starts a daemon thread in `run()` before the scheduler.
+**Architecture:** Module-level singletons in `alphaTrade/metrics.py` using the default prometheus_client registry. T212Client records request counts and latency inside `_get/_post/_delete`. `tick()` in `main.py` records business metrics. `start_http_server(9090)` starts a daemon thread in `run()` before the scheduler.
 
 **Tech Stack:** `prometheus-client>=0.20`, existing `aiohttp` health server pattern for reference.
 
@@ -15,9 +15,9 @@
 | File | Action | Purpose |
 |------|--------|---------|
 | `pyproject.toml` | Modify | Add `prometheus-client>=0.20` dependency |
-| `alphalink/metrics.py` | Create | All metric definitions (counters, gauges, histograms) |
-| `alphalink/broker/t212_client.py` | Modify | Record `t212_requests_total` + `t212_request_latency_seconds` in `_get/_post/_delete` |
-| `alphalink/main.py` | Modify | Record business metrics in `tick()`; call `start_http_server(9090)` in `run()` |
+| `alphaTrade/metrics.py` | Create | All metric definitions (counters, gauges, histograms) |
+| `alphaTrade/broker/t212_client.py` | Modify | Record `t212_requests_total` + `t212_request_latency_seconds` in `_get/_post/_delete` |
+| `alphaTrade/main.py` | Modify | Record business metrics in `tick()`; call `start_http_server(9090)` in `run()` |
 | `tests/unit/test_metrics.py` | Create | Smoke test for metrics module + mock tests for instrumentation |
 
 ---
@@ -81,18 +81,18 @@ git commit -m "build: add prometheus-client dependency"
 
 ---
 
-### Task 2: Create alphalink/metrics.py (TDD: smoke test first)
+### Task 2: Create alphaTrade/metrics.py (TDD: smoke test first)
 
 **Files:**
 - Create: `tests/unit/test_metrics.py`
-- Create: `alphalink/metrics.py`
+- Create: `alphaTrade/metrics.py`
 
 - [ ] **Step 1: Write failing smoke test**
 
 Create `tests/unit/test_metrics.py`:
 
 ```python
-"""Smoke tests for alphalink.metrics — validates metric definitions parse correctly."""
+"""Smoke tests for alphaTrade.metrics — validates metric definitions parse correctly."""
 from __future__ import annotations
 
 import pytest
@@ -100,7 +100,7 @@ import prometheus_client
 
 
 def test_metrics_module_exports_all_expected_names():
-    import alphalink.metrics as m
+    import alphaTrade.metrics as m
 
     assert hasattr(m, "signals_total")
     assert hasattr(m, "orders_total")
@@ -114,7 +114,7 @@ def test_metrics_module_exports_all_expected_names():
 
 
 def test_metrics_generate_valid_prometheus_text():
-    import alphalink.metrics  # noqa: F401 — ensure metrics registered
+    import alphaTrade.metrics  # noqa: F401 — ensure metrics registered
 
     output = prometheus_client.generate_latest(prometheus_client.REGISTRY)
     assert len(output) > 0
@@ -131,11 +131,11 @@ def test_metrics_generate_valid_prometheus_text():
 pytest tests/unit/test_metrics.py -v
 ```
 
-Expected: `FAILED` with `ModuleNotFoundError: No module named 'alphalink.metrics'`
+Expected: `FAILED` with `ModuleNotFoundError: No module named 'alphaTrade.metrics'`
 
-- [ ] **Step 3: Implement alphalink/metrics.py**
+- [ ] **Step 3: Implement alphaTrade/metrics.py**
 
-Create `alphalink/metrics.py`:
+Create `alphaTrade/metrics.py`:
 
 ```python
 """Prometheus metrics definitions. Import this module to register all metrics."""
@@ -206,8 +206,8 @@ Expected: both tests `PASSED`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add alphalink/metrics.py tests/unit/test_metrics.py
-git commit -m "feat: add prometheus metrics definitions (alphaLink-c9e)"
+git add alphaTrade/metrics.py tests/unit/test_metrics.py
+git commit -m "feat: add prometheus metrics definitions (alphaTrade-c9e)"
 ```
 
 ---
@@ -216,7 +216,7 @@ git commit -m "feat: add prometheus metrics definitions (alphaLink-c9e)"
 
 **Files:**
 - Modify: `tests/unit/test_metrics.py` (append new test class)
-- Modify: `alphalink/broker/t212_client.py`
+- Modify: `alphaTrade/broker/t212_client.py`
 
 - [ ] **Step 1: Write failing test for T212Client instrumentation**
 
@@ -226,7 +226,7 @@ Append to `tests/unit/test_metrics.py`:
 import respx
 import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
-from alphalink.broker.t212_client import T212Client
+from alphaTrade.broker.t212_client import T212Client
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
 
@@ -242,8 +242,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
         ):
             client.get_account_summary()
 
@@ -264,8 +264,8 @@ class TestT212ClientMetrics:
         mock_histogram = MagicMock()
 
         with (
-            patch("alphalink.broker.t212_client.t212_requests_total", mock_counter),
-            patch("alphalink.broker.t212_client.t212_request_latency_seconds", mock_histogram),
+            patch("alphaTrade.broker.t212_client.t212_requests_total", mock_counter),
+            patch("alphaTrade.broker.t212_client.t212_request_latency_seconds", mock_histogram),
             patch("time.sleep"),
         ):
             try:
@@ -290,12 +290,12 @@ Expected: `FAILED` with `AssertionError` — counter not called because instrume
 
 - [ ] **Step 3: Instrument T212Client._get, _post, _delete**
 
-In `alphalink/broker/t212_client.py`, add import at the top (after existing imports):
+In `alphaTrade/broker/t212_client.py`, add import at the top (after existing imports):
 
 ```python
 import time
 
-from alphalink.metrics import t212_request_latency_seconds, t212_requests_total
+from alphaTrade.metrics import t212_request_latency_seconds, t212_requests_total
 ```
 
 Note: `import time` is already present — only add the metrics import line.
@@ -409,8 +409,8 @@ Expected: all `PASSED`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add alphalink/broker/t212_client.py tests/unit/test_metrics.py
-git commit -m "feat: instrument T212Client with prometheus metrics (alphaLink-c9e)"
+git add alphaTrade/broker/t212_client.py tests/unit/test_metrics.py
+git commit -m "feat: instrument T212Client with prometheus metrics (alphaTrade-c9e)"
 ```
 
 ---
@@ -419,7 +419,7 @@ git commit -m "feat: instrument T212Client with prometheus metrics (alphaLink-c9
 
 **Files:**
 - Modify: `tests/unit/test_metrics.py` (append new test class)
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 - [ ] **Step 1: Write failing tests for tick() instrumentation**
 
@@ -431,10 +431,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sqlmodel import SQLModel, create_engine
-from alphalink.config import Settings
-from alphalink.health import HealthState
-from alphalink.main import make_tick
-from alphalink.store.repos import Position
+from alphaTrade.config import Settings
+from alphaTrade.health import HealthState
+from alphaTrade.main import make_tick
+from alphaTrade.store.repos import Position
 
 _BUY_DF = pd.DataFrame({
     "Open": [150.0], "High": [155.0], "Low": [148.0],
@@ -509,14 +509,14 @@ class TestTickMetrics:
         )
 
         with (
-            patch("alphalink.main.compute_features", return_value=_BUY_DF),
-            patch("alphalink.main.normalize", return_value=_BUY_DF),
-            patch("alphalink.main.build_input", return_value=np.zeros((1, 1))),
-            patch("alphalink.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
-            patch("alphalink.main.signals_total", mock_signals_total),
-            patch("alphalink.main.equity_total", mock_equity_total),
-            patch("alphalink.main.open_positions", mock_open_positions),
-            patch("alphalink.main.daily_pnl_pct", mock_daily_pnl_pct),
+            patch("alphaTrade.main.compute_features", return_value=_BUY_DF),
+            patch("alphaTrade.main.normalize", return_value=_BUY_DF),
+            patch("alphaTrade.main.build_input", return_value=np.zeros((1, 1))),
+            patch("alphaTrade.main.consensus_by_ticker", return_value={"AAPL": "HOLD"}),
+            patch("alphaTrade.main.signals_total", mock_signals_total),
+            patch("alphaTrade.main.equity_total", mock_equity_total),
+            patch("alphaTrade.main.open_positions", mock_open_positions),
+            patch("alphaTrade.main.daily_pnl_pct", mock_daily_pnl_pct),
         ):
             await tick()
 
@@ -549,8 +549,8 @@ class TestTickMetrics:
         )
 
         with (
-            patch("alphalink.main.compute_features", side_effect=ValueError("bad features")),
-            patch("alphalink.main.inference_errors_total", mock_inference_errors),
+            patch("alphaTrade.main.compute_features", side_effect=ValueError("bad features")),
+            patch("alphaTrade.main.inference_errors_total", mock_inference_errors),
         ):
             await tick()
 
@@ -564,14 +564,14 @@ class TestTickMetrics:
 pytest tests/unit/test_metrics.py::TestTickMetrics -v
 ```
 
-Expected: `FAILED` — `AttributeError` on `alphalink.main.signals_total` (not imported yet).
+Expected: `FAILED` — `AttributeError` on `alphaTrade.main.signals_total` (not imported yet).
 
 - [ ] **Step 3: Add metric imports to main.py**
 
-At the top of `alphalink/main.py`, after the existing first-party imports block, add:
+At the top of `alphaTrade/main.py`, after the existing first-party imports block, add:
 
 ```python
-from alphalink.metrics import (
+from alphaTrade.metrics import (
     daily_pnl_pct as metric_daily_pnl_pct,
     equity_total as metric_equity_total,
     inference_errors_total,
@@ -683,8 +683,8 @@ Expected: all `PASSED` (or same failures as before this task).
 - [ ] **Step 10: Commit**
 
 ```bash
-git add alphalink/main.py tests/unit/test_metrics.py
-git commit -m "feat: instrument tick() with prometheus business metrics (alphaLink-c9e)"
+git add alphaTrade/main.py tests/unit/test_metrics.py
+git commit -m "feat: instrument tick() with prometheus business metrics (alphaTrade-c9e)"
 ```
 
 ---
@@ -692,13 +692,13 @@ git commit -m "feat: instrument tick() with prometheus business metrics (alphaLi
 ### Task 5: Wire start_http_server(9090) in run()
 
 **Files:**
-- Modify: `alphalink/main.py`
+- Modify: `alphaTrade/main.py`
 
 No unit test for this step — `start_http_server` spawns a background daemon thread; verifying it in unit tests requires binding a real port.
 
 - [ ] **Step 1: Add start_http_server call in run()**
 
-In `alphalink/main.py`'s `run()` function, after `configure_logging(...)` and before the `provider = _build_data_provider(settings)` line, add:
+In `alphaTrade/main.py`'s `run()` function, after `configure_logging(...)` and before the `provider = _build_data_provider(settings)` line, add:
 
 ```python
     from prometheus_client import start_http_server as _start_metrics
@@ -720,8 +720,8 @@ Expected: all `PASSED`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add alphalink/main.py
-git commit -m "feat: expose prometheus metrics on :9090 (alphaLink-c9e)"
+git add alphaTrade/main.py
+git commit -m "feat: expose prometheus metrics on :9090 (alphaTrade-c9e)"
 ```
 
 ---
@@ -741,7 +741,7 @@ Expected: all pass (or same pre-existing failures, none new).
 If you have a model loaded and T212 credentials, start the bot:
 
 ```bash
-alphalink run
+alphaTrade run
 ```
 
 In another terminal:
@@ -761,5 +761,5 @@ Expected: Prometheus text format output containing lines like:
 - [ ] **Step 3: Close issue**
 
 ```bash
-bd close alphaLink-c9e
+bd close alphaTrade-c9e
 ```

@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from alphalink.metrics import t212_request_latency_seconds, t212_requests_total
+from alphaTrade.metrics import t212_request_latency_seconds, t212_requests_total
 
 _BASE_URLS = {
     "demo": "https://demo.trading212.com/api/v0",

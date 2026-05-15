@@ -1,4 +1,4 @@
-# alphaLink Enhancement Design: Backtester, Risk, Operational
+# alphaTrade Enhancement Design: Backtester, Risk, Operational
 
 **Date:** 2026-05-11  
 **Status:** Approved  
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Six capability areas added to alphaLink. All follow existing DB-centric (Approach A) pattern — no new abstractions, no separate processes. New features plug in as CLI subcommands, post-tick hooks, or gate extensions. Existing `adapter/`, `consensus/`, `broker/`, and `main.py` tick loop structure are untouched.
+Six capability areas added to alphaTrade. All follow existing DB-centric (Approach A) pattern — no new abstractions, no separate processes. New features plug in as CLI subcommands, post-tick hooks, or gate extensions. Existing `adapter/`, `consensus/`, `broker/`, and `main.py` tick loop structure are untouched.
 
 ---
 
@@ -54,7 +54,7 @@ Existing tables (`Signal`, `Order`, `Position`, `EquityCurve`, `InstrumentCache`
 ### Entry point
 
 ```bash
-alphalink backtest --start 2024-01-01 --end 2024-12-31 --models-dir ./models
+alphaTrade backtest --start 2024-01-01 --end 2024-12-31 --models-dir ./models
 ```
 
 ### Design
@@ -97,8 +97,8 @@ Full results written to `backtest_runs` + `backtest_trades` for UI consumption.
 
 ### New files
 
-- `alphalink/backtest/engine.py` — bar-by-bar simulation harness
-- `alphalink/backtest/reporter.py` — summary stats + DB writer
+- `alphaTrade/backtest/engine.py` — bar-by-bar simulation harness
+- `alphaTrade/backtest/reporter.py` — summary stats + DB writer
 
 ---
 
@@ -124,12 +124,12 @@ risk:
 
 ### New files
 
-- `alphalink/risk/performance.py` — rolling metrics calculator + retirement logic
+- `alphaTrade/risk/performance.py` — rolling metrics calculator + retirement logic
 
 ### Changes
 
-- `alphalink/risk/gates.py` — add retirement check gate
-- `alphalink/model_registry.py` — skip retired models
+- `alphaTrade/risk/gates.py` — add retirement check gate
+- `alphaTrade/model_registry.py` — skip retired models
 
 ---
 
@@ -167,13 +167,13 @@ If yfinance sector lookup fails: log warning, skip sector gate for that ticker (
 
 ### New files
 
-- `alphalink/risk/sector.py` — sector lookup, exposure calculator, gate check
+- `alphaTrade/risk/sector.py` — sector lookup, exposure calculator, gate check
 
 ### Changes
 
-- `alphalink/risk/gates.py` — add sector gate
-- `alphalink/store/repos.py` — `SectorCache` repo
-- `alphalink/broker/instrument_map.py` — populate `sector_cache` at pre-resolve
+- `alphaTrade/risk/gates.py` — add sector gate
+- `alphaTrade/store/repos.py` — `SectorCache` repo
+- `alphaTrade/broker/instrument_map.py` — populate `sector_cache` at pre-resolve
 
 ---
 
@@ -210,7 +210,7 @@ Fall back to `fixed` sizing for that tick. Alert fires.
 
 ### Changes
 
-- `alphalink/risk/sizing.py` — extend with `atr` and `vix` modes
+- `alphaTrade/risk/sizing.py` — extend with `atr` and `vix` modes
 
 ---
 
@@ -255,7 +255,7 @@ All values from env vars or overrides.yaml. No hardcoded addresses.
 
 ### New files
 
-- `alphalink/notify/alerting.py` — Slack + email dispatchers, queue wrapper
+- `alphaTrade/notify/alerting.py` — Slack + email dispatchers, queue wrapper
 
 ---
 
@@ -306,7 +306,7 @@ Payload:
 ## 11. Performance Attribution Export
 
 ```bash
-alphalink report --format json|csv --since 2024-01-01
+alphaTrade report --format json|csv --since 2024-01-01
 ```
 
 Queries `trade_journal` + `model_performance`. Output per model and per ticker:
@@ -316,14 +316,14 @@ UI can call CLI or query DB directly.
 
 ### Changes
 
-- `alphalink/cli.py` — add `report` subcommand
+- `alphaTrade/cli.py` — add `report` subcommand
 
 ---
 
 ## 12. New Module Summary
 
 ```
-alphalink/
+alphaTrade/
   backtest/
     __init__.py
     engine.py

@@ -1,7 +1,7 @@
 # Webhook Alerting Design
 
 **Date:** 2026-05-10  
-**Issue:** alphaLink-dac  
+**Issue:** alphaTrade-dac  
 **Status:** Approved
 
 ## Overview
@@ -10,7 +10,7 @@ Push critical trading bot events to Discord or Slack via webhook. Operators get 
 
 ## Architecture
 
-### New module: `alphalink/notify/webhook.py`
+### New module: `alphaTrade/notify/webhook.py`
 
 **`notify(level: str, msg: str, category: str = "general") -> None`**
 - Reads `WEBHOOK_URL` from settings; no-ops if unset
@@ -53,7 +53,7 @@ if settings.webhook_url:
 | Bot shutdown (SIGTERM/SIGINT) | explicit `notify()` | `shutdown` |
 | Daily-loss halt active | explicit `notify()` | `daily-loss-halt` |
 | Reconcile divergence | explicit `notify()` | `reconcile-divergence` |
-| Order reject / fill error | `WebhookHandler` catches `log.error` | `alphalink.main` |
+| Order reject / fill error | `WebhookHandler` catches `log.error` | `alphaTrade.main` |
 | Kill switch flip | explicit `notify()` (when implemented) | `kill-switch` |
 | General ERROR+ | `WebhookHandler` auto-catches | logger name |
 
@@ -69,7 +69,7 @@ if settings.webhook_url:
 ```
 log.error("Order failed", ...) 
     → WebhookHandler.emit()
-    → notify("ERROR", msg, category="alphalink.main")
+    → notify("ERROR", msg, category="alphaTrade.main")
     → rate limit check
     → POST to WEBHOOK_URL
 

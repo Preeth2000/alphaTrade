@@ -15,8 +15,8 @@ import respx
 
 from tests.integration.mock_t212.responses import mount
 
-ALPHALINK_ROOT = Path(__file__).parent.parent.parent
-ARTIFACT_DIR = ALPHALINK_ROOT.parent / "alphaGen" / "artifacts" / "aapl_daily_mlp_example"
+alphaTrade_ROOT = Path(__file__).parent.parent.parent
+ARTIFACT_DIR = alphaTrade_ROOT.parent / "alphaGen" / "artifacts" / "aapl_daily_mlp_example"
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 
@@ -40,7 +40,7 @@ def aapl_ohlcv():
 @pytest.fixture
 def mock_provider(aapl_ohlcv):
     """Patch YFinanceProvider.fetch_ohlcv to return recorded fixture."""
-    from alphalink.data.yfinance_provider import YFinanceProvider
+    from alphaTrade.data.yfinance_provider import YFinanceProvider
 
     def fake_fetch(self, ticker, interval, bars):
         return aapl_ohlcv.tail(bars + 100)
@@ -52,13 +52,13 @@ def mock_provider(aapl_ohlcv):
 def test_inference_pipeline_offline(mock_provider):
     """Full inference pipeline runs with fixture data, no network."""
     _skip_if_missing()
-    from alphalink.adapter.manifest import Manifest
-    from alphalink.adapter.inference import OnnxModel
-    from alphalink.adapter.features import compute_features
-    from alphalink.adapter.normalize import normalize
-    from alphalink.adapter.window import build_input
-    from alphalink.data.yfinance_provider import YFinanceProvider
-    from alphalink.consensus.softmax_avg import CLASS_NAMES
+    from alphaTrade.adapter.manifest import Manifest
+    from alphaTrade.adapter.inference import OnnxModel
+    from alphaTrade.adapter.features import compute_features
+    from alphaTrade.adapter.normalize import normalize
+    from alphaTrade.adapter.window import build_input
+    from alphaTrade.data.yfinance_provider import YFinanceProvider
+    from alphaTrade.consensus.softmax_avg import CLASS_NAMES
 
     manifest = Manifest.load(ARTIFACT_DIR / "manifest.json")
     model = OnnxModel(manifest, ARTIFACT_DIR / "model.onnx")
@@ -82,10 +82,10 @@ def test_t212_mock_order_flow(mock_provider):
     _skip_if_missing()
     mount(respx.mock)
 
-    from alphalink.broker.t212_client import T212Client
-    from alphalink.broker.instrument_map import InstrumentMap
-    from alphalink.broker.orders import submit_order
-    from alphalink.store.repos import InstrumentCacheRepo
+    from alphaTrade.broker.t212_client import T212Client
+    from alphaTrade.broker.instrument_map import InstrumentMap
+    from alphaTrade.broker.orders import submit_order
+    from alphaTrade.store.repos import InstrumentCacheRepo
     from sqlmodel import SQLModel, create_engine, Session
 
     engine = create_engine("sqlite:///:memory:")
@@ -118,10 +118,10 @@ def test_reconcile_empty_positions(mock_provider):
     mount(respx.mock)
 
     from sqlmodel import SQLModel, create_engine, Session
-    from alphalink.store.repos import PositionRepo, Position
-    from alphalink.broker.t212_client import T212Client
-    from alphalink.config import Settings
-    from alphalink.main import reconcile_positions
+    from alphaTrade.store.repos import PositionRepo, Position
+    from alphaTrade.broker.t212_client import T212Client
+    from alphaTrade.config import Settings
+    from alphaTrade.main import reconcile_positions
 
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)

@@ -1,7 +1,7 @@
 # OCO SL/TP via T212 Stop+Limit Orders
 
 **Date:** 2026-05-10  
-**Issue:** alphaLink-h6c  
+**Issue:** alphaTrade-h6c  
 **Status:** Approved
 
 ## Problem
@@ -26,7 +26,7 @@ BUY fill (fill_price known)
 
 ## Components
 
-### `alphalink/broker/t212_client.py` (additions)
+### `alphaTrade/broker/t212_client.py` (additions)
 
 Four new methods:
 
@@ -41,7 +41,7 @@ Request body for stop: `{"ticker": ..., "quantity": ..., "stopPrice": ...}`
 Request body for limit: `{"ticker": ..., "quantity": ..., "limitPrice": ...}`  
 `cancel_order` calls `_delete` (new private method); no JSON body returned.
 
-### `alphalink/broker/oco_monitor.py` (new file)
+### `alphaTrade/broker/oco_monitor.py` (new file)
 
 ```python
 async def monitor_oco(
@@ -65,7 +65,7 @@ Loop logic:
 7. DB update: `pos_repo.remove(t212_ticker)` + `pos_repo.upsert(Position(quantity=0, cooldown_until_ts=now+cooldown_td))`
 8. Uses own `Session(engine)` — tick session is already closed by then
 
-### `alphalink/main.py` (BUY branch)
+### `alphaTrade/main.py` (BUY branch)
 
 After `pos_repo.upsert(...)`, add:
 

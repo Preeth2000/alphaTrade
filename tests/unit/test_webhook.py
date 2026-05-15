@@ -8,7 +8,7 @@ import pytest
 import respx
 import httpx
 
-from alphalink.notify import webhook
+from alphaTrade.notify import webhook
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +140,7 @@ def test_handler_uses_category_from_extra():
     with respx.mock() as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         record = logging.LogRecord(
-            name="alphalink.main", level=logging.ERROR,
+            name="alphaTrade.main", level=logging.ERROR,
             pathname="", lineno=0, msg="Order failed for AAPL",
             args=(), exc_info=None,
         )
@@ -156,11 +156,11 @@ def test_handler_falls_back_to_logger_name_as_category():
     with respx.mock() as mock:
         mock.post(DISCORD_URL).mock(return_value=httpx.Response(204))
         record = logging.LogRecord(
-            name="alphalink.broker", level=logging.ERROR,
+            name="alphaTrade.broker", level=logging.ERROR,
             pathname="", lineno=0, msg="Some error",
             args=(), exc_info=None,
         )
-        # No category on record — should fall back to "alphalink.broker"
+        # No category on record — should fall back to "alphaTrade.broker"
         handler.emit(record)
         webhook._drain()
         assert len(mock.calls) == 1
@@ -169,4 +169,4 @@ def test_handler_falls_back_to_logger_name_as_category():
         # Don't set up a route since the request should be rate-limited
         handler.emit(record)
         webhook._drain()
-        assert len(mock2.calls) == 0  # rate-limited under "alphalink.broker"
+        assert len(mock2.calls) == 0  # rate-limited under "alphaTrade.broker"

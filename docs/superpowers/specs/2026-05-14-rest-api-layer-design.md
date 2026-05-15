@@ -1,19 +1,19 @@
 # REST API Layer for UI Consumption
 
 **Date:** 2026-05-14  
-**Issue:** alphaLink-bmw  
+**Issue:** alphaTrade-bmw  
 **Status:** Approved
 
 ## Overview
 
-FastAPI app at `alphalink/api/` serving SQLite repos over HTTP on `:8081`. Runs in the same asyncio event loop as the bot via `asyncio.create_task`. Also exposes a read/write settings endpoint backed by a new `BotSettings` SQLite table, enabling the UI to configure the bot without touching `.env` or `overrides.yaml`.
+FastAPI app at `alphaTrade/api/` serving SQLite repos over HTTP on `:8081`. Runs in the same asyncio event loop as the bot via `asyncio.create_task`. Also exposes a read/write settings endpoint backed by a new `BotSettings` SQLite table, enabling the UI to configure the bot without touching `.env` or `overrides.yaml`.
 
 ## Architecture
 
-### New module: `alphalink/api/`
+### New module: `alphaTrade/api/`
 
 ```
-alphalink/api/
+alphaTrade/api/
 ├── __init__.py
 ├── app.py          # FastAPI factory + start_api_server() coroutine
 ├── auth.py         # X-API-Key header dependency
@@ -47,7 +47,7 @@ uvicorn[standard]>=0.29
 ### New config field (`Settings`)
 
 ```
-ALPHALINK_API_PORT=8081   # default 8081
+alphaTrade_API_PORT=8081   # default 8081
 ```
 
 ---
@@ -58,7 +58,7 @@ All routes prefixed `/api/v1`.
 
 ### Authentication
 
-`X-API-Key: <key>` header checked against `ALPHALINK_API_KEY` env var (or the `BotSettings.alphalink_api_key` DB value if set). If neither is set, auth is skipped (dev mode). Returns `403` on mismatch.
+`X-API-Key: <key>` header checked against `alphaTrade_API_KEY` env var (or the `BotSettings.alphaTrade_api_key` DB value if set). If neither is set, auth is skipped (dev mode). Returns `403` on mismatch.
 
 ### Data endpoints (read-only)
 
@@ -115,9 +115,9 @@ New `BotSettings` SQLModel table. Singleton pattern: always id=1, upserted on PU
 | | `extended_hours` | bool | `false` |
 | **Risk** | `max_positions` | int | `5` |
 | | `daily_loss_halt_pct` | float | `0.05` |
-| **API** | `alphalink_api_key` | str | `""` |
+| **API** | `alphaTrade_api_key` | str | `""` |
 
-Masked on GET read: `t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphalink_api_key`.
+Masked on GET read: `t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphaTrade_api_key`.
 
 New Alembic migration: `0003_bot_settings`.
 
@@ -134,7 +134,7 @@ New repo: `BotSettingsRepo` in `store/repos.py` with `get() -> BotSettings | Non
 
 ## Security
 
-- `t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphalink_api_key` stored plaintext in SQLite. Restrict file permissions: `chmod 600 state.db`.
+- `t212_api_key`, `polygon_api_key`, `email_smtp_password`, `slack_webhook_url`, `alphaTrade_api_key` stored plaintext in SQLite. Restrict file permissions: `chmod 600 state.db`.
 - API key auth disabled only when both env var and DB value are empty — never silently bypassed.
 - No rate limiting in scope (single-user local deployment).
 

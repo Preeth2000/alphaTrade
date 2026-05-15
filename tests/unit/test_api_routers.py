@@ -219,6 +219,63 @@ def test_create_app_has_all_routes(tmp_path):
     assert "/api/v1/equity-curve" in paths
     assert "/api/v1/backtest/runs/{run_id}" in paths
     assert "/api/v1/stream" in paths
+    assert "/api/v1/kill-switch" in paths
+    assert "/api/v1/halt" in paths
+    assert "/api/v1/resume" in paths
+
+
+# --- Kill switch ---
+
+def test_kill_switch_status_not_halted(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    resp = _client(_engine(tmp_path)).get("/api/v1/kill-switch")
+    assert resp.status_code == 200
+    assert resp.json()["halted"] is False
+
+
+def test_halt_endpoint_creates_sentinel(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    resp = _client(_engine(tmp_path)).post("/api/v1/halt")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["halted"] is True
+    assert (tmp_path / "HALT").exists()
+
+
+def test_resume_endpoint_removes_sentinel(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "HALT").touch()
+    resp = _client(_engine(tmp_path)).post("/api/v1/resume")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["halted"] is False
+    assert not (tmp_path / "HALT").exists()
+
+
+def test_halt_idempotent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = _client(_engine(tmp_path))
+    client.post("/api/v1/halt")
+    resp = client.post("/api/v1/halt")
+    assert resp.status_code == 200
+    assert resp.json()["halted"] is True
+
+
+def test_resume_idempotent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    resp = _client(_engine(tmp_path)).post("/api/v1/resume")
+    assert resp.status_code == 200
+    assert resp.json()["halted"] is False
+
+
+def test_kill_switch_round_trip(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = _client(_engine(tmp_path))
+    assert client.get("/api/v1/kill-switch").json()["halted"] is False
+    client.post("/api/v1/halt")
+    assert client.get("/api/v1/kill-switch").json()["halted"] is True
+    client.post("/api/v1/resume")
+    assert client.get("/api/v1/kill-switch").json()["halted"] is False
 
 
 # --- Trades ---

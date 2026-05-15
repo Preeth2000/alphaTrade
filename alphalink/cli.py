@@ -99,7 +99,12 @@ def status():
     from alphalink.store.repos import PositionRepo, EquityRepo
     from alphalink.main import scan_models
 
-    settings = Settings()
+    try:
+        settings = Settings()
+    except Exception as exc:
+        console.print(f"[red]Configuration error:[/red] {exc}")
+        console.print("Copy [bold].env.example[/bold] to [bold].env[/bold] and set required variables (at minimum T212_API_KEY).")
+        raise typer.Exit(1)
 
     console.print("\n[bold]Loaded models:[/bold]")
     models = scan_models(settings.models_dir)
@@ -192,7 +197,12 @@ def report(
     from alphalink.store.db import get_session
     from alphalink.store.repos import PnlSnapshotRepo, TradeJournalRepo
 
-    settings = Settings()
+    try:
+        settings = Settings()
+    except Exception as exc:
+        console.print(f"[red]Configuration error:[/red] {exc}")
+        console.print("Copy [bold].env.example[/bold] to [bold].env[/bold] and set required variables (at minimum T212_API_KEY).")
+        raise typer.Exit(1)
     since_date = since or (date.today() - timedelta(days=30)).isoformat()
 
     with get_session(settings.state_db_path) as session:

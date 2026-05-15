@@ -37,6 +37,7 @@ from alphalink.store.repos import (
     BotSettings,
     BotSettingsRepo,
     EquityRepo,
+    InstrumentCache,
     InstrumentCacheRepo,
     ModelPerformanceRepo,
     Order,
@@ -478,11 +479,14 @@ def make_tick(
                             limit_resp = await asyncio.to_thread(
                                 t212.place_limit_order, t212_ticker, qty, tp_price
                             )
+                            stop_id = str(stop_resp["id"])
+                            limit_id = str(limit_resp["id"])
+                            pos_repo.update_oco_ids(t212_ticker, stop_id, limit_id)
                             _task = asyncio.create_task(monitor_oco(
                                 t212=t212,
                                 t212_ticker=t212_ticker,
-                                stop_order_id=str(stop_resp["id"]),
-                                limit_order_id=str(limit_resp["id"]),
+                                stop_order_id=stop_id,
+                                limit_order_id=limit_id,
                                 engine=engine,
                                 cooldown_td=cooldown_td,
                                 entry_price=entry_price,
@@ -621,6 +625,36 @@ async def run(settings: Settings) -> None:
         _pos_repo = PositionRepo(_session)
         metric_open_positions.set(len([p for p in _pos_repo.all() if p.quantity > 0]))
 
+    # Re-attach OCO monitors for positions that had active SL/TP orders before restart
+    with Session(engine) as _oco_session:
+        _oco_pos_repo = PositionRepo(_oco_session)
+        for _pos in _oco_pos_repo.all_with_oco():
+            if not (_pos.stop_order_id and _pos.limit_order_id):
+                continue
+            _sl = _pos.avg_entry * (1 - settings.defaults.stop_loss_pct)
+            _tp = _pos.avg_entry * (1 + settings.defaults.take_profit_pct)
+            _cd = timedelta(seconds=86400)
+            _t = asyncio.create_task(monitor_oco(
+                t212=t212_holder[0],
+                t212_ticker=_pos.t212_ticker,
+                stop_order_id=_pos.stop_order_id,
+                limit_order_id=_pos.limit_order_id,
+                engine=engine,
+                cooldown_td=_cd,
+                entry_price=_pos.avg_entry,
+                sl_price=_sl,
+                tp_price=_tp,
+                quantity=_pos.quantity,
+                model_id="",
+                entry_time=_pos.opened_at,
+            ))
+            _oco_tasks.add(_t)
+            _t.add_done_callback(_oco_tasks.discard)
+            log.info(
+                "Re-attached OCO monitor for %s (stop=%s limit=%s)",
+                _pos.t212_ticker, _pos.stop_order_id, _pos.limit_order_id,
+            )
+
     # Build static t212_ticker overrides from overrides.yaml
     static_map: dict[str, str] = {}
     for run_name, override in settings.model_overrides.items():
@@ -693,16 +727,34 @@ async def run(settings: Settings) -> None:
                 trade_count = len(today_trades)
                 open_positions = pos_repo.all()
                 today_open = eq_repo.today_open() or 0.0
-                total_equity = today_open + realized_pnl
-                day_pnl_pct = (realized_pnl / today_open * 100) if today_open > 0 else 0.0
+
+                # Compute unrealized P&L from live closing prices for open positions
+                unrealized_pnl = 0.0
+                inst_repo = InstrumentCacheRepo(session)
+                try:
+                    import yfinance as yf
+                    for _op in open_positions:
+                        if _op.quantity <= 0:
+                            continue
+                        _cache = inst_repo.get_by_t212(_op.t212_ticker)
+                        if _cache:
+                            _hist = yf.download(_cache.yf_ticker, period="2d", interval="1d", progress=False, auto_adjust=True)
+                            if not _hist.empty:
+                                _last_close = float(_hist["Close"].iloc[-1])
+                                unrealized_pnl += (_last_close - _op.avg_entry) * _op.quantity
+                except Exception as _exc:
+                    log.warning("Unrealized P&L fetch failed: %s — using 0.0", _exc)
+
+                total_equity = today_open + realized_pnl + unrealized_pnl
+                day_pnl_pct = ((realized_pnl + unrealized_pnl) / today_open * 100) if today_open > 0 else 0.0
 
                 snapshot_repo.upsert(PnlSnapshot(
                     date=today_str,
                     total_equity=total_equity,
-                    day_pnl=realized_pnl,
+                    day_pnl=realized_pnl + unrealized_pnl,
                     day_pnl_pct=day_pnl_pct,
                     realized_pnl=realized_pnl,
-                    unrealized_pnl=0.0,
+                    unrealized_pnl=unrealized_pnl,
                     open_positions=len(open_positions),
                     trade_count=trade_count,
                 ))

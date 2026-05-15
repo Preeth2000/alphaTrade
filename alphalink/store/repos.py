@@ -39,6 +39,8 @@ class Position(SQLModel, table=True):
     opened_at: datetime = Field(default_factory=datetime.utcnow)
     last_signal_ts: Optional[datetime] = None
     cooldown_until_ts: Optional[datetime] = None
+    stop_order_id: Optional[str] = None
+    limit_order_id: Optional[str] = None
 
 
 class EquityCurve(SQLModel, table=True):
@@ -128,9 +130,29 @@ class PositionRepo:
             existing.avg_entry = pos.avg_entry
             existing.last_signal_ts = pos.last_signal_ts
             existing.cooldown_until_ts = pos.cooldown_until_ts
+            # Preserve OCO IDs — only overwrite if caller explicitly sets them
+            if pos.stop_order_id is not None:
+                existing.stop_order_id = pos.stop_order_id
+            if pos.limit_order_id is not None:
+                existing.limit_order_id = pos.limit_order_id
         else:
             self._s.add(pos)
         self._s.commit()
+
+    def update_oco_ids(self, t212_ticker: str, stop_order_id: str, limit_order_id: str) -> None:
+        existing = self.get(t212_ticker)
+        if existing:
+            existing.stop_order_id = stop_order_id
+            existing.limit_order_id = limit_order_id
+            self._s.commit()
+
+    def all_with_oco(self) -> list[Position]:
+        return list(self._s.exec(
+            select(Position).where(
+                Position.stop_order_id.isnot(None),
+                Position.limit_order_id.isnot(None),
+            )
+        ).all())
 
     def remove(self, t212_ticker: str) -> None:
         existing = self.get(t212_ticker)
@@ -168,6 +190,11 @@ class InstrumentCacheRepo:
     def get(self, yf_ticker: str) -> InstrumentCache | None:
         return self._s.exec(
             select(InstrumentCache).where(InstrumentCache.yf_ticker == yf_ticker)
+        ).first()
+
+    def get_by_t212(self, t212_ticker: str) -> InstrumentCache | None:
+        return self._s.exec(
+            select(InstrumentCache).where(InstrumentCache.t212_ticker == t212_ticker)
         ).first()
 
     def put(self, yf_ticker: str, t212_ticker: str) -> None:

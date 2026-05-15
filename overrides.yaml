@@ -1,0 +1,19 @@
+defaults:
+  size_pct: 0.10          # fraction of account equity per BUY
+  stop_loss_pct: 0.02     # 2% below fill price
+  take_profit_pct: 0.05   # 5% above fill price
+  cooldown_bars: 3        # bars to wait after closing a position before re-entry
+  extended_hours: false   # set true to fire intraday ticks outside NYSE regular hours
+
+risk:
+  max_positions: 5
+  daily_loss_halt_pct: 0.05  # halt new orders when daily PnL <= -5%
+
+# Per-model overrides keyed by manifest run_name.
+# t212_ticker: optional; omit to auto-resolve via T212 instruments API.
+# Any field omitted falls back to defaults above.
+models:
+  aapl_daily_mlp_example:
+    enabled: true
+    t212_ticker: AAPL_US_EQ
+    size_pct: 0.05

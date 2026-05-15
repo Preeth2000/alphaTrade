@@ -65,3 +65,13 @@ class TestNormalFetch:
     def test_raises_on_unsupported_interval(self):
         with pytest.raises(ValueError, match="Unsupported interval"):
             _run(_good_aggs(), interval="3m")
+
+    def test_hourly_interval_accepted(self):
+        result = _run(_good_aggs(), interval="1h", bars=5)
+        assert set(_COLS).issubset(result.columns)
+
+    def test_api_key_passed_to_client(self):
+        with patch("polygon.RESTClient") as MockClient:
+            MockClient.return_value.get_aggs.return_value = _good_aggs()
+            PolygonProvider(api_key="secret-key").fetch_ohlcv("AAPL", "1d", 5)
+        MockClient.assert_called_once_with(api_key="secret-key")

@@ -1,5 +1,5 @@
 services:
-  alphalink:
+  bot:
     build: .
     env_file: .env
     environment:
@@ -7,10 +7,20 @@ services:
       - DATA_PROVIDER=${DATA_PROVIDER:-yfinance}
       - MODELS_DIR=/app/models
       - STATE_DB_PATH=/app/state.db
+    # state.db must be a HOST FILE before `docker compose up`.
+    # Create it once with: touch state.db
     volumes:
       - ./models:/app/models:ro
       - ./state.db:/app/state.db
       - ./overrides.yaml:/app/overrides.yaml:ro
     ports:
-      - "8080:8080"
+      - "8080:8080"   # aiohttp health / readyz
+      - "8081:8081"   # FastAPI REST API
+      - "9090:9090"   # Prometheus metrics
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3

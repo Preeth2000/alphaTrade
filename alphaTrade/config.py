@@ -112,7 +112,7 @@ class Defaults(BaseSettings):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    t212_api_key: str
+    t212_api_key: str = ""
     t212_secret_key: str = ""
     t212_env: str = "demo"
     data_provider: str = "yfinance"

@@ -70,15 +70,22 @@ def run_backtest(
     start: str,
     end: str,
     cfg: BacktestConfig,
+    run_id: int | None = None,
+    model_filter: str | None = None,
 ) -> dict[str, Any]:
-    """Run backtest for all models in models_dir. Returns summary dict."""
+    """Run backtest for all (or one filtered) model in models_dir. Returns summary dict."""
     models = scan_models(models_dir)
+    if model_filter is not None:
+        models = [(m, mo) for m, mo in models if m.run_name == model_filter]
     if not models:
-        raise RuntimeError(f"No models found in {models_dir}")
+        raise RuntimeError(
+            f"No models found in {models_dir}" + (f" matching {model_filter!r}" if model_filter else "")
+        )
 
     provider = YFinanceProvider()
     repo = BacktestRepo(session)
-    run_id = repo.create_run(start=start, end=end, config_json=cfg.model_dump_json())
+    if run_id is None:
+        run_id = repo.create_run(start=start, end=end, config_json=cfg.model_dump_json())
 
     all_trades: list[dict] = []
 

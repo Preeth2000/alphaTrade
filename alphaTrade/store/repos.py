@@ -267,6 +267,7 @@ class BacktestRun(SQLModel, table=True):
     start_date: str
     end_date: str
     config_json: str = "{}"
+    status: str = "done"
 
 
 class BacktestTrade(SQLModel, table=True):
@@ -404,16 +405,20 @@ class BacktestRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def create_run(self, start: str, end: str, config_json: str = "{}") -> int:
-        """Create a new BacktestRun and return its id."""
-        run = BacktestRun(start_date=start, end_date=end, config_json=config_json)
+    def create_run(self, start: str, end: str, config_json: str = "{}", status: str = "done") -> int:
+        run = BacktestRun(start_date=start, end_date=end, config_json=config_json, status=status)
         self._s.add(run)
         self._s.commit()
         self._s.refresh(run)
         return run.id
 
+    def update_status(self, run_id: int, status: str) -> None:
+        run = self._s.get(BacktestRun, run_id)
+        if run:
+            run.status = status
+            self._s.commit()
+
     def record_trade(self, run_id: int, **kwargs) -> None:
-        """Save a BacktestTrade row. kwargs maps to BacktestTrade fields."""
         trade = BacktestTrade(run_id=run_id, **kwargs)
         self._s.add(trade)
         self._s.commit()

@@ -12,7 +12,7 @@ from alphaTrade.health import HealthState
 log = logging.getLogger(__name__)
 
 
-def create_app(engine: Engine, health_state: HealthState, registry=None) -> FastAPI:
+def create_app(engine: Engine, health_state: HealthState, registry=None, backtest_scheduler=None) -> FastAPI:
     from alphaTrade.api.routers import positions, orders, signals, pnl, models, backtest, health, settings, equity, trades, stream, kill_switch
 
     app = FastAPI(title="alphaTrade API", version="1.0")
@@ -31,7 +31,7 @@ def create_app(engine: Engine, health_state: HealthState, registry=None) -> Fast
     app.include_router(signals.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(pnl.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(models.make_router(session_dep, api_key_dep, registry), prefix="/api/v1")
-    app.include_router(backtest.make_router(session_dep, api_key_dep), prefix="/api/v1")
+    app.include_router(backtest.make_router(session_dep, api_key_dep, backtest_scheduler), prefix="/api/v1")
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
     app.include_router(settings.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(equity.make_router(session_dep, api_key_dep), prefix="/api/v1")
@@ -47,8 +47,9 @@ async def start_api_server(
     health_state: HealthState,
     port: int = 8081,
     registry=None,
+    backtest_scheduler=None,
 ) -> uvicorn.Server:
-    app = create_app(engine, health_state, registry)
+    app = create_app(engine, health_state, registry, backtest_scheduler)
     config = uvicorn.Config(app, host="0.0.0.0", port=port, loop="none", log_level="warning")
     server = uvicorn.Server(config)
     asyncio.create_task(server.serve())

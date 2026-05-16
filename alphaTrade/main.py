@@ -727,10 +727,30 @@ async def run(settings: Settings) -> None:
     except Exception as exc:
         log.error("Health server failed to start on :8080: %s", exc)
 
+    backtest_scheduler = None
+    try:
+        from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler  # deferred: avoids circular import
+        models_list = list(registry.by_run_name.values()) if registry else []
+        backtest_scheduler = BacktestScheduler(
+            engine=engine,
+            settings=settings,
+            models=models_list,
+            models_dir=settings.models_dir,
+        )
+        backtest_scheduler.start()
+        log.info("BacktestScheduler started (enabled=%s)", settings.backtest.schedule_enabled)
+    except Exception as exc:
+        log.error("BacktestScheduler failed to start: %s", exc)
+
     api_server = None
     try:
         from alphaTrade.api.app import start_api_server
-        api_server = await start_api_server(engine, health_state, port=settings.api_port, registry=registry)
+        api_server = await start_api_server(
+            engine, health_state,
+            port=settings.api_port,
+            registry=registry,
+            backtest_scheduler=backtest_scheduler,
+        )
     except Exception as exc:
         log.error("API server failed to start on :%d: %s", settings.api_port, exc)
 
@@ -831,6 +851,8 @@ async def run(settings: Settings) -> None:
         task.cancel()
     if _oco_tasks:
         await asyncio.gather(*_oco_tasks, return_exceptions=True)
+    if backtest_scheduler is not None:
+        backtest_scheduler.shutdown()
     if api_server is not None:
         api_server.should_exit = True
     if health_runner is not None:

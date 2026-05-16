@@ -129,7 +129,7 @@ def test_models_returns_rows(tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["model_id"] == "my_model"
+    assert data[0]["run_name"] == "my_model"
 
 
 # --- Backtest ---
@@ -231,7 +231,7 @@ def test_kill_switch_status_not_halted(tmp_path, monkeypatch):
     resp = _client(_engine(tmp_path)).get("/api/v1/kill-switch")
     assert resp.status_code == 200
     assert resp.json()["halted"] is False
-alphaTrade
+
 
 def test_halt_endpoint_creates_sentinel(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -255,7 +255,7 @@ def test_resume_endpoint_removes_sentinel(tmp_path, monkeypatch):
 def test_halt_idempotent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     client = _client(_engine(tmp_path))
-    clienalphaTradeapi/v1/halt")
+    client.post("/api/v1/halt")
     resp = client.post("/api/v1/halt")
     assert resp.status_code == 200
     assert resp.json()["halted"] is True
@@ -276,7 +276,7 @@ def test_kill_switch_round_trip(tmp_path, monkeypatch):
     assert client.get("/api/v1/kill-switch").json()["halted"] is True
     client.post("/api/v1/resume")
     assert client.get("/api/v1/kill-switch").json()["halted"] is False
-alphaTrade
+
 
 # --- Trades ---
 
@@ -291,7 +291,7 @@ def test_trades_since_filters(tmp_path):
     from alphaTrade.store.repos import TradeJournal, TradeJournalRepo
     with Session(engine) as s:
         repo = TradeJournalRepo(s)
-        ralphaTradeTradeJournal(
+        repo.save(TradeJournal(
             ts=datetime(2020, 1, 1), model_id="m1", ticker="AAPL",
             entry_price=100.0, exit_price=110.0, quantity=1.0,
             entry_time=datetime(2020, 1, 1), exit_time=datetime(2020, 1, 2),

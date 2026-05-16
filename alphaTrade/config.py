@@ -9,12 +9,20 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class BacktestScheduleOverride(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    disabled: bool = False
+    cron: Optional[str] = None
+    lookback_days: Optional[int] = None
+
+
 class ModelOverride(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     enabled: bool = True
     t212_ticker: Optional[str] = None
     size_pct: Optional[float] = None
+    backtest: BacktestScheduleOverride = BacktestScheduleOverride()
 
 
 class ModelRetirementConfig(BaseSettings):
@@ -83,6 +91,9 @@ class BacktestConfig(BaseSettings):
     default_size_pct: float = 0.10
     sl_pct: Optional[float] = None
     tp_pct: Optional[float] = None
+    schedule_enabled: bool = True
+    cron: str = "0 2 * * *"
+    lookback_days: int = 30
 
 
 class RiskConfig(BaseSettings):

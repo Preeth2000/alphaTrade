@@ -37,10 +37,7 @@ def make_router(session_dep: Callable, api_key_dep: Callable, backtest_scheduler
         if req.start:
             start = req.start
         else:
-            try:
-                lookback = int(backtest_scheduler._settings.backtest.lookback_days)
-            except (AttributeError, TypeError, ValueError):
-                lookback = 90
+            lookback = backtest_scheduler._settings.backtest.lookback_days
             start = (date.today() - timedelta(days=lookback)).isoformat()
         run_id = await backtest_scheduler.trigger(
             session=session,

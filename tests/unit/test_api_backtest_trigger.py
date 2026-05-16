@@ -20,6 +20,7 @@ def _client(engine, scheduler):
 
 def test_trigger_returns_run_id_and_queued(tmp_path):
     scheduler = MagicMock()
+    scheduler._settings.backtest.lookback_days = 30
     scheduler.trigger = AsyncMock(return_value=42)
     client = _client(_engine(tmp_path), scheduler)
     resp = client.post("/api/v1/backtest/trigger", json={})
@@ -40,6 +41,7 @@ def test_trigger_with_explicit_dates(tmp_path):
 
 def test_trigger_with_model_id(tmp_path):
     scheduler = MagicMock()
+    scheduler._settings.backtest.lookback_days = 30
     scheduler.trigger = AsyncMock(return_value=3)
     client = _client(_engine(tmp_path), scheduler)
     resp = client.post("/api/v1/backtest/trigger", json={"model_id": "AAPL_v1"})

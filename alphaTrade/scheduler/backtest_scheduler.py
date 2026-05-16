@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,7 @@ class BacktestScheduler:
         self._models: dict[str, tuple[Manifest, OnnxModel]] = {m.run_name: (m, mo) for m, mo in models}
         self._models_dir = models_dir
         self._scheduler = AsyncIOScheduler()
+        self._persist_lock = threading.Lock()
 
     def start(self) -> None:
         self._scheduler.start()
@@ -78,27 +80,35 @@ class BacktestScheduler:
     async def trigger(
         self,
         session: Session,
-        start: str,
-        end: str,
+        end: str | None = None,
+        start: str | None = None,
         model_filter: str | None = None,
     ) -> int:
         """Pre-create run record and launch background task. Returns run_id."""
+        resolved_end = end or date.today().isoformat()
+        if start is None:
+            resolved_start = (date.today() - timedelta(days=self._settings.backtest.lookback_days)).isoformat()
+        else:
+            resolved_start = start
         run_id = BacktestRepo(session).create_run(
-            start=start,
-            end=end,
+            start=resolved_start,
+            end=resolved_end,
             config_json=self._settings.backtest.model_dump_json(),
             status="queued",
         )
-        asyncio.create_task(
+        task = asyncio.create_task(
             _execute_backtest(
                 engine=self._engine,
                 settings=self._settings,
                 models_dir=self._models_dir,
                 run_id=run_id,
-                start=start,
-                end=end,
+                start=resolved_start,
+                end=resolved_end,
                 model_filter=model_filter,
             )
+        )
+        task.add_done_callback(
+            lambda t: log.error("backtest task raised: %s", t.exception()) if not t.cancelled() and t.exception() else None
         )
         return run_id
 
@@ -164,8 +174,8 @@ class BacktestScheduler:
         return {
             "model_id": model_id,
             "disabled": ov.disabled,
-            "effective_cron": ov.cron or self._settings.backtest.cron,
-            "effective_lookback_days": ov.lookback_days or self._settings.backtest.lookback_days,
+            "effective_cron": ov.cron if ov.cron is not None else self._settings.backtest.cron,
+            "effective_lookback_days": ov.lookback_days if ov.lookback_days is not None else self._settings.backtest.lookback_days,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
 
@@ -176,8 +186,8 @@ class BacktestScheduler:
                 self._add_job(manifest, model, ov)
 
     def _add_job(self, manifest: Manifest, model: OnnxModel, ov: BacktestScheduleOverride) -> None:
-        effective_cron = ov.cron or self._settings.backtest.cron
-        effective_lookback = ov.lookback_days or self._settings.backtest.lookback_days
+        effective_cron = ov.cron if ov.cron is not None else self._settings.backtest.cron
+        effective_lookback = ov.lookback_days if ov.lookback_days is not None else self._settings.backtest.lookback_days
         engine = self._engine
         settings = self._settings
         models_dir = self._models_dir
@@ -207,6 +217,10 @@ class BacktestScheduler:
 
     def _persist_overrides(self) -> None:
         path = self._settings.overrides_path
+        with self._persist_lock:
+            self._write_overrides(path)
+
+    def _write_overrides(self, path: Path) -> None:
         raw: dict = yaml.safe_load(path.read_text()) if path.exists() else {}
         raw.setdefault("backtest", {})
         raw["backtest"]["schedule_enabled"] = self._settings.backtest.schedule_enabled

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
 from typing import Optional
 
 from apscheduler.triggers.cron import CronTrigger as _CronTrigger
@@ -66,16 +65,10 @@ def make_router(session_dep: Callable, api_key_dep: Callable, backtest_scheduler
     ):
         if backtest_scheduler is None:
             raise HTTPException(status_code=503, detail="Backtest scheduler not available")
-        end = req.end or date.today().isoformat()
-        if req.start:
-            start = req.start
-        else:
-            lookback = backtest_scheduler._settings.backtest.lookback_days
-            start = (date.today() - timedelta(days=lookback)).isoformat()
         run_id = await backtest_scheduler.trigger(
             session=session,
-            start=start,
-            end=end,
+            start=req.start,
+            end=req.end,
             model_filter=req.model_id,
         )
         return TriggerResponse(run_id=run_id, status="queued")

@@ -406,6 +406,7 @@ class BacktestRepo:
         self._s = session
 
     def create_run(self, start: str, end: str, config_json: str = "{}", status: str = "done") -> int:
+        """Create a new BacktestRun and return its id."""
         run = BacktestRun(start_date=start, end_date=end, config_json=config_json, status=status)
         self._s.add(run)
         self._s.commit()
@@ -419,6 +420,7 @@ class BacktestRepo:
             self._s.commit()
 
     def record_trade(self, run_id: int, **kwargs) -> None:
+        """Save a BacktestTrade row. kwargs maps to BacktestTrade fields."""
         trade = BacktestTrade(run_id=run_id, **kwargs)
         self._s.add(trade)
         self._s.commit()

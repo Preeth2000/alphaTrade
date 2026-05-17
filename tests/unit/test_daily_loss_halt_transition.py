@@ -29,7 +29,7 @@ def _engine():
 
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
-        t212_api_key="test-key",
+        t212_demo_api_key="test-key",
         state_db_path=tmp_path / "state.db",
         models_dir=tmp_path / "models",
         overrides_path=tmp_path / "overrides.yaml",
@@ -71,7 +71,7 @@ async def test_notify_fires_once_for_consecutive_halted_ticks(tmp_path):
         settings=_settings(tmp_path),
         engine=_engine(),
         t212_holder=[MagicMock(get_total_equity=MagicMock(side_effect=equities))],
-        provider=MagicMock(fetch_ohlcv=MagicMock(return_value=_DF)),
+        provider_holder=[MagicMock(fetch_ohlcv=MagicMock(return_value=_DF))],
         health_state=HealthState(),
         oco_tasks=set(),
         static_map={"AAPL": "AAPL_US_EQ"},
@@ -109,7 +109,7 @@ async def test_notify_fires_on_transition_tick_not_before(tmp_path):
         settings=_settings(tmp_path),
         engine=_engine(),
         t212_holder=[MagicMock(get_total_equity=MagicMock(side_effect=equities))],
-        provider=MagicMock(fetch_ohlcv=MagicMock(return_value=_DF)),
+        provider_holder=[MagicMock(fetch_ohlcv=MagicMock(return_value=_DF))],
         health_state=HealthState(),
         oco_tasks=set(),
         static_map={"AAPL": "AAPL_US_EQ"},
@@ -150,7 +150,7 @@ async def test_notify_fires_again_on_re_entry(tmp_path):
         settings=_settings(tmp_path),
         engine=_engine(),
         t212_holder=[MagicMock(get_total_equity=MagicMock(side_effect=equities))],
-        provider=MagicMock(fetch_ohlcv=MagicMock(return_value=_DF)),
+        provider_holder=[MagicMock(fetch_ohlcv=MagicMock(return_value=_DF))],
         health_state=HealthState(),
         oco_tasks=set(),
         static_map={"AAPL": "AAPL_US_EQ"},

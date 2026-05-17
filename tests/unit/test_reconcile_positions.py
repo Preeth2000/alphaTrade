@@ -19,7 +19,7 @@ from alphaTrade.store.repos import (
 
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
-        t212_api_key="test-key",
+        t212_demo_api_key="test-key",
         state_db_path=tmp_path / "state.db",
         models_dir=tmp_path / "models",
         overrides_path=tmp_path / "overrides.yaml",

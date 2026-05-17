@@ -13,7 +13,7 @@ from alphaTrade.notify import webhook as wh
 def _settings(tmp_path: Path, webhook_url: str = "https://discord.com/api/webhooks/123/abc"):
     from alphaTrade.config import Settings
     return Settings(
-        t212_api_key="test-key",
+        t212_demo_api_key="test-key",
         state_db_path=tmp_path / "state.db",
         models_dir=tmp_path / "models",
         overrides_path=tmp_path / "overrides.yaml",

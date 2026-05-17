@@ -197,7 +197,7 @@ def _engine():
 
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
-        t212_api_key="test-key",
+        t212_demo_api_key="test-key",
         state_db_path=tmp_path / "state.db",
         models_dir=tmp_path / "models",
         overrides_path=tmp_path / "overrides.yaml",
@@ -248,7 +248,7 @@ class TestTickMetrics:
             settings=_settings(tmp_path),
             engine=_engine(),
             t212_holder=[t212],
-            provider=provider,
+            provider_holder=[provider],
             health_state=HealthState(),
             oco_tasks=set(),
             static_map={"AAPL": "AAPL_US_EQ"},
@@ -288,7 +288,7 @@ class TestTickMetrics:
             settings=_settings(tmp_path),
             engine=_engine(),
             t212_holder=[t212],
-            provider=provider,
+            provider_holder=[provider],
             health_state=HealthState(),
             oco_tasks=set(),
             static_map={"AAPL": "AAPL_US_EQ"},

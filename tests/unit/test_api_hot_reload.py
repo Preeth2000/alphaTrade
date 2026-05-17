@@ -20,11 +20,12 @@ def test_hot_reload_updates_t212_client(engine):
     t212_holder = [original]
 
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="new-key", t212_env="live"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_invest_api_key="new-key", t212_active_account="invest"))
         db_s = BotSettingsRepo(s).get()
 
     settings = MagicMock()
-    apply_bot_settings(db_s, settings, t212_holder)
+    provider_holder = [MagicMock()]
+    apply_bot_settings(db_s, settings, t212_holder, provider_holder)
 
     assert t212_holder[0] is not original
     assert t212_holder[0]._headers == {"Authorization": "new-key"}
@@ -38,11 +39,12 @@ def test_hot_reload_no_change_keeps_client(engine):
     t212_holder = [client]
 
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="same-key", t212_env="demo"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_demo_api_key="same-key", t212_active_account="demo"))
         db_s = BotSettingsRepo(s).get()
 
     settings = MagicMock()
-    apply_bot_settings(db_s, settings, t212_holder)
+    provider_holder = [MagicMock()]
+    apply_bot_settings(db_s, settings, t212_holder, provider_holder)
 
     assert t212_holder[0] is client
 
@@ -57,8 +59,9 @@ def test_hot_reload_overlays_risk_settings(engine):
     settings = MagicMock()
     t212_holder = [MagicMock()]
     t212_holder[0]._headers = {}
+    provider_holder = [MagicMock()]
 
-    apply_bot_settings(db_s, settings, t212_holder)
+    apply_bot_settings(db_s, settings, t212_holder, provider_holder)
 
     assert settings.risk.max_positions == 12
     assert settings.risk.daily_loss_halt_pct == pytest.approx(0.08)

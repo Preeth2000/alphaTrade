@@ -136,7 +136,7 @@ def test_reconcile_empty_positions(mock_provider):
 
     # Mock returns empty positions list
     settings = Settings(
-        t212_api_key="test-key",
+        t212_demo_api_key="test-key",
         state_db_path=":memory:",
         models_dir=Path("/tmp"),
     )

@@ -16,10 +16,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "botsettings",
-        sa.Column("t212_secret_key", sa.String(), nullable=False, server_default=""),
-    )
+    conn = op.get_bind()
+    cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(botsettings)"))]
+    if "t212_secret_key" not in cols:
+        op.add_column(
+            "botsettings",
+            sa.Column("t212_secret_key", sa.String(), nullable=False, server_default=""),
+        )
 
 
 def downgrade() -> None:

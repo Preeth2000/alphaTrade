@@ -66,6 +66,7 @@ class TestStartupNotify:
             patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
             patch("alphaTrade.main._preresolve_tickers"),
             patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+            patch("alphaTrade.api.app.start_api_server", AsyncMock(return_value=MagicMock(should_exit=False))),
             patch("prometheus_client.start_http_server"),
             patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
             patch("alphaTrade.main.wh.notify") as mock_notify,
@@ -90,6 +91,7 @@ class TestStartupNotify:
             patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
             patch("alphaTrade.main._preresolve_tickers"),
             patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+            patch("alphaTrade.api.app.start_api_server", AsyncMock(return_value=MagicMock(should_exit=False))),
             patch("prometheus_client.start_http_server"),
             patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
             patch("alphaTrade.main.wh.notify") as mock_notify,
@@ -137,6 +139,7 @@ class TestHandlerIdempotency:
                 patch("alphaTrade.main._build_data_provider", return_value=MagicMock()),
                 patch("alphaTrade.main._preresolve_tickers"),
                 patch("alphaTrade.main.start_health_server", AsyncMock(return_value=MagicMock(cleanup=AsyncMock()))),
+                patch("alphaTrade.api.app.start_api_server", AsyncMock(return_value=MagicMock(should_exit=False))),
                 patch("prometheus_client.start_http_server"),
                 patch("alphaTrade.main.schedule_bar_close", new=AsyncMock()),
                 patch("alphaTrade.main.wh.notify"),  # suppress actual delivery

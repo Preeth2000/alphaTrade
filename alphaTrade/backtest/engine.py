@@ -33,6 +33,7 @@ class BacktestState:
     sl_price: float | None
     tp_price: float | None
     entry_bar: int
+    entry_time: Any
     model_id: str
 
     def pnl(self, exit_price: float) -> float:
@@ -171,6 +172,7 @@ def _run_single_model(
                 sl_price=sl_price,
                 tp_price=tp_price,
                 entry_bar=i + 1,
+                entry_time=next_bar.name,
                 model_id=manifest.run_name,
             )
 
@@ -233,6 +235,7 @@ def _build_trade(
         "exit_price": exit_price,
         "quantity": state.quantity,
         "entry_bar": state.entry_bar,
+        "entry_time": state.entry_time,
         "exit_bar": exit_bar,
         "exit_time": exit_time,
         "realized_pnl": realized_pnl,

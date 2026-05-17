@@ -167,7 +167,7 @@ def test_settings_get_returns_defaults(tmp_path):
     resp = _client(_engine(tmp_path)).get("/api/v1/settings")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["t212_env"] == "demo"
+    assert body["t212_active_account"] == "demo"
     assert body["max_positions"] == 5
 
 
@@ -175,27 +175,48 @@ def test_settings_sensitive_fields_masked(tmp_path):
     engine = _engine(tmp_path)
     from alphaTrade.store.repos import BotSettings, BotSettingsRepo
     with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_api_key="real-key", alphaTrade_api_key="api-key"))
+        BotSettingsRepo(s).upsert(BotSettings(id=1, t212_demo_api_key="real-key", alphaTrade_api_key="api-key"))
     resp = _client(engine).get("/api/v1/settings", headers={"X-API-Key": "api-key"})
     body = resp.json()
-    assert body["t212_api_key"] == "***"
+    assert body["t212_demo_api_key"] == "***"
     assert body["alphaTrade_api_key"] == "***"
 
 
 def test_settings_put_partial_update(tmp_path):
     engine = _engine(tmp_path)
     client = _client(engine)
-    resp = client.put("/api/v1/settings", json={"max_positions": 10, "t212_env": "live"})
+    resp = client.put("/api/v1/settings", json={"max_positions": 10, "t212_active_account": "invest"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["max_positions"] == 10
-    assert body["t212_env"] == "live"
+    assert body["t212_active_account"] == "invest"
     assert body["size_pct"] == pytest.approx(0.10)
 
 
 def test_settings_put_sensitive_masked_in_response(tmp_path):
-    resp = _client(_engine(tmp_path)).put("/api/v1/settings", json={"t212_api_key": "new-key"})
-    assert resp.json()["t212_api_key"] == "***"
+    resp = _client(_engine(tmp_path)).put("/api/v1/settings", json={"t212_demo_api_key": "new-key"})
+    assert resp.json()["t212_demo_api_key"] == "***"
+
+
+def test_settings_t212_multi_account(tmp_path):
+    c = _client(_engine(tmp_path))
+    resp = c.put("/api/v1/settings", json={
+        "t212_active_account": "invest",
+        "t212_invest_api_key": "invest-key",
+        "t212_invest_secret_key": "invest-secret",
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["t212_active_account"] == "invest"
+    assert body["t212_invest_api_key"] == "***"
+    assert body["t212_invest_secret_key"] == "***"
+
+
+def test_settings_t212_demo_key_masked(tmp_path):
+    c = _client(_engine(tmp_path))
+    resp = c.put("/api/v1/settings", json={"t212_demo_api_key": "demo-key"})
+    assert resp.status_code == 200
+    assert resp.json()["t212_demo_api_key"] == "***"
 
 
 # --- Route completeness ---

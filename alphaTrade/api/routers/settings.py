@@ -7,15 +7,22 @@ from sqlmodel import Session
 from alphaTrade.store.repos import BotSettings, BotSettingsRepo
 
 _SENSITIVE = frozenset({
-    "t212_api_key", "polygon_api_key", "email_smtp_password",
+    "t212_demo_api_key", "t212_demo_secret_key",
+    "t212_invest_api_key", "t212_invest_secret_key",
+    "t212_isa_api_key", "t212_isa_secret_key",
+    "polygon_api_key", "email_smtp_password",
     "slack_webhook_url", "alphaTrade_api_key",
 })
 
 
 class BotSettingsUpdate(BaseModel):
-    t212_api_key: Optional[str] = None
-    t212_env: Optional[str] = None
-    t212_account_type: Optional[str] = None
+    t212_active_account: Optional[str] = None  # "demo" | "invest" | "isa"
+    t212_demo_api_key: Optional[str] = None
+    t212_demo_secret_key: Optional[str] = None
+    t212_invest_api_key: Optional[str] = None
+    t212_invest_secret_key: Optional[str] = None
+    t212_isa_api_key: Optional[str] = None
+    t212_isa_secret_key: Optional[str] = None
     data_provider: Optional[str] = None
     polygon_api_key: Optional[str] = None
     slack_enabled: Optional[bool] = None

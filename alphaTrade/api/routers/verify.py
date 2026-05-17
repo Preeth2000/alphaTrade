@@ -55,11 +55,7 @@ def make_router(api_key_dep: Callable) -> APIRouter:
                 timeout=_TIMEOUT,
             )
             if r.status_code == 200:
-                try:
-                    details = r.json()
-                except Exception:
-                    details = {}
-                return {"valid": True, "account": body.account, "details": details}
+                return {"valid": True, "account": body.account}
             return {"valid": False, "account": body.account, "error": f"{r.status_code} {r.reason_phrase}"}
         except httpx.HTTPError as exc:
             return {"valid": False, "account": body.account, "error": str(exc)}
@@ -72,7 +68,7 @@ def make_router(api_key_dep: Callable) -> APIRouter:
         try:
             r = httpx.get(
                 _POLYGON_EXCHANGES_URL,
-                params={"apiKey": body.api_key},
+                headers={"Authorization": f"Bearer {body.api_key}"},
                 timeout=_TIMEOUT,
             )
             if r.status_code == 200:

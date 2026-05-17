@@ -36,7 +36,6 @@ def test_t212_demo_valid(tmp_path):
     data = resp.json()
     assert data["valid"] is True
     assert data["account"] == "demo"
-    assert "details" in data
 
 
 @respx.mock

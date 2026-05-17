@@ -64,4 +64,30 @@ def make_router(api_key_dep: Callable) -> APIRouter:
         except httpx.HTTPError as exc:
             return {"valid": False, "account": body.account, "error": str(exc)}
 
+    @router.post("/verify/polygon")
+    def verify_polygon(
+        body: PolygonVerifyRequest,
+        _: None = Depends(api_key_dep),
+    ) -> dict[str, Any]:
+        try:
+            r = httpx.get(
+                _POLYGON_EXCHANGES_URL,
+                params={"apiKey": body.api_key},
+                timeout=_TIMEOUT,
+            )
+            if r.status_code == 200:
+                body_json = r.json()
+                exchanges = body_json if isinstance(body_json, list) else []
+                rate_limit = r.headers.get("X-RateLimit-Limit")
+                return {
+                    "valid": True,
+                    "details": {
+                        "exchanges_count": len(exchanges),
+                        "rate_limit": rate_limit,
+                    },
+                }
+            return {"valid": False, "error": f"{r.status_code} {r.reason_phrase}"}
+        except httpx.HTTPError as exc:
+            return {"valid": False, "error": str(exc)}
+
     return router

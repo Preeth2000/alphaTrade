@@ -111,3 +111,62 @@ def test_t212_requires_api_key(tmp_path):
         "account": "demo", "api_key": "t212key", "secret_key": "t212secret"
     }, headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
+
+
+# --- Polygon ---
+
+@respx.mock
+def test_polygon_valid_returns_details(tmp_path):
+    exchanges = [{"id": 1, "name": "NYSE"}, {"id": 2, "name": "NASDAQ"}]
+    respx.get("https://api.polygon.io/v1/meta/exchanges").mock(
+        return_value=httpx.Response(
+            200,
+            json=exchanges,
+            headers={"X-RateLimit-Limit": "5"},
+        )
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/polygon", json={"api_key": "good-key"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is True
+    assert data["details"]["exchanges_count"] == 2
+    assert data["details"]["rate_limit"] == "5"
+
+
+@respx.mock
+def test_polygon_invalid_key(tmp_path):
+    respx.get("https://api.polygon.io/v1/meta/exchanges").mock(
+        return_value=httpx.Response(403, json={"status": "ERROR", "error": "Forbidden"})
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/polygon", json={"api_key": "bad-key"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is False
+    assert "error" in data
+
+
+@respx.mock
+def test_polygon_network_error(tmp_path):
+    respx.get("https://api.polygon.io/v1/meta/exchanges").mock(
+        side_effect=httpx.ConnectError("unreachable")
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/polygon", json={"api_key": "key"})
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is False
+
+
+@respx.mock
+def test_polygon_no_rate_limit_header(tmp_path):
+    respx.get("https://api.polygon.io/v1/meta/exchanges").mock(
+        return_value=httpx.Response(200, json=[{"id": 1, "name": "NYSE"}])
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/polygon", json={"api_key": "key"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is True
+    assert data["details"]["rate_limit"] is None
+    assert data["details"]["exchanges_count"] == 1

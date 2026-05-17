@@ -1,6 +1,6 @@
 from __future__ import annotations
 from collections.abc import Callable
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
@@ -16,7 +16,7 @@ _SENSITIVE = frozenset({
 
 
 class BotSettingsUpdate(BaseModel):
-    t212_active_account: Optional[str] = None  # "demo" | "invest" | "isa"
+    t212_active_account: Optional[Literal["demo", "invest", "isa"]] = None
     t212_demo_api_key: Optional[str] = None
     t212_demo_secret_key: Optional[str] = None
     t212_invest_api_key: Optional[str] = None

@@ -123,9 +123,13 @@ class Defaults(BaseSettings):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    t212_api_key: str = ""
-    t212_secret_key: str = ""
-    t212_env: str = "demo"
+    t212_active_account: str = "demo"  # "demo" | "invest" | "isa"
+    t212_demo_api_key: str = ""
+    t212_demo_secret_key: str = ""
+    t212_invest_api_key: str = ""
+    t212_invest_secret_key: str = ""
+    t212_isa_api_key: str = ""
+    t212_isa_secret_key: str = ""
     data_provider: str = "yfinance"
     polygon_api_key: str = ""
     models_dir: Path = Path("./models")
@@ -170,6 +174,6 @@ class Settings(BaseSettings):
                 self.backtest = BacktestConfig(**raw["backtest"])
         if self.data_provider == "polygon" and not self.polygon_api_key:
             raise ValueError("POLYGON_API_KEY is required when DATA_PROVIDER=polygon")
-        if self.t212_env not in ("demo", "live"):
-            raise ValueError(f"T212_ENV must be 'demo' or 'live', got {self.t212_env!r}")
+        if self.t212_active_account not in ("demo", "invest", "isa"):
+            raise ValueError(f"t212_active_account must be 'demo', 'invest', or 'isa', got {self.t212_active_account!r}")
         return self

@@ -27,7 +27,7 @@ def test_check_sl_tp_no_position():
 def test_check_sl_tp_sl_hit():
     state = BacktestState(
         side="BUY", entry_price=100.0, quantity=10.0,
-        sl_price=95.0, tp_price=115.0, entry_bar=0, model_id="m1"
+        sl_price=95.0, tp_price=115.0, entry_bar=0, entry_time=pd.Timestamp("2024-01-01"), model_id="m1"
     )
     result = _check_sl_tp(state=state, high=110.0, low=93.0)
     assert result == ("SL", 95.0)
@@ -36,7 +36,7 @@ def test_check_sl_tp_sl_hit():
 def test_check_sl_tp_tp_hit():
     state = BacktestState(
         side="BUY", entry_price=100.0, quantity=10.0,
-        sl_price=95.0, tp_price=115.0, entry_bar=0, model_id="m1"
+        sl_price=95.0, tp_price=115.0, entry_bar=0, entry_time=pd.Timestamp("2024-01-01"), model_id="m1"
     )
     result = _check_sl_tp(state=state, high=116.0, low=98.0)
     assert result == ("TP", 115.0)
@@ -45,7 +45,7 @@ def test_check_sl_tp_tp_hit():
 def test_check_sl_tp_no_hit():
     state = BacktestState(
         side="BUY", entry_price=100.0, quantity=10.0,
-        sl_price=95.0, tp_price=115.0, entry_bar=0, model_id="m1"
+        sl_price=95.0, tp_price=115.0, entry_bar=0, entry_time=pd.Timestamp("2024-01-01"), model_id="m1"
     )
     result = _check_sl_tp(state=state, high=110.0, low=98.0)
     assert result is None
@@ -54,7 +54,7 @@ def test_check_sl_tp_no_hit():
 def test_backtest_state_pnl_long():
     state = BacktestState(
         side="BUY", entry_price=100.0, quantity=5.0,
-        sl_price=95.0, tp_price=115.0, entry_bar=0, model_id="m1"
+        sl_price=95.0, tp_price=115.0, entry_bar=0, entry_time=pd.Timestamp("2024-01-01"), model_id="m1"
     )
     assert state.pnl(exit_price=110.0) == pytest.approx(50.0)
 
@@ -62,7 +62,7 @@ def test_backtest_state_pnl_long():
 def test_backtest_state_pnl_short():
     state = BacktestState(
         side="SELL", entry_price=100.0, quantity=5.0,
-        sl_price=105.0, tp_price=85.0, entry_bar=0, model_id="m1"
+        sl_price=105.0, tp_price=85.0, entry_bar=0, entry_time=pd.Timestamp("2024-01-01"), model_id="m1"
     )
     assert state.pnl(exit_price=90.0) == pytest.approx(50.0)
 

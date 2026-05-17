@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import create_engine
 from alphaTrade.store.db import run_migrations
 from alphaTrade.api.auth import make_api_key_dep
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo
 
 
 def _make_client(tmp_path):
@@ -51,6 +52,7 @@ def test_t212_demo_invalid_credentials(tmp_path):
     data = resp.json()
     assert data["valid"] is False
     assert "error" in data
+    assert "401" in data["error"]
 
 
 @respx.mock
@@ -90,3 +92,22 @@ def test_t212_network_error_returns_invalid(tmp_path):
     })
     assert resp.status_code == 200
     assert resp.json()["valid"] is False
+
+
+@respx.mock
+def test_t212_requires_api_key(tmp_path):
+    from sqlmodel import Session
+    db = tmp_path / "test.db"
+    run_migrations(db)
+    engine = create_engine(f"sqlite:///{db}")
+    with Session(engine) as s:
+        BotSettingsRepo(s).upsert(BotSettings(id=1, alphaTrade_api_key="secret"))
+    api_key_dep = make_api_key_dep(engine)
+    from alphaTrade.api.routers.verify import make_router
+    app = FastAPI()
+    app.include_router(make_router(api_key_dep), prefix="/api/v1")
+    client = TestClient(app)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "demo", "api_key": "t212key", "secret_key": "t212secret"
+    }, headers={"X-API-Key": "wrong"})
+    assert resp.status_code == 403

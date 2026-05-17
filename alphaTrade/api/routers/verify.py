@@ -22,7 +22,7 @@ _TIMEOUT = 10.0
 class T212VerifyRequest(BaseModel):
     account: Literal["demo", "invest", "isa"]
     api_key: str
-    secret_key: str
+    secret_key: str = ""
 
 
 class PolygonVerifyRequest(BaseModel):
@@ -41,13 +41,25 @@ def make_router(api_key_dep: Callable) -> APIRouter:
         base = _T212_BASE[env]
         url = f"{base}/equity/account/summary"
         try:
+            if body.secret_key:
+                auth = httpx.BasicAuth(body.api_key, body.secret_key)
+                headers: dict[str, str] = {}
+            else:
+                auth = None
+                headers = {"Authorization": body.api_key}
+
             r = httpx.get(
                 url,
-                auth=httpx.BasicAuth(body.api_key, body.secret_key),
+                auth=auth,
+                headers=headers,
                 timeout=_TIMEOUT,
             )
             if r.status_code == 200:
-                return {"valid": True, "account": body.account, "details": r.json()}
+                try:
+                    details = r.json()
+                except Exception:
+                    details = {}
+                return {"valid": True, "account": body.account, "details": details}
             return {"valid": False, "account": body.account, "error": f"{r.status_code} {r.reason_phrase}"}
         except httpx.HTTPError as exc:
             return {"valid": False, "account": body.account, "error": str(exc)}

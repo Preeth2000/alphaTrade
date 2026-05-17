@@ -68,22 +68,38 @@ _INTERVAL_SECONDS: dict[str, int] = {
 }
 
 
+def _t212_credentials(db_s) -> tuple[str, str, str]:
+    """Return (api_key, secret_key, env) for the active T212 account."""
+    account = db_s.t212_active_account or "demo"
+    env = "demo" if account == "demo" else "live"
+    if account == "demo":
+        return db_s.t212_demo_api_key or "", db_s.t212_demo_secret_key or "", env
+    if account == "invest":
+        return db_s.t212_invest_api_key or "", db_s.t212_invest_secret_key or "", env
+    if account == "isa":
+        return db_s.t212_isa_api_key or "", db_s.t212_isa_secret_key or "", env
+    return "", "", env
+
+
 def apply_bot_settings(
     db_s: BotSettings,
     settings: Settings,
     t212_holder: list,
+    provider_holder: list,
 ) -> None:
-    from alphaTrade.broker.t212_client import T212Client
-    new_key = db_s.t212_api_key or ""
-    new_secret = db_s.t212_secret_key or ""
-    new_env = db_s.t212_env or "demo"
+    from alphaTrade.broker.t212_client import T212Client, _BASE_URLS
+    new_key, new_secret, new_env = _t212_credentials(db_s)
     current_auth = getattr(t212_holder[0], "_auth", None)
     current_key = getattr(current_auth, "username", None) if current_auth else getattr(t212_holder[0], "_headers", {}).get("Authorization")
-    if new_key and current_key != new_key:
+    current_base = getattr(t212_holder[0], "_base", None)
+    new_base = _BASE_URLS.get(new_env)
+    if new_key and (current_key != new_key or current_base != new_base):
         t212_holder[0] = T212Client(api_key=new_key, secret_key=new_secret, env=new_env)
-        log.info("Hot-reload: T212Client reinitialised (env=%s)", new_env)
-    if db_s.data_provider:
+        log.info("Hot-reload: T212Client reinitialised (account=%s, env=%s)", db_s.t212_active_account, new_env)
+    if db_s.data_provider and db_s.data_provider != settings.data_provider:
         settings.data_provider = db_s.data_provider
+        provider_holder[0] = _build_data_provider(settings)
+        log.info("Hot-reload: data provider switched to %s", db_s.data_provider)
     if db_s.size_pct:
         settings.defaults.size_pct = db_s.size_pct
     if db_s.stop_loss_pct:
@@ -258,7 +274,7 @@ def make_tick(
     settings: Settings,
     engine,
     t212_holder: list,
-    provider,
+    provider_holder: list,
     health_state,
     oco_tasks: set,
     static_map: dict[str, str],
@@ -279,7 +295,7 @@ def make_tick(
         with Session(engine) as _hs:
             _db_s = BotSettingsRepo(_hs).get()
         if _db_s is not None:
-            apply_bot_settings(_db_s, settings, t212_holder)
+            apply_bot_settings(_db_s, settings, t212_holder, provider_holder)
         t212 = t212_holder[0]
         bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         with Session(engine) as _ov_s:
@@ -304,7 +320,7 @@ def make_tick(
         for manifest, model in interval_models:
             try:
                 t0 = time.perf_counter()
-                df = provider.fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
+                df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
                 features = compute_features(df, manifest.feature_names)
                 features = features.dropna()
                 # Save raw ATR before normalization (ATR sizing uses price units)
@@ -369,7 +385,7 @@ def make_tick(
 
             current_vix: float | None = None
             if settings.risk.sizing_mode == "vix":
-                current_vix = await asyncio.to_thread(provider.fetch_vix)
+                current_vix = await asyncio.to_thread(provider_holder[0].fetch_vix)
                 if current_vix is None:
                     log.warning("VIX fetch failed; compute_quantity will use internal fallback")
 
@@ -447,7 +463,7 @@ def make_tick(
                 size_pct = eff_size_pct
 
                 try:
-                    df2 = provider.fetch_ohlcv(yf_ticker, manifest.interval, 1)
+                    df2 = provider_holder[0].fetch_ohlcv(yf_ticker, manifest.interval, 1)
                     current_price = float(df2["Close"].iloc[-1])
                 except Exception as exc:
                     log.error("Cannot get current price for %s: %s", yf_ticker, exc)
@@ -636,8 +652,20 @@ async def run(settings: Settings) -> None:
     except OSError as exc:
         log.error("Metrics server failed to start on :9090: %s", exc)
 
-    provider = _build_data_provider(settings)
-    t212 = T212Client(api_key=settings.t212_api_key, secret_key=settings.t212_secret_key, env=settings.t212_env)
+    provider_holder: list = [_build_data_provider(settings)]
+
+    def _t212_from_settings(s) -> "T212Client":
+        account = s.t212_active_account or "demo"
+        env = "demo" if account == "demo" else "live"
+        key_map = {
+            "demo": (s.t212_demo_api_key, s.t212_demo_secret_key),
+            "invest": (s.t212_invest_api_key, s.t212_invest_secret_key),
+            "isa": (s.t212_isa_api_key, s.t212_isa_secret_key),
+        }
+        api_key, secret_key = key_map.get(account, ("", ""))
+        return T212Client(api_key=api_key or "", secret_key=secret_key or "", env=env)
+
+    t212 = _t212_from_settings(settings)
     t212_holder: list = [t212]
 
     health_state = HealthState()
@@ -764,7 +792,7 @@ async def run(settings: Settings) -> None:
                     settings=settings,
                     engine=engine,
                     t212_holder=t212_holder,
-                    provider=provider,
+                    provider_holder=provider_holder,
                     health_state=health_state,
                     oco_tasks=_oco_tasks,
                     static_map=static_map,

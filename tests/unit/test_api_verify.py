@@ -1,0 +1,92 @@
+from __future__ import annotations
+import pytest
+import respx
+import httpx
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlmodel import create_engine
+from alphaTrade.store.db import run_migrations
+from alphaTrade.api.auth import make_api_key_dep
+
+
+def _make_client(tmp_path):
+    db = tmp_path / "test.db"
+    run_migrations(db)
+    engine = create_engine(f"sqlite:///{db}")
+    api_key_dep = make_api_key_dep(engine)
+    from alphaTrade.api.routers.verify import make_router
+    app = FastAPI()
+    app.include_router(make_router(api_key_dep), prefix="/api/v1")
+    return TestClient(app)
+
+
+# --- T212 ---
+
+@respx.mock
+def test_t212_demo_valid(tmp_path):
+    respx.get("https://demo.trading212.com/api/v0/equity/account/summary").mock(
+        return_value=httpx.Response(200, json={"cash": {"free": 1000.0}, "pieCash": 0.0})
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "demo", "api_key": "test-key", "secret_key": "test-secret"
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is True
+    assert data["account"] == "demo"
+    assert "details" in data
+
+
+@respx.mock
+def test_t212_demo_invalid_credentials(tmp_path):
+    respx.get("https://demo.trading212.com/api/v0/equity/account/summary").mock(
+        return_value=httpx.Response(401, json={"message": "Unauthorized"})
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "demo", "api_key": "bad-key", "secret_key": "bad-secret"
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is False
+    assert "error" in data
+
+
+@respx.mock
+def test_t212_invest_uses_live_url(tmp_path):
+    respx.get("https://live.trading212.com/api/v0/equity/account/summary").mock(
+        return_value=httpx.Response(200, json={"cash": {"free": 500.0}, "pieCash": 0.0})
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "invest", "api_key": "key", "secret_key": "secret"
+    })
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is True
+
+
+@respx.mock
+def test_t212_isa_uses_live_url(tmp_path):
+    respx.get("https://live.trading212.com/api/v0/equity/account/summary").mock(
+        return_value=httpx.Response(200, json={"cash": {"free": 200.0}, "pieCash": 0.0})
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "isa", "api_key": "key", "secret_key": "secret"
+    })
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is True
+
+
+@respx.mock
+def test_t212_network_error_returns_invalid(tmp_path):
+    respx.get("https://demo.trading212.com/api/v0/equity/account/summary").mock(
+        side_effect=httpx.ConnectError("timeout")
+    )
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/t212", json={
+        "account": "demo", "api_key": "key", "secret_key": "secret"
+    })
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is False

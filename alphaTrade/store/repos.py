@@ -442,10 +442,13 @@ class BacktestRepo:
 
 class BotSettings(SQLModel, table=True):
     id: int = Field(default=1, primary_key=True)
-    t212_api_key: str = Field(default="")
-    t212_secret_key: str = Field(default="")
-    t212_env: str = Field(default="demo")
-    t212_account_type: str = Field(default="invest")
+    t212_active_account: str = Field(default="demo")
+    t212_demo_api_key: str = Field(default="")
+    t212_demo_secret_key: str = Field(default="")
+    t212_invest_api_key: str = Field(default="")
+    t212_invest_secret_key: str = Field(default="")
+    t212_isa_api_key: str = Field(default="")
+    t212_isa_secret_key: str = Field(default="")
     data_provider: str = Field(default="yfinance")
     polygon_api_key: str = Field(default="")
     slack_enabled: bool = Field(default=False)

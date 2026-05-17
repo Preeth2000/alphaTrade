@@ -76,7 +76,10 @@ def make_router(api_key_dep: Callable) -> APIRouter:
                 timeout=_TIMEOUT,
             )
             if r.status_code == 200:
-                body_json = r.json()
+                try:
+                    body_json = r.json()
+                except Exception:
+                    body_json = []
                 exchanges = body_json if isinstance(body_json, list) else []
                 rate_limit = r.headers.get("X-RateLimit-Limit")
                 return {

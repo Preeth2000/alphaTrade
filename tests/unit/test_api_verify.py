@@ -145,6 +145,7 @@ def test_polygon_invalid_key(tmp_path):
     data = resp.json()
     assert data["valid"] is False
     assert "error" in data
+    assert "403" in data["error"]
 
 
 @respx.mock
@@ -170,3 +171,22 @@ def test_polygon_no_rate_limit_header(tmp_path):
     assert data["valid"] is True
     assert data["details"]["rate_limit"] is None
     assert data["details"]["exchanges_count"] == 1
+
+
+@respx.mock
+def test_polygon_requires_api_key(tmp_path):
+    from sqlmodel import Session
+    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
+    db = tmp_path / "test.db"
+    run_migrations(db)
+    engine = create_engine(f"sqlite:///{db}")
+    with Session(engine) as s:
+        BotSettingsRepo(s).upsert(BotSettings(id=1, alphaTrade_api_key="secret"))
+    api_key_dep = make_api_key_dep(engine)
+    from alphaTrade.api.routers.verify import make_router
+    app = FastAPI()
+    app.include_router(make_router(api_key_dep), prefix="/api/v1")
+    client = TestClient(app)
+    resp = client.post("/api/v1/verify/polygon", json={"api_key": "poly-key"},
+                       headers={"X-API-Key": "wrong"})
+    assert resp.status_code == 403

@@ -190,3 +190,35 @@ def test_polygon_requires_api_key(tmp_path):
     resp = client.post("/api/v1/verify/polygon", json={"api_key": "poly-key"},
                        headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
+
+
+# --- alphaTrade API key ---
+
+def test_alphatrade_key_no_key_configured_returns_valid(tmp_path, monkeypatch):
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/alphatrade-key")
+    assert resp.status_code == 200
+    assert resp.json() == {"valid": True}
+
+
+def test_alphatrade_key_correct_key_returns_valid(tmp_path, monkeypatch):
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/alphatrade-key", headers={"X-API-Key": "secret"})
+    assert resp.status_code == 200
+    assert resp.json() == {"valid": True}
+
+
+def test_alphatrade_key_wrong_key_returns_403(tmp_path, monkeypatch):
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/alphatrade-key", headers={"X-API-Key": "wrong"})
+    assert resp.status_code == 403
+
+
+def test_alphatrade_key_missing_header_returns_403(tmp_path, monkeypatch):
+    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    client = _make_client(tmp_path)
+    resp = client.post("/api/v1/verify/alphatrade-key")
+    assert resp.status_code == 403

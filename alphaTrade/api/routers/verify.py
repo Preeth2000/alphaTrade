@@ -93,4 +93,10 @@ def make_router(api_key_dep: Callable) -> APIRouter:
         except httpx.HTTPError as exc:
             return {"valid": False, "error": str(exc)}
 
+    @router.post("/verify/alphatrade-key")
+    def verify_alphatrade_key(
+        _: None = Depends(api_key_dep),
+    ) -> dict[str, Any]:
+        return {"valid": True}
+
     return router

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import Boolean, Column, Float, Integer, String
 from sqlmodel import Field, SQLModel, Session, select
 
 
@@ -251,6 +252,7 @@ class ModelPerformance(SQLModel, table=True):
     rolling_trades_json: str = "[]"  # JSON list of last N realized_pnl values
     retired: bool = False
     retired_at: Optional[datetime] = None
+    first_trade_at: Optional[datetime] = None
     last_updated: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -470,6 +472,12 @@ class BotSettings(SQLModel, table=True):
     max_positions: int = Field(default=5)
     daily_loss_halt_pct: float = Field(default=0.05)
     alphaTrade_api_key: str = Field(default="")
+    retirement_enabled: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
+    retirement_lookback_trades: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    retirement_min_win_rate: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    retirement_min_rolling_pnl: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    retirement_min_trades_before_evaluation: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    retirement_min_evaluation_period: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
 
 
 class BotSettingsRepo:

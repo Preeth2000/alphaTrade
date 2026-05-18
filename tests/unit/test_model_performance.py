@@ -114,3 +114,22 @@ def test_registry_skips_retired_model(engine, tmp_path):
 
     assert "model_a" not in registry.by_run_name
     assert "model_b" in registry.by_run_name
+
+
+def test_first_trade_at_set_on_first_trade(engine):
+    cfg = ModelRetirementConfig(enabled=False)
+    with Session(engine) as s:
+        record_trade(s, model_id="model_x", realized_pnl=10.0, cfg=cfg)
+        perf = ModelPerformanceRepo(s).get_or_create("model_x")
+        assert perf.first_trade_at is not None
+
+def test_first_trade_at_not_updated_on_subsequent_trades(engine):
+    cfg = ModelRetirementConfig(enabled=False)
+    with Session(engine) as s:
+        record_trade(s, model_id="model_x", realized_pnl=10.0, cfg=cfg)
+        perf = ModelPerformanceRepo(s).get_or_create("model_x")
+        first = perf.first_trade_at
+    with Session(engine) as s:
+        record_trade(s, model_id="model_x", realized_pnl=20.0, cfg=cfg)
+        perf = ModelPerformanceRepo(s).get_or_create("model_x")
+        assert perf.first_trade_at == first

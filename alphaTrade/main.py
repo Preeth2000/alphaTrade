@@ -23,13 +23,13 @@ from alphaTrade.broker.instrument_map import InstrumentMap
 from alphaTrade.broker.oco_monitor import monitor_oco
 from alphaTrade.broker.orders import make_client_order_id, submit_order_async
 from alphaTrade.broker.t212_client import T212Client
-from alphaTrade.config import Settings
+from alphaTrade.config import ModelOverride, Settings
 from alphaTrade.consensus.softmax_avg import consensus_by_ticker
 from alphaTrade.data.provider import DataProvider
 from alphaTrade.notify import webhook as wh
 from alphaTrade.notify.alerting import AlertManager, AlertLevel
 from alphaTrade.risk.gates import GateResult, run_gates
-from alphaTrade.risk.performance import _effective_config
+from alphaTrade.risk.performance import _effective_config, check_retirement, record_trade
 from alphaTrade.risk.sizing import compute_quantity
 from alphaTrade.kill_switch import is_halted
 from alphaTrade.scheduler.bar_close import schedule_bar_close
@@ -556,6 +556,8 @@ def make_tick(
                         sl_price = entry_price * (1 - eff_stop_loss_pct)
                         tp_price = entry_price * (1 + eff_take_profit_pct)
                         stop_resp = None
+                        per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
+                        _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
                         try:
                             stop_resp = await asyncio.to_thread(
                                 t212.place_stop_order, t212_ticker, qty, sl_price
@@ -566,9 +568,6 @@ def make_tick(
                             stop_id = str(stop_resp["id"])
                             limit_id = str(limit_resp["id"])
                             pos_repo.update_oco_ids(t212_ticker, stop_id, limit_id)
-                            from alphaTrade.config import ModelOverride
-                            per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
-                            _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
                             _task = asyncio.create_task(monitor_oco(
                                 t212=t212,
                                 t212_ticker=t212_ticker,
@@ -621,21 +620,21 @@ def make_tick(
                                 quantity=qty,
                                 position=pos,
                             ))
-                            # Update model performance tracking
-                            from alphaTrade.config import ModelOverride
-                            from alphaTrade.risk.performance import record_trade, check_retirement
                             per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
                             _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
                             pnl_for_perf = (exit_p - pos.avg_entry) * qty
-                            record_trade(session, model_id=manifest.run_name,
-                                         realized_pnl=pnl_for_perf,
-                                         cfg=_ret_cfg)
-                            if check_retirement(session, model_id=manifest.run_name,
-                                                cfg=_ret_cfg):
-                                msg = f"Model {manifest.run_name} auto-retired: performance below threshold"
-                                wh.notify("WARNING", msg, category="model-retirement")
-                                if alert_manager is not None:
-                                    alert_manager.notify(msg, AlertLevel.WARNING)
+                            try:
+                                record_trade(session, model_id=manifest.run_name,
+                                             realized_pnl=pnl_for_perf,
+                                             cfg=_ret_cfg)
+                                if check_retirement(session, model_id=manifest.run_name,
+                                                    cfg=_ret_cfg):
+                                    msg = f"Model {manifest.run_name} auto-retired: performance below threshold"
+                                    wh.notify("WARNING", msg, category="model-retirement")
+                                    if alert_manager is not None:
+                                        alert_manager.notify(msg, AlertLevel.WARNING)
+                            except Exception as perf_exc:
+                                log.warning("Retirement tracking failed for %s: %s", manifest.run_name, perf_exc)
 
                 except Exception as exc:
                     err_rec = order_repo.find_by_client_order_id(cid)

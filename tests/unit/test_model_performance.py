@@ -9,7 +9,7 @@ import pytest
 from sqlmodel import Session
 
 from alphaTrade.config import ModelRetirementConfig, ModelRetirementOverride
-from alphaTrade.risk.performance import record_trade, check_retirement, _effective_config
+from alphaTrade.risk.performance import record_trade, check_retirement
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import ModelPerformanceRepo
 
@@ -57,7 +57,7 @@ def test_rolling_window_trims_to_lookback(engine):
 
 
 def test_check_retirement_below_win_rate(engine):
-    cfg = ModelRetirementConfig(enabled=True, lookback_trades=5, min_win_rate=0.6, min_rolling_pnl=-9999)
+    cfg = ModelRetirementConfig(enabled=True, lookback_trades=5, min_win_rate=0.6, min_rolling_pnl=-9999, min_trades_before_evaluation=5)
     with Session(engine) as s:
         for pnl in [-10.0, -20.0, 10.0, -5.0, -8.0]:
             record_trade(s, model_id="model_a", realized_pnl=pnl, cfg=cfg)

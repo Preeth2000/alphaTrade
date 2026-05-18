@@ -194,3 +194,50 @@ async def test_stop_cancelled_cancels_limit_leg() -> None:
         pos = PositionRepo(s).get("AAPL_US_EQ")
     assert pos is not None
     assert pos.quantity == 1.0
+
+
+def test_oco_retirement_uses_passed_config(tmp_path):
+    """OCO monitor fires retirement using the passed retirement_cfg, not defaults."""
+    from alphaTrade.config import ModelRetirementConfig
+    from alphaTrade.store.repos import ModelPerformanceRepo
+    import asyncio
+
+    engine = _make_engine()
+    _seed_position(engine)
+
+    retirement_cfg = ModelRetirementConfig(
+        enabled=True,
+        lookback_trades=1,
+        min_win_rate=0.9,    # impossible — will retire on first loss
+        min_rolling_pnl=-9999,
+        min_trades_before_evaluation=1,
+        min_evaluation_period="9999d",
+    )
+
+    t212 = MagicMock()
+    t212.get_order.side_effect = [
+        {"status": "FILLED", "fillPrice": "170.0"},  # stop fills
+        {"status": "PENDING"},
+    ]
+    t212.cancel_order.return_value = None
+
+    with patch("alphaTrade.broker.oco_monitor.wh"):
+        asyncio.run(monitor_oco(
+            t212=t212,
+            t212_ticker="AAPL_US_EQ",
+            stop_order_id="s1",
+            limit_order_id="l1",
+            engine=engine,
+            cooldown_td=timedelta(hours=1),
+            entry_price=175.0,
+            sl_price=170.0,
+            tp_price=182.0,
+            quantity=1.0,
+            model_id="my_model",
+            retirement_cfg=retirement_cfg,
+            poll_interval_s=0,
+        ))
+
+    with Session(engine) as s:
+        perf = ModelPerformanceRepo(s).get_or_create("my_model")
+        assert perf.retired is True

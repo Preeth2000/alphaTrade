@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.config import ModelRetirementConfig
 from alphaTrade.notify import webhook as wh
 from alphaTrade.store.repos import Position, PositionRepo, TradeJournal, TradeJournalRepo
 
@@ -32,6 +33,7 @@ async def monitor_oco(
     model_id: str = "",
     entry_time: Optional[datetime] = None,
     poll_interval_s: float = 10.0,
+    retirement_cfg: Optional[ModelRetirementConfig] = None,
 ) -> None:
     """Poll stop and limit orders until one fills. Cancel the other leg and close position."""
     while True:
@@ -53,6 +55,7 @@ async def monitor_oco(
                 quantity=quantity, model_id=model_id,
                 sl_price=sl_price, tp_price=tp_price,
                 entry_time=entry_time,
+                retirement_cfg=retirement_cfg,
             )
             _cancel_leg(t212, limit_order_id, t212_ticker)
             break
@@ -65,6 +68,7 @@ async def monitor_oco(
                 quantity=quantity, model_id=model_id,
                 sl_price=sl_price, tp_price=tp_price,
                 entry_time=entry_time,
+                retirement_cfg=retirement_cfg,
             )
             _cancel_leg(t212, stop_order_id, t212_ticker)
             break
@@ -109,6 +113,7 @@ def _close_position(
     sl_price: float = 0.0,
     tp_price: float = 0.0,
     entry_time: Optional[datetime] = None,
+    retirement_cfg: Optional[ModelRetirementConfig] = None,
 ) -> None:
     now = datetime.utcnow()
     realized_pnl = (exit_price - entry_price) * quantity
@@ -139,12 +144,13 @@ def _close_position(
                 realized_pnl=realized_pnl,
                 pnl_pct=pnl_pct,
             ))
-            # Record performance for retirement evaluation (uses defaults; tick loop enforces policy)
             try:
-                from alphaTrade.risk.performance import record_trade as _record_trade
-                from alphaTrade.config import ModelRetirementConfig
-                _record_trade(session, model_id=model_id, realized_pnl=realized_pnl,
-                              cfg=ModelRetirementConfig())
+                from alphaTrade.risk.performance import check_retirement, record_trade as _record_trade
+                cfg = retirement_cfg or ModelRetirementConfig()
+                _record_trade(session, model_id=model_id, realized_pnl=realized_pnl, cfg=cfg)
+                if check_retirement(session, model_id=model_id, cfg=cfg):
+                    wh.notify("WARNING", f"Model {model_id} auto-retired: performance below threshold",
+                              category="model-retirement")
             except Exception as exc:
                 log.warning("Performance record failed for %s: %s", model_id, exc)
 

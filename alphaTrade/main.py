@@ -29,6 +29,7 @@ from alphaTrade.data.provider import DataProvider
 from alphaTrade.notify import webhook as wh
 from alphaTrade.notify.alerting import AlertManager, AlertLevel
 from alphaTrade.risk.gates import GateResult, run_gates
+from alphaTrade.risk.performance import _effective_config
 from alphaTrade.risk.sizing import compute_quantity
 from alphaTrade.kill_switch import is_halted
 from alphaTrade.scheduler.bar_close import schedule_bar_close
@@ -296,6 +297,13 @@ def make_tick(
             _db_s = BotSettingsRepo(_hs).get()
         if _db_s is not None:
             apply_bot_settings(_db_s, settings, t212_holder, provider_holder)
+            _tick_creds = _t212_credentials(_db_s)
+            health_state.t212_configured = bool(_tick_creds[0])
+            if not health_state.t212_configured:
+                log.warning("No API key for active T212 account — skipping tick")
+                health_state.t212_ok = False
+                health_state.last_tick_at = datetime.now(timezone.utc)
+                return
         t212 = t212_holder[0]
         bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         with Session(engine) as _ov_s:
@@ -546,6 +554,9 @@ def make_tick(
                             stop_id = str(stop_resp["id"])
                             limit_id = str(limit_resp["id"])
                             pos_repo.update_oco_ids(t212_ticker, stop_id, limit_id)
+                            from alphaTrade.config import ModelOverride
+                            per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
+                            _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
                             _task = asyncio.create_task(monitor_oco(
                                 t212=t212,
                                 t212_ticker=t212_ticker,
@@ -559,6 +570,7 @@ def make_tick(
                                 quantity=qty,
                                 model_id=manifest.run_name,
                                 entry_time=datetime.utcnow(),
+                                retirement_cfg=_ret_cfg,
                             ))
                             oco_tasks.add(_task)
                             _task.add_done_callback(oco_tasks.discard)
@@ -598,13 +610,16 @@ def make_tick(
                                 position=pos,
                             ))
                             # Update model performance tracking
+                            from alphaTrade.config import ModelOverride
                             from alphaTrade.risk.performance import record_trade, check_retirement
+                            per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
+                            _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
                             pnl_for_perf = (exit_p - pos.avg_entry) * qty
                             record_trade(session, model_id=manifest.run_name,
                                          realized_pnl=pnl_for_perf,
-                                         cfg=settings.risk.model_retirement)
+                                         cfg=_ret_cfg)
                             if check_retirement(session, model_id=manifest.run_name,
-                                                cfg=settings.risk.model_retirement):
+                                                cfg=_ret_cfg):
                                 msg = f"Model {manifest.run_name} auto-retired: performance below threshold"
                                 wh.notify("WARNING", msg, category="model-retirement")
                                 if alert_manager is not None:
@@ -631,6 +646,11 @@ def make_tick(
 async def run(settings: Settings) -> None:
     from alphaTrade.logging_config import configure_logging
     configure_logging(log_file=settings.log_file)
+
+    from alphaTrade.kill_switch import SENTINEL_FILE as _SENTINEL
+    Path(_SENTINEL).touch()
+    log.info("Trading halted on startup — call POST /resume to begin trading")
+
     _oco_tasks: set[asyncio.Task] = set()
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -669,6 +689,14 @@ async def run(settings: Settings) -> None:
     t212_holder: list = [t212]
 
     health_state = HealthState()
+    _startup_key_map = {
+        "demo": settings.t212_demo_api_key,
+        "invest": settings.t212_invest_api_key,
+        "isa": settings.t212_isa_api_key,
+    }
+    health_state.t212_configured = bool(
+        _startup_key_map.get(settings.t212_active_account or "demo", "")
+    )
     try:
         await asyncio.to_thread(t212.get_total_equity)  # probe only; result discarded
         health_state.t212_ok = True

@@ -12,7 +12,7 @@ from sqlmodel import Session
 
 from alphaTrade.config import ModelOverride, ModelRetirementOverride, Settings
 from alphaTrade.risk.performance import _effective_config, _parse_period
-from alphaTrade.store.repos import BotSettingsRepo, ModelPerformanceRepo
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
 
@@ -93,11 +93,16 @@ def _persist_retirement_overrides(settings: Settings) -> None:
             ret_dict["min_trades_before_evaluation"] = ret.min_trades_before_evaluation
         if ret.min_evaluation_period is not None:
             ret_dict["min_evaluation_period"] = ret.min_evaluation_period
-        raw["models"].setdefault(run_name, {})
+        existing = raw["models"].get(run_name, {})
         if ret_dict:
-            raw["models"][run_name]["retirement"] = ret_dict
-        elif "retirement" in raw["models"].get(run_name, {}):
-            del raw["models"][run_name]["retirement"]
+            existing["retirement"] = ret_dict
+            raw["models"][run_name] = existing
+        elif "retirement" in existing:
+            del existing["retirement"]
+            if existing:
+                raw["models"][run_name] = existing
+            else:
+                raw["models"].pop(run_name, None)
     path.write_text(yaml.dump(raw, default_flow_style=False))
 
 
@@ -126,7 +131,6 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         repo = BotSettingsRepo(session)
         bs = repo.get()
         if bs is None:
-            from alphaTrade.store.repos import BotSettings
             bs = BotSettings(id=1)
 
         for field, val in update.model_dump(exclude_unset=True).items():

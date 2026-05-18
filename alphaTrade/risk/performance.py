@@ -3,14 +3,34 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlmodel import Session
 
-from alphaTrade.config import ModelRetirementConfig
+from alphaTrade.config import ModelRetirementConfig, ModelRetirementOverride
 from alphaTrade.store.repos import ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
+
+
+def _parse_period(s: str) -> timedelta:
+    if s.endswith("d"):
+        return timedelta(days=int(s[:-1]))
+    raise ValueError(f"Invalid period format: {s!r}. Use e.g. '30d'")
+
+
+def _effective_config(
+    global_cfg: ModelRetirementConfig,
+    per_model: ModelRetirementOverride,
+) -> ModelRetirementConfig:
+    return ModelRetirementConfig(
+        enabled=per_model.enabled if per_model.enabled is not None else global_cfg.enabled,
+        lookback_trades=per_model.lookback_trades if per_model.lookback_trades is not None else global_cfg.lookback_trades,
+        min_win_rate=per_model.min_win_rate if per_model.min_win_rate is not None else global_cfg.min_win_rate,
+        min_rolling_pnl=per_model.min_rolling_pnl if per_model.min_rolling_pnl is not None else global_cfg.min_rolling_pnl,
+        min_trades_before_evaluation=per_model.min_trades_before_evaluation if per_model.min_trades_before_evaluation is not None else global_cfg.min_trades_before_evaluation,
+        min_evaluation_period=per_model.min_evaluation_period if per_model.min_evaluation_period is not None else global_cfg.min_evaluation_period,
+    )
 
 
 def record_trade(

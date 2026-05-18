@@ -16,15 +16,6 @@ class BacktestScheduleOverride(BaseSettings):
     lookback_days: Optional[int] = None
 
 
-class ModelOverride(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
-
-    enabled: bool = True
-    t212_ticker: Optional[str] = None
-    size_pct: Optional[float] = None
-    backtest: BacktestScheduleOverride = BacktestScheduleOverride()
-
-
 class ModelRetirementConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     enabled: bool = False
@@ -32,6 +23,28 @@ class ModelRetirementConfig(BaseSettings):
     min_win_rate: float = 0.4
     min_rolling_pnl: float = -500.0
     auto_reload: bool = True
+    min_evaluation_period: str = "30d"
+    min_trades_before_evaluation: int = 5
+
+
+class ModelRetirementOverride(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    enabled: Optional[bool] = None
+    lookback_trades: Optional[int] = None
+    min_win_rate: Optional[float] = None
+    min_rolling_pnl: Optional[float] = None
+    min_trades_before_evaluation: Optional[int] = None
+    min_evaluation_period: Optional[str] = None
+
+
+class ModelOverride(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = True
+    t212_ticker: Optional[str] = None
+    size_pct: Optional[float] = None
+    backtest: BacktestScheduleOverride = BacktestScheduleOverride()
+    retirement: ModelRetirementOverride = ModelRetirementOverride()
 
 
 class BalancedPortfolioConfig(BaseSettings):

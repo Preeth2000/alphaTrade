@@ -817,6 +817,7 @@ async def run(settings: Settings) -> None:
             port=settings.api_port,
             registry=registry,
             backtest_scheduler=backtest_scheduler,
+            settings=settings,
         )
     except Exception as exc:
         log.error("API server failed to start on :%d: %s", settings.api_port, exc)

@@ -357,6 +357,11 @@ class ModelPerformanceRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
+    def get(self, model_id: str) -> ModelPerformance | None:
+        return self._s.exec(
+            select(ModelPerformance).where(ModelPerformance.model_id == model_id)
+        ).first()
+
     def get_or_create(self, model_id: str) -> ModelPerformance:
         existing = self._s.exec(
             select(ModelPerformance).where(ModelPerformance.model_id == model_id)

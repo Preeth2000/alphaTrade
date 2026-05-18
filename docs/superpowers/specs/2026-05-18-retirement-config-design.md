@@ -18,7 +18,7 @@ Two new fields added to existing config:
 ```python
 class ModelRetirementConfig(BaseSettings):
     enabled: bool = False
-    lookback_trades: int = 20           # rolling window size (global only, not per-model)
+    lookback_trades: int = 20           # rolling window size
     min_win_rate: float = 0.4
     min_rolling_pnl: float = -500.0
     min_evaluation_period: str = "30d"  # NEW — time-based gate
@@ -35,6 +35,7 @@ New class, nested in `ModelOverride` under `retirement:` key:
 class ModelRetirementOverride(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     enabled: Optional[bool] = None
+    lookback_trades: Optional[int] = None
     min_win_rate: Optional[float] = None
     min_rolling_pnl: Optional[float] = None
     min_trades_before_evaluation: Optional[int] = None
@@ -46,7 +47,7 @@ class ModelRetirementOverride(BaseSettings):
 retirement: ModelRetirementOverride = ModelRetirementOverride()
 ```
 
-All fields optional — `None` means fall back to global. `lookback_trades` is global-only (per-model override is a footgun; see design rationale below).
+All fields optional — `None` means fall back to global.
 
 `overrides.yaml` example:
 ```yaml
@@ -54,6 +55,7 @@ models:
   my_daily_model:
     retirement:
       enabled: false
+      lookback_trades: 10
       min_win_rate: 0.3
       min_rolling_pnl: -200.0
       min_trades_before_evaluation: 3
@@ -76,13 +78,9 @@ def _effective_config(
         min_rolling_pnl=per_model.min_rolling_pnl if per_model.min_rolling_pnl is not None else global_cfg.min_rolling_pnl,
         min_trades_before_evaluation=per_model.min_trades_before_evaluation if per_model.min_trades_before_evaluation is not None else global_cfg.min_trades_before_evaluation,
         min_evaluation_period=per_model.min_evaluation_period if per_model.min_evaluation_period is not None else global_cfg.min_evaluation_period,
-        lookback_trades=global_cfg.lookback_trades,
+        lookback_trades=per_model.lookback_trades if per_model.lookback_trades is not None else global_cfg.lookback_trades,
     )
 ```
-
-### Why `lookback_trades` is global-only
-
-Per-model `lookback_trades` can be set so high the model never accumulates enough trades to be evaluated — silently bypassing retirement. The correct solution for interval-aware windows is the time-based gate (`min_evaluation_period`).
 
 ---
 
@@ -102,6 +100,7 @@ Set once on first `record_trade` call (when `trade_count == 0`). Never updated a
 
 ```python
 retirement_enabled: Optional[bool] = Field(default=None)
+retirement_lookback_trades: Optional[int] = Field(default=None)
 retirement_min_win_rate: Optional[float] = Field(default=None)
 retirement_min_rolling_pnl: Optional[float] = Field(default=None)
 retirement_min_trades_before_evaluation: Optional[int] = Field(default=None)
@@ -195,6 +194,7 @@ PATCH /api/v1/retirement/config   → update global (writes BotSettings DB + imm
 ```json
 {
   "enabled": true,
+  "lookback_trades": 20,
   "min_win_rate": 0.35,
   "min_rolling_pnl": -300.0,
   "min_trades_before_evaluation": 10,
@@ -217,11 +217,13 @@ DELETE /api/v1/models/{run_name}/retirement   → clear overrides, revert to glo
 {
   "run_name": "my_model",
   "enabled": null,
+  "lookback_trades": null,
   "min_win_rate": 0.3,
   "min_rolling_pnl": null,
   "min_trades_before_evaluation": null,
   "min_evaluation_period": null,
   "effective_enabled": true,
+  "effective_lookback_trades": 20,
   "effective_min_win_rate": 0.3,
   "effective_min_rolling_pnl": -500.0,
   "effective_min_trades_before_evaluation": 5,

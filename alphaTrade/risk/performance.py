@@ -23,14 +23,8 @@ def _effective_config(
     global_cfg: ModelRetirementConfig,
     per_model: ModelRetirementOverride,
 ) -> ModelRetirementConfig:
-    return ModelRetirementConfig(
-        enabled=per_model.enabled if per_model.enabled is not None else global_cfg.enabled,
-        lookback_trades=per_model.lookback_trades if per_model.lookback_trades is not None else global_cfg.lookback_trades,
-        min_win_rate=per_model.min_win_rate if per_model.min_win_rate is not None else global_cfg.min_win_rate,
-        min_rolling_pnl=per_model.min_rolling_pnl if per_model.min_rolling_pnl is not None else global_cfg.min_rolling_pnl,
-        min_trades_before_evaluation=per_model.min_trades_before_evaluation if per_model.min_trades_before_evaluation is not None else global_cfg.min_trades_before_evaluation,
-        min_evaluation_period=per_model.min_evaluation_period if per_model.min_evaluation_period is not None else global_cfg.min_evaluation_period,
-    )
+    overrides = {k: v for k, v in per_model.model_dump().items() if v is not None}
+    return ModelRetirementConfig(**{**global_cfg.model_dump(), **overrides})
 
 
 def record_trade(

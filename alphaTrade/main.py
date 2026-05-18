@@ -122,6 +122,18 @@ def apply_bot_settings(
         settings.alerts.email.to_addrs = [
             a.strip() for a in db_s.email_to_addrs.split(",") if a.strip()
         ]
+    if db_s.retirement_enabled is not None:
+        settings.risk.model_retirement.enabled = db_s.retirement_enabled
+    if db_s.retirement_lookback_trades is not None:
+        settings.risk.model_retirement.lookback_trades = db_s.retirement_lookback_trades
+    if db_s.retirement_min_win_rate is not None:
+        settings.risk.model_retirement.min_win_rate = db_s.retirement_min_win_rate
+    if db_s.retirement_min_rolling_pnl is not None:
+        settings.risk.model_retirement.min_rolling_pnl = db_s.retirement_min_rolling_pnl
+    if db_s.retirement_min_trades_before_evaluation is not None:
+        settings.risk.model_retirement.min_trades_before_evaluation = db_s.retirement_min_trades_before_evaluation
+    if db_s.retirement_min_evaluation_period is not None:
+        settings.risk.model_retirement.min_evaluation_period = db_s.retirement_min_evaluation_period
 
 
 def _build_data_provider(settings: Settings) -> DataProvider:

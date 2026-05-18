@@ -1,6 +1,6 @@
 """Tests for rolling model performance tracking and retirement logic."""
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import asyncio
@@ -8,8 +8,8 @@ import asyncio
 import pytest
 from sqlmodel import Session
 
-from alphaTrade.config import ModelRetirementConfig
-from alphaTrade.risk.performance import record_trade, check_retirement
+from alphaTrade.config import ModelRetirementConfig, ModelRetirementOverride
+from alphaTrade.risk.performance import record_trade, check_retirement, _effective_config
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import ModelPerformanceRepo
 
@@ -67,7 +67,7 @@ def test_check_retirement_below_win_rate(engine):
 
 
 def test_check_retirement_below_rolling_pnl(engine):
-    cfg = ModelRetirementConfig(enabled=True, lookback_trades=3, min_win_rate=0.0, min_rolling_pnl=-50.0)
+    cfg = ModelRetirementConfig(enabled=True, lookback_trades=3, min_win_rate=0.0, min_rolling_pnl=-50.0, min_trades_before_evaluation=3)
     with Session(engine) as s:
         for pnl in [-20.0, -20.0, -20.0]:
             record_trade(s, model_id="model_a", realized_pnl=pnl, cfg=cfg)
@@ -133,3 +133,77 @@ def test_first_trade_at_not_updated_on_subsequent_trades(engine):
         record_trade(s, model_id="model_x", realized_pnl=20.0, cfg=cfg)
         perf = ModelPerformanceRepo(s).get_or_create("model_x")
         assert perf.first_trade_at == first
+
+
+def test_retirement_fires_after_trade_count_gate(engine):
+    """Retires when trade count reached, even before evaluation period elapsed."""
+    cfg = ModelRetirementConfig(
+        enabled=True,
+        lookback_trades=5,
+        min_win_rate=0.9,   # impossible to meet
+        min_rolling_pnl=-9999,
+        min_trades_before_evaluation=3,
+        min_evaluation_period="9999d",  # will never elapse
+    )
+    with Session(engine) as s:
+        for _ in range(3):
+            record_trade(s, model_id="m", realized_pnl=-10.0, cfg=cfg)
+        retired = check_retirement(s, model_id="m", cfg=cfg)
+    assert retired is True
+
+
+def test_retirement_fires_after_evaluation_period(engine):
+    """Retires when evaluation period elapsed, even if trade count gate not met."""
+    cfg = ModelRetirementConfig(
+        enabled=True,
+        lookback_trades=5,
+        min_win_rate=0.9,   # impossible to meet
+        min_rolling_pnl=-9999,
+        min_trades_before_evaluation=9999,  # will never be met by trade count alone
+        min_evaluation_period="1d",
+    )
+    with Session(engine) as s:
+        record_trade(s, model_id="m2", realized_pnl=-10.0, cfg=cfg)
+        # backdate first_trade_at to 2 days ago
+        perf = ModelPerformanceRepo(s).get_or_create("m2")
+        perf.first_trade_at = datetime.utcnow() - timedelta(days=2)
+        s.add(perf)
+        s.commit()
+        retired = check_retirement(s, model_id="m2", cfg=cfg)
+    assert retired is True
+
+
+def test_retirement_not_triggered_when_neither_gate_met(engine):
+    """Neither trade count nor period gate met — no evaluation."""
+    cfg = ModelRetirementConfig(
+        enabled=True,
+        lookback_trades=5,
+        min_win_rate=0.9,
+        min_rolling_pnl=-9999,
+        min_trades_before_evaluation=99,
+        min_evaluation_period="9999d",
+    )
+    with Session(engine) as s:
+        record_trade(s, model_id="m3", realized_pnl=-10.0, cfg=cfg)
+        retired = check_retirement(s, model_id="m3", cfg=cfg)
+    assert retired is False
+
+
+def test_already_retired_returns_true_immediately(engine):
+    """Already-retired model short-circuits without re-evaluating."""
+    cfg = ModelRetirementConfig(
+        enabled=True,
+        lookback_trades=5,
+        min_win_rate=0.0,   # would pass if evaluated
+        min_rolling_pnl=-9999,
+        min_trades_before_evaluation=1,
+        min_evaluation_period="1d",
+    )
+    with Session(engine) as s:
+        record_trade(s, model_id="m4", realized_pnl=100.0, cfg=cfg)
+        perf = ModelPerformanceRepo(s).get_or_create("m4")
+        perf.retired = True
+        s.add(perf)
+        s.commit()
+        result = check_retirement(s, model_id="m4", cfg=cfg)
+    assert result is True

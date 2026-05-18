@@ -43,6 +43,8 @@ def record_trade(
         trades = trades[-cfg.lookback_trades:]
 
     perf.rolling_trades_json = json.dumps(trades)
+    if perf.trade_count == 0:
+        perf.first_trade_at = datetime.utcnow()
     perf.trade_count += 1
     if realized_pnl > 0:
         perf.win_count += 1
@@ -56,7 +58,7 @@ def check_retirement(
     model_id: str,
     cfg: ModelRetirementConfig,
 ) -> bool:
-    """Return True and mark retired if model breaches thresholds. Return False otherwise."""
+    """Return True and mark retired if model breaches thresholds, False otherwise."""
     if not cfg.enabled:
         return False
 
@@ -66,11 +68,18 @@ def check_retirement(
     if perf.retired:
         return True
 
-    trades: list[float] = json.loads(perf.rolling_trades_json)
-    if len(trades) < cfg.lookback_trades:
+    period = _parse_period(cfg.min_evaluation_period)
+    age_ok = (
+        perf.first_trade_at is not None
+        and (datetime.utcnow() - perf.first_trade_at) >= period
+    )
+    trades_ok = perf.trade_count >= cfg.min_trades_before_evaluation
+
+    if not (age_ok or trades_ok):
         return False
 
-    win_rate = sum(1 for t in trades if t > 0) / len(trades)
+    trades: list[float] = json.loads(perf.rolling_trades_json)
+    win_rate = sum(1 for t in trades if t > 0) / len(trades) if trades else 0.0
     rolling_pnl = sum(trades)
 
     should_retire = win_rate < cfg.min_win_rate or rolling_pnl < cfg.min_rolling_pnl

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from typing import Optional
 
@@ -15,6 +16,8 @@ from alphaTrade.risk.performance import _effective_config, _parse_period
 from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
+
+_yaml_lock = threading.Lock()
 
 
 class GlobalRetirementUpdate(BaseModel):
@@ -76,34 +79,35 @@ class PerModelRetirementResponse(BaseModel):
 
 def _persist_retirement_overrides(settings: Settings) -> None:
     path = settings.overrides_path
-    raw: dict = yaml.safe_load(path.read_text()) if path.exists() and path.stat().st_size > 0 else {}
-    raw.setdefault("models", {})
-    for run_name, override in settings.model_overrides.items():
-        ret = override.retirement
-        ret_dict: dict = {}
-        if ret.enabled is not None:
-            ret_dict["enabled"] = ret.enabled
-        if ret.lookback_trades is not None:
-            ret_dict["lookback_trades"] = ret.lookback_trades
-        if ret.min_win_rate is not None:
-            ret_dict["min_win_rate"] = ret.min_win_rate
-        if ret.min_rolling_pnl is not None:
-            ret_dict["min_rolling_pnl"] = ret.min_rolling_pnl
-        if ret.min_trades_before_evaluation is not None:
-            ret_dict["min_trades_before_evaluation"] = ret.min_trades_before_evaluation
-        if ret.min_evaluation_period is not None:
-            ret_dict["min_evaluation_period"] = ret.min_evaluation_period
-        existing = raw["models"].get(run_name, {})
-        if ret_dict:
-            existing["retirement"] = ret_dict
-            raw["models"][run_name] = existing
-        elif "retirement" in existing:
-            del existing["retirement"]
-            if existing:
+    with _yaml_lock:
+        raw: dict = yaml.safe_load(path.read_text()) if path.exists() and path.stat().st_size > 0 else {}
+        raw.setdefault("models", {})
+        for run_name, override in settings.model_overrides.items():
+            ret = override.retirement
+            ret_dict: dict = {}
+            if ret.enabled is not None:
+                ret_dict["enabled"] = ret.enabled
+            if ret.lookback_trades is not None:
+                ret_dict["lookback_trades"] = ret.lookback_trades
+            if ret.min_win_rate is not None:
+                ret_dict["min_win_rate"] = ret.min_win_rate
+            if ret.min_rolling_pnl is not None:
+                ret_dict["min_rolling_pnl"] = ret.min_rolling_pnl
+            if ret.min_trades_before_evaluation is not None:
+                ret_dict["min_trades_before_evaluation"] = ret.min_trades_before_evaluation
+            if ret.min_evaluation_period is not None:
+                ret_dict["min_evaluation_period"] = ret.min_evaluation_period
+            existing = raw["models"].get(run_name, {})
+            if ret_dict:
+                existing["retirement"] = ret_dict
                 raw["models"][run_name] = existing
-            else:
-                raw["models"].pop(run_name, None)
-    path.write_text(yaml.dump(raw, default_flow_style=False))
+            elif "retirement" in existing:
+                del existing["retirement"]
+                if existing:
+                    raw["models"][run_name] = existing
+                else:
+                    raw["models"].pop(run_name, None)
+        path.write_text(yaml.dump(raw, default_flow_style=False))
 
 
 def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings) -> APIRouter:

@@ -17,6 +17,7 @@ from alphaTrade.adapter.window import build_input
 from alphaTrade.config import BacktestConfig
 from alphaTrade.consensus.softmax_avg import CLASS_NAMES
 from alphaTrade.consensus.softmax_avg import consensus as softmax_vote
+from alphaTrade.data.provider import DataProvider
 from alphaTrade.data.yfinance_provider import YFinanceProvider
 from alphaTrade.main import scan_models
 from alphaTrade.store.repos import BacktestRepo
@@ -73,6 +74,7 @@ def run_backtest(
     cfg: BacktestConfig,
     run_id: int | None = None,
     model_filter: str | None = None,
+    provider: DataProvider | None = None,
 ) -> dict[str, Any]:
     """Run backtest for all (or one filtered) model in models_dir. Returns summary dict."""
     models = scan_models(models_dir)
@@ -83,7 +85,8 @@ def run_backtest(
             f"No models found in {models_dir}" + (f" matching {model_filter!r}" if model_filter else "")
         )
 
-    provider = YFinanceProvider()
+    if provider is None:
+        provider = YFinanceProvider()
     repo = BacktestRepo(session)
     if run_id is None:
         run_id = repo.create_run(start=start, end=end, config_json=cfg.model_dump_json())
@@ -92,16 +95,25 @@ def run_backtest(
 
     for manifest, model in models:
         log.info("backtest: running %s (%s, %s)", manifest.run_name, manifest.ticker, manifest.interval)
-        trades = _run_single_model(
+        trades, status = _run_single_model(
             manifest=manifest,
             model=model,
-            provider=provider,
+            provider=provider,  # type: ignore[arg-type]
             start=start,
             end=end,
             cfg=cfg,
         )
         for t in trades:
             repo.record_trade(run_id=run_id, **t)
+        repo.record_model_run(
+            run_id=run_id,
+            model_id=manifest.run_name,
+            ticker=manifest.ticker,
+            interval=manifest.interval,
+            trade_count=len(trades),
+            status=status,
+            error_msg="",
+        )
         all_trades.extend(trades)
         log.info("backtest: %s → %d trades", manifest.run_name, len(trades))
 
@@ -111,18 +123,18 @@ def run_backtest(
 def _run_single_model(
     manifest: Manifest,
     model: OnnxModel,
-    provider: YFinanceProvider,
+    provider: DataProvider,
     start: str,
     end: str,
     cfg: BacktestConfig,
-) -> list[dict]:
-    """Walk forward bar-by-bar for one model. No lookahead."""
+) -> tuple[list[dict], str]:
+    """Walk forward bar-by-bar for one model. Returns (trades, status)."""
     # Fetch enough history for feature computation + window warm-up
     warmup_bars = manifest.window + 50
     df = provider.fetch_ohlcv_range(manifest.ticker, manifest.interval, start=start, end=end, extra_bars=warmup_bars)
     if df is None or len(df) < manifest.window + 2:
         log.warning("backtest: not enough data for %s", manifest.run_name)
-        return []
+        return [], "no_data"
 
     trades: list[dict] = []
     state: BacktestState | None = None
@@ -200,7 +212,7 @@ def _run_single_model(
             model_id=manifest.run_name,
         ))
 
-    return trades
+    return trades, "ran"
 
 
 def _infer(manifest: Manifest, model: OnnxModel, df) -> str:

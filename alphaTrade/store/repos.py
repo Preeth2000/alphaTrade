@@ -290,6 +290,17 @@ class BacktestTrade(SQLModel, table=True):
     tp_price: Optional[float] = None
 
 
+class BacktestModelRun(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: int = Field(index=True)
+    model_id: str
+    ticker: str
+    interval: str
+    trade_count: int = 0
+    status: str = "ran"   # ran | no_data | failed
+    error_msg: str = ""
+
+
 # ---------------------------------------------------------------------------
 # New repo classes (migration 0002)
 # ---------------------------------------------------------------------------
@@ -435,6 +446,32 @@ class BacktestRepo:
     def trades_for_run(self, run_id: int) -> list[BacktestTrade]:
         return list(self._s.exec(
             select(BacktestTrade).where(BacktestTrade.run_id == run_id)
+        ).all())
+
+    def record_model_run(
+        self,
+        run_id: int,
+        model_id: str,
+        ticker: str,
+        interval: str,
+        trade_count: int,
+        status: str,
+        error_msg: str = "",
+    ) -> None:
+        self._s.add(BacktestModelRun(
+            run_id=run_id,
+            model_id=model_id,
+            ticker=ticker,
+            interval=interval,
+            trade_count=trade_count,
+            status=status,
+            error_msg=error_msg,
+        ))
+        self._s.commit()
+
+    def model_runs_for_run(self, run_id: int) -> list[BacktestModelRun]:
+        return list(self._s.exec(
+            select(BacktestModelRun).where(BacktestModelRun.run_id == run_id)
         ).all())
 
     def list_runs(self, limit: int = 50) -> list[BacktestRun]:

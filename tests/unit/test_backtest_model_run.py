@@ -73,8 +73,6 @@ from pathlib import Path
 import pandas as pd
 from alphaTrade.backtest.engine import run_backtest
 from alphaTrade.config import BacktestConfig
-from sqlalchemy import create_engine as create_engine_sa
-
 
 def _make_manifest(run_name="m1", ticker="AAPL", interval="1d", window=3):
     m = MagicMock()
@@ -108,7 +106,7 @@ def test_run_backtest_records_model_run_zero_trades(tmp_path):
     cfg = BacktestConfig()
 
     provider = MagicMock()
-    provider.fetch_ohlcv_range.return_value = _make_df(20)
+    provider.fetch_ohlcv_range.return_value = _make_df(60)
 
     with patch("alphaTrade.backtest.engine.scan_models", return_value=[(manifest, mock_model)]):
         with patch("alphaTrade.backtest.engine._infer", return_value="HOLD"):
@@ -166,3 +164,37 @@ def test_run_backtest_records_no_data_status(tmp_path):
         assert len(model_runs) == 1
         assert model_runs[0].status == "no_data"
         assert model_runs[0].trade_count == 0
+
+
+def test_run_backtest_records_failed_status_on_exception(tmp_path):
+    """Engine records failed status and error_msg when model raises an exception."""
+    db = tmp_path / "test.db"
+    run_migrations(db)
+    engine_db = create_engine(f"sqlite:///{db}")
+
+    manifest = _make_manifest()
+    mock_model = MagicMock()
+    cfg = BacktestConfig()
+    provider = MagicMock()
+    provider.fetch_ohlcv_range.side_effect = RuntimeError("network error")
+
+    with patch("alphaTrade.backtest.engine.scan_models", return_value=[(manifest, mock_model)]):
+        with Session(engine_db) as session:
+            run_backtest(
+                session=session,
+                models_dir=Path("/fake"),
+                start="2026-01-10",
+                end="2026-01-20",
+                cfg=cfg,
+                provider=provider,
+            )
+
+    with Session(engine_db) as session:
+        repo = BacktestRepo(session)
+        runs = repo.list_runs()
+        model_runs = repo.model_runs_for_run(runs[0].id)
+        assert len(model_runs) == 1
+        mr = model_runs[0]
+        assert mr.status == "failed"
+        assert "network error" in mr.error_msg
+        assert mr.trade_count == 0

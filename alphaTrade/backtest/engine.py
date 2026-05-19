@@ -95,16 +95,21 @@ def run_backtest(
 
     for manifest, model in models:
         log.info("backtest: running %s (%s, %s)", manifest.run_name, manifest.ticker, manifest.interval)
-        trades, status = _run_single_model(
-            manifest=manifest,
-            model=model,
-            provider=provider,  # type: ignore[arg-type]
-            start=start,
-            end=end,
-            cfg=cfg,
-        )
-        for t in trades:
-            repo.record_trade(run_id=run_id, **t)
+        error_msg = ""
+        try:
+            trades, status = _run_single_model(
+                manifest=manifest,
+                model=model,
+                provider=provider,  # type: ignore[arg-type]
+                start=start,
+                end=end,
+                cfg=cfg,
+            )
+            for t in trades:
+                repo.record_trade(run_id=run_id, **t)
+        except Exception as exc:
+            log.exception("backtest: model %s raised: %s", manifest.run_name, exc)
+            trades, status, error_msg = [], "failed", str(exc)
         repo.record_model_run(
             run_id=run_id,
             model_id=manifest.run_name,
@@ -112,7 +117,7 @@ def run_backtest(
             interval=manifest.interval,
             trade_count=len(trades),
             status=status,
-            error_msg="",
+            error_msg=error_msg,
         )
         all_trades.extend(trades)
         log.info("backtest: %s → %d trades", manifest.run_name, len(trades))

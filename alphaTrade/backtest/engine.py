@@ -110,15 +110,18 @@ def run_backtest(
         except Exception as exc:
             log.exception("backtest: model %s raised: %s", manifest.run_name, exc)
             trades, status, error_msg = [], "failed", str(exc)
-        repo.record_model_run(
-            run_id=run_id,
-            model_id=manifest.run_name,
-            ticker=manifest.ticker,
-            interval=manifest.interval,
-            trade_count=len(trades),
-            status=status,
-            error_msg=error_msg,
-        )
+        try:
+            repo.record_model_run(
+                run_id=run_id,
+                model_id=manifest.run_name,
+                ticker=manifest.ticker,
+                interval=manifest.interval,
+                trade_count=len(trades),
+                status=status,
+                error_msg=error_msg,
+            )
+        except Exception as exc:
+            log.exception("backtest: failed to record model run for %s: %s", manifest.run_name, exc)
         all_trades.extend(trades)
         log.info("backtest: %s → %d trades", manifest.run_name, len(trades))
 

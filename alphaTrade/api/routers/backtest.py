@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session
 
-from alphaTrade.store.repos import BacktestRun, BacktestTrade, BacktestRepo
+from alphaTrade.store.repos import BacktestRun, BacktestTrade, BacktestRepo, BacktestModelRun
 
 
 class TriggerRequest(BaseModel):
@@ -101,6 +101,16 @@ def make_router(session_dep: Callable, api_key_dep: Callable, backtest_scheduler
             raise HTTPException(status_code=404, detail="Run not found")
         return BacktestRepo(session).trades_for_run(run_id)
 
+    @router.get("/backtest/runs/{run_id}/models", response_model=list[BacktestModelRun])
+    def list_model_runs(
+        run_id: int,
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ):
+        if session.get(BacktestRun, run_id) is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return BacktestRepo(session).model_runs_for_run(run_id)
+
     @router.get("/backtest/schedule")
     def get_schedule(_: None = Depends(api_key_dep)):
         if backtest_scheduler is None:
@@ -120,6 +130,12 @@ def make_router(session_dep: Callable, api_key_dep: Callable, backtest_scheduler
             lookback_days=req.lookback_days,
         )
         return backtest_scheduler.get_status()
+
+    @router.get("/backtest/schedule/models")
+    def get_all_model_schedules(_: None = Depends(api_key_dep)):
+        if backtest_scheduler is None:
+            raise HTTPException(status_code=503, detail="Backtest scheduler not available")
+        return backtest_scheduler.get_all_model_statuses()
 
     @router.get("/backtest/schedule/{model_id}")
     def get_model_schedule(model_id: str, _: None = Depends(api_key_dep)):

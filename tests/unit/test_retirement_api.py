@@ -5,7 +5,6 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 from sqlmodel import Session, create_engine
 
@@ -92,7 +91,7 @@ class TestPerModelRetirementConfig:
         assert data["effective_enabled"] is False  # global default
         assert data["effective_min_win_rate"] == 0.4
 
-    def test_patch_sets_override_and_persists_to_yaml(self, tmp_path):
+    def test_patch_sets_override_and_persists_to_db(self, tmp_path):
         engine = _make_engine(tmp_path)
         settings = _make_settings(tmp_path)
         client = _make_client(engine, settings)
@@ -103,21 +102,29 @@ class TestPerModelRetirementConfig:
         assert data["min_win_rate"] == 0.3
         assert data["effective_enabled"] is False
         assert data["effective_min_win_rate"] == 0.3
-        # in-memory
-        assert settings.model_overrides["my_model"].retirement.enabled is False
-        # YAML persisted
-        raw = yaml.safe_load(settings.overrides_path.read_text())
-        assert raw["models"]["my_model"]["retirement"]["enabled"] is False
+        # persisted to DB
+        with Session(engine) as s:
+            from alphaTrade.store.repos import ModelOverrideRepo
+            rec = ModelOverrideRepo(s).get("my_model")
+            assert rec is not None
+            assert rec.retirement_enabled is False
+            assert rec.retirement_min_win_rate == 0.3
+        # YAML not touched
+        raw = settings.overrides_path.read_text()
+        assert "my_model" not in raw
 
-    def test_delete_clears_overrides_and_reverts_to_global(self, tmp_path):
+    def test_delete_clears_retirement_fields_in_db(self, tmp_path):
         engine = _make_engine(tmp_path)
         settings = _make_settings(tmp_path)
         client = _make_client(engine, settings)
         client.patch("/api/v1/models/my_model/retirement", json={"enabled": False})
         r = client.delete("/api/v1/models/my_model/retirement")
         assert r.status_code == 200
-        assert settings.model_overrides.get("my_model") is None or \
-               settings.model_overrides["my_model"].retirement.enabled is None
+        with Session(engine) as s:
+            from alphaTrade.store.repos import ModelOverrideRepo
+            rec = ModelOverrideRepo(s).get("my_model")
+            # retirement fields cleared
+            assert rec is None or rec.retirement_enabled is None
 
 
 class TestUnretire:

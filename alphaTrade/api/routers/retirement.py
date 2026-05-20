@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import logging
-import threading
 from collections.abc import Callable
 from typing import Optional
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session
 
-from alphaTrade.config import ModelOverride, ModelRetirementOverride, Settings
+from alphaTrade.config import ModelRetirementOverride, Settings
 from alphaTrade.risk.performance import _effective_config, _parse_period
 from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
-
-_yaml_lock = threading.Lock()
 
 
 class GlobalRetirementUpdate(BaseModel):
@@ -77,38 +73,6 @@ class PerModelRetirementResponse(BaseModel):
     effective_min_evaluation_period: str
 
 
-def _persist_retirement_overrides(settings: Settings) -> None:
-    path = settings.overrides_path
-    with _yaml_lock:
-        raw: dict = yaml.safe_load(path.read_text()) if path.exists() and path.stat().st_size > 0 else {}
-        raw.setdefault("models", {})
-        for run_name, override in settings.model_overrides.items():
-            ret = override.retirement
-            ret_dict: dict = {}
-            if ret.enabled is not None:
-                ret_dict["enabled"] = ret.enabled
-            if ret.lookback_trades is not None:
-                ret_dict["lookback_trades"] = ret.lookback_trades
-            if ret.min_win_rate is not None:
-                ret_dict["min_win_rate"] = ret.min_win_rate
-            if ret.min_rolling_pnl is not None:
-                ret_dict["min_rolling_pnl"] = ret.min_rolling_pnl
-            if ret.min_trades_before_evaluation is not None:
-                ret_dict["min_trades_before_evaluation"] = ret.min_trades_before_evaluation
-            if ret.min_evaluation_period is not None:
-                ret_dict["min_evaluation_period"] = ret.min_evaluation_period
-            existing = raw["models"].get(run_name, {})
-            if ret_dict:
-                existing["retirement"] = ret_dict
-                raw["models"][run_name] = existing
-            elif "retirement" in existing:
-                del existing["retirement"]
-                if existing:
-                    raw["models"][run_name] = existing
-                else:
-                    raw["models"].pop(run_name, None)
-        path.write_text(yaml.dump(raw, default_flow_style=False))
-
 
 def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings) -> APIRouter:
     router = APIRouter()
@@ -151,8 +115,17 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
             min_evaluation_period=cfg.min_evaluation_period,
         )
 
-    def _per_model_response(run_name: str) -> PerModelRetirementResponse:
-        override = settings.model_overrides.get(run_name, ModelOverride()).retirement
+    def _per_model_response(run_name: str, session: Session) -> PerModelRetirementResponse:
+        from alphaTrade.store.repos import ModelOverrideRepo
+        rec = ModelOverrideRepo(session).get(run_name)
+        override = ModelRetirementOverride(
+            enabled=rec.retirement_enabled if rec else None,
+            lookback_trades=rec.retirement_lookback_trades if rec else None,
+            min_win_rate=rec.retirement_min_win_rate if rec else None,
+            min_rolling_pnl=rec.retirement_min_rolling_pnl if rec else None,
+            min_trades_before_evaluation=rec.retirement_min_trades_before_evaluation if rec else None,
+            min_evaluation_period=rec.retirement_min_evaluation_period if rec else None,
+        )
         effective = _effective_config(settings.risk.model_retirement, override)
         return PerModelRetirementResponse(
             run_name=run_name,
@@ -171,28 +144,51 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         )
 
     @router.get("/models/{run_name}/retirement", response_model=PerModelRetirementResponse)
-    def get_per_model(run_name: str, _: None = Depends(api_key_dep)):
-        return _per_model_response(run_name)
+    def get_per_model(
+        run_name: str,
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ):
+        return _per_model_response(run_name, session)
 
     @router.patch("/models/{run_name}/retirement", response_model=PerModelRetirementResponse)
     def patch_per_model(
         run_name: str,
         update: PerModelRetirementUpdate,
+        session: Session = Depends(session_dep),
         _: None = Depends(api_key_dep),
     ):
-        if run_name not in settings.model_overrides:
-            settings.model_overrides[run_name] = ModelOverride()
-        override = settings.model_overrides[run_name].retirement
+        from alphaTrade.store.repos import ModelOverrideRepo, ModelOverrideRecord
+        repo = ModelOverrideRepo(session)
+        rec = repo.get(run_name) or ModelOverrideRecord(run_name=run_name)
+        field_map = {
+            "enabled": "retirement_enabled",
+            "lookback_trades": "retirement_lookback_trades",
+            "min_win_rate": "retirement_min_win_rate",
+            "min_rolling_pnl": "retirement_min_rolling_pnl",
+            "min_trades_before_evaluation": "retirement_min_trades_before_evaluation",
+            "min_evaluation_period": "retirement_min_evaluation_period",
+        }
         for field, val in update.model_dump(exclude_unset=True).items():
-            setattr(override, field, val)
-        _persist_retirement_overrides(settings)
-        return _per_model_response(run_name)
+            setattr(rec, field_map[field], val)
+        repo.upsert(rec)
+        return _per_model_response(run_name, session)
 
     @router.delete("/models/{run_name}/retirement")
-    def delete_per_model(run_name: str, _: None = Depends(api_key_dep)):
-        if run_name in settings.model_overrides:
-            settings.model_overrides[run_name].retirement = ModelRetirementOverride()
-            _persist_retirement_overrides(settings)
+    def delete_per_model(
+        run_name: str,
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ):
+        from alphaTrade.store.repos import ModelOverrideRepo
+        repo = ModelOverrideRepo(session)
+        rec = repo.get(run_name)
+        if rec is not None:
+            for col in ("retirement_enabled", "retirement_lookback_trades", "retirement_min_win_rate",
+                        "retirement_min_rolling_pnl", "retirement_min_trades_before_evaluation",
+                        "retirement_min_evaluation_period"):
+                setattr(rec, col, None)
+            repo.upsert(rec)
         return {"deleted": True, "run_name": run_name}
 
     @router.post("/models/{run_name}/unretire")

@@ -19,10 +19,13 @@ from alphaTrade.adapter.inference import OnnxModel
 from alphaTrade.adapter.manifest import Manifest
 from alphaTrade.adapter.normalize import normalize
 from alphaTrade.adapter.window import build_input
+from alphaTrade.broker.async_broker import AsyncBroker
 from alphaTrade.broker.instrument_map import InstrumentMap
 from alphaTrade.broker.oco_monitor import monitor_oco
+from alphaTrade.broker.order_queue import OrderRequest, OrderResult
 from alphaTrade.broker.orders import make_client_order_id, submit_order_async
 from alphaTrade.broker.t212_client import T212Client
+from alphaTrade.broker.throttle import EndpointThrottle
 from alphaTrade.config import ModelOverride, Settings
 from alphaTrade.consensus.softmax_avg import consensus_by_ticker
 from alphaTrade.data.provider import DataProvider
@@ -97,10 +100,16 @@ def apply_bot_settings(
     if new_key and (current_key != new_key or current_base != new_base):
         t212_holder[0] = T212Client(api_key=new_key, secret_key=new_secret, env=new_env)
         log.info("Hot-reload: T212Client reinitialised (account=%s, env=%s)", db_s.t212_active_account, new_env)
-    if db_s.data_provider and db_s.data_provider != settings.data_provider:
+    _key_changed = bool(db_s.polygon_api_key) and db_s.polygon_api_key != settings.polygon_api_key
+    _prov_changed = bool(db_s.data_provider) and db_s.data_provider != settings.data_provider
+    if _key_changed:
+        settings.polygon_api_key = db_s.polygon_api_key
+    if _prov_changed:
         settings.data_provider = db_s.data_provider
+    if _key_changed or _prov_changed:
         provider_holder[0] = _build_data_provider(settings)
-        log.info("Hot-reload: data provider switched to %s", db_s.data_provider)
+        if _prov_changed:
+            log.info("Hot-reload: data provider switched to %s", db_s.data_provider)
     if db_s.size_pct:
         settings.defaults.size_pct = db_s.size_pct
     if db_s.stop_loss_pct:
@@ -114,6 +123,10 @@ def apply_bot_settings(
         settings.risk.max_positions = db_s.max_positions
     if db_s.daily_loss_halt_pct:
         settings.risk.daily_loss_halt_pct = db_s.daily_loss_halt_pct
+    if db_s.safe_mode is not None:
+        settings.risk.safe_mode = db_s.safe_mode
+    if db_s.dangerously_allow_pyramid is not None:
+        settings.risk.dangerously_allow_pyramid = db_s.dangerously_allow_pyramid
     settings.alerts.slack.enabled = db_s.slack_enabled
     if db_s.slack_webhook_url:
         settings.alerts.slack.webhook_url = db_s.slack_webhook_url
@@ -137,11 +150,8 @@ def apply_bot_settings(
 
 
 def _build_data_provider(settings: Settings) -> DataProvider:
-    if settings.data_provider == "polygon":
-        from alphaTrade.data.polygon_provider import PolygonProvider
-        return PolygonProvider(api_key=settings.polygon_api_key)
-    from alphaTrade.data.yfinance_provider import YFinanceProvider
-    return YFinanceProvider()
+    from alphaTrade.data.factory import build_data_provider
+    return build_data_provider(settings)
 
 
 def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
@@ -292,6 +302,8 @@ def make_tick(
     oco_tasks: set,
     static_map: dict[str, str],
     alert_manager=None,
+    throttle: "EndpointThrottle | None" = None,
+    broker: "AsyncBroker | None" = None,
 ):
     """Return an async tick coroutine for the given interval.
 
@@ -375,6 +387,8 @@ def make_tick(
             order_repo = OrderRepo(session)
 
             try:
+                if throttle is not None:
+                    await throttle.acquire("account_cash")
                 equity = await asyncio.to_thread(t212.get_total_equity)
                 health_state.t212_ok = True
             except Exception as exc:
@@ -462,6 +476,20 @@ def make_tick(
 
                 pos = pos_repo.get(t212_ticker)
 
+                eff_safe_mode = next(
+                    (v for v in [
+                        db_ov.safe_mode if db_ov else None,
+                        yaml_ov.safe_mode if yaml_ov else None,
+                        settings.risk.safe_mode,
+                    ] if v is not None),
+                    True,
+                )
+                eff_dangerously_allow_pyramid = (
+                    (db_ov.dangerously_allow_pyramid if db_ov and db_ov.dangerously_allow_pyramid is not None else None)
+                    or (yaml_ov.dangerously_allow_pyramid if yaml_ov and yaml_ov.dangerously_allow_pyramid is not None else None)
+                    or settings.risk.dangerously_allow_pyramid
+                )
+
                 gate: GateResult = run_gates(
                     signal=signal,
                     t212_ticker=t212_ticker,
@@ -474,6 +502,9 @@ def make_tick(
                     equity=equity,
                     sector_repo=SectorCacheRepo(session),
                     risk_cfg=settings.risk,
+                    interval=manifest.interval,
+                    safe_mode=eff_safe_mode,
+                    dangerously_allow_pyramid=eff_dangerously_allow_pyramid,
                 )
 
                 if not gate.approved:
@@ -641,7 +672,15 @@ def make_tick(
                     if err_rec:
                         order_repo.update_fill(err_rec.id, "error", None, "")
                     orders_total.labels(side=signal, status="error").inc()
-                    log.error("Order failed for %s: %s", t212_ticker, exc)
+                    import httpx as _httpx
+                    _body = ""
+                    if isinstance(exc, _httpx.HTTPStatusError):
+                        try:
+                            _body = exc.response.text
+                        except Exception:
+                            pass
+                    log.error("Order failed for %s: %s%s", t212_ticker, exc,
+                              f" | T212 response: {_body}" if _body else "")
                     if alert_manager is not None:
                         alert_manager.notify(
                             f"Order error for {t212_ticker}: {exc}",
@@ -699,6 +738,140 @@ async def run(settings: Settings) -> None:
     t212 = _t212_from_settings(settings)
     t212_holder: list = [t212]
 
+    throttle = EndpointThrottle.from_t212_config(settings.executors.trading212.throttle)
+    broker = AsyncBroker(
+        t212=t212,
+        throttle=throttle,
+        stale_window_multiplier=settings.risk.order_stale_window_multiplier,
+        max_queue_depth=settings.risk.order_queue_max_depth,
+    )
+
+    async def _on_order_fill(result: OrderResult) -> None:
+        from sqlmodel import Session as _Session
+        from alphaTrade.store.repos import (
+            OrderRepo, PositionRepo, TradeJournalRepo, Position,
+        )
+        from alphaTrade.risk.performance import _effective_config, check_retirement, record_trade
+        from alphaTrade.notify.alerting import AlertLevel
+        from alphaTrade.broker.oco_monitor import monitor_oco
+        from alphaTrade.config import ModelOverride
+        from datetime import timedelta, datetime
+
+        req = result.request
+
+        if result.status not in ("filled",):
+            if result.status == "stale_dropped":
+                log.info("Order stale-dropped: %s %s", req.side, req.t212_ticker)
+            elif result.status == "failed":
+                log.error("Order failed: %s %s — %s", req.side, req.t212_ticker, result.error)
+                if alert_manager is not None:
+                    alert_manager.notify(
+                        f"Order error for {req.t212_ticker}: {result.error}",
+                        AlertLevel.ERROR,
+                    )
+            return
+
+        fill_price = result.fill_price or req.entry_price
+
+        with _Session(engine) as session:
+            order_repo = OrderRepo(session)
+            pos_repo = PositionRepo(session)
+
+            saved = order_repo.find_by_client_order_id(req.client_order_id)
+            if saved:
+                order_repo.update_fill(saved.id, "filled", fill_price, result.t212_order_id)
+
+            cooldown_secs = _INTERVAL_SECONDS.get(req.interval, 86400) * settings.defaults.cooldown_bars
+            cooldown_td = timedelta(seconds=cooldown_secs)
+
+            if req.side == "BUY":
+                pos_repo.upsert(Position(
+                    t212_ticker=req.t212_ticker,
+                    quantity=req.quantity,
+                    avg_entry=fill_price,
+                    last_signal_ts=datetime.utcnow(),
+                ))
+                from alphaTrade.metrics import open_positions as metric_open_positions
+                metric_open_positions.set(len(pos_repo.all()))
+
+                if result.stop_order_id and result.limit_order_id:
+                    pos_repo.update_oco_ids(req.t212_ticker, result.stop_order_id, result.limit_order_id)
+
+                sl_price = fill_price * (1 - req.stop_loss_pct)
+                tp_price = fill_price * (1 + req.take_profit_pct)
+
+                yaml_ov = settings.model_overrides.get(req.run_name, ModelOverride())
+                per_model_ret = yaml_ov.retirement
+                _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
+
+                if result.stop_order_id and result.limit_order_id:
+                    _task = asyncio.create_task(monitor_oco(
+                        t212=t212_holder[0],
+                        t212_ticker=req.t212_ticker,
+                        stop_order_id=result.stop_order_id,
+                        limit_order_id=result.limit_order_id,
+                        engine=engine,
+                        cooldown_td=cooldown_td,
+                        entry_price=fill_price,
+                        sl_price=sl_price,
+                        tp_price=tp_price,
+                        quantity=req.quantity,
+                        model_id=req.run_name,
+                        entry_time=result.submitted_at or datetime.utcnow(),
+                        retirement_cfg=_ret_cfg,
+                    ))
+                    _oco_tasks.add(_task)
+                    _task.add_done_callback(_oco_tasks.discard)
+
+                if alert_manager is not None:
+                    alert_manager.notify(
+                        f"Order filled: BUY {req.quantity:.2f}x {req.t212_ticker} @ {fill_price:.4f}",
+                        AlertLevel.INFO,
+                    )
+
+            elif req.side == "SELL":
+                pos = pos_repo.get(req.t212_ticker)
+                pos_repo.remove(req.t212_ticker)
+                pos_repo.upsert(Position(
+                    t212_ticker=req.t212_ticker,
+                    quantity=0,
+                    avg_entry=0,
+                    cooldown_until_ts=datetime.utcnow() + cooldown_td,
+                ))
+                from alphaTrade.metrics import open_positions as metric_open_positions
+                metric_open_positions.set(len(pos_repo.all()))
+
+                if pos:
+                    journal_repo = TradeJournalRepo(session)
+                    journal_repo.save(build_sell_journal_entry(
+                        model_id=req.run_name,
+                        t212_ticker=req.t212_ticker,
+                        exit_price=fill_price,
+                        quantity=req.quantity,
+                        position=pos,
+                    ))
+                    yaml_ov = settings.model_overrides.get(req.run_name, ModelOverride())
+                    per_model_ret = yaml_ov.retirement
+                    _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
+                    pnl = (fill_price - pos.avg_entry) * req.quantity
+                    try:
+                        record_trade(session, model_id=req.run_name, realized_pnl=pnl, cfg=_ret_cfg)
+                        if check_retirement(session, model_id=req.run_name, cfg=_ret_cfg):
+                            msg = f"Model {req.run_name} auto-retired"
+                            wh.notify("WARNING", msg, category="model-retirement")
+                            if alert_manager is not None:
+                                alert_manager.notify(msg, AlertLevel.WARNING)
+                    except Exception as perf_exc:
+                        log.warning("Retirement tracking failed: %s", perf_exc)
+
+                if alert_manager is not None:
+                    alert_manager.notify(
+                        f"Order filled: SELL {req.quantity:.2f}x {req.t212_ticker} @ {fill_price:.4f}",
+                        AlertLevel.INFO,
+                    )
+
+    broker.set_callback(_on_order_fill)
+
     health_state = HealthState()
     _startup_key_map = {
         "demo": settings.t212_demo_api_key,
@@ -717,6 +890,13 @@ async def run(settings: Settings) -> None:
 
     engine = get_engine(settings.state_db_path)
 
+    # Apply DB-persisted settings immediately so backtest scheduler and first tick use correct provider/config.
+    with Session(engine) as _s0:
+        _startup_db_s = BotSettingsRepo(_s0).get()
+    if _startup_db_s is not None:
+        apply_bot_settings(_startup_db_s, settings, t212_holder, provider_holder)
+        log.info("Startup: DB settings applied (data_provider=%s)", settings.data_provider)
+
     alert_manager = AlertManager(settings.alerts)
 
     from alphaTrade.model_registry import ModelRegistry
@@ -734,6 +914,9 @@ async def run(settings: Settings) -> None:
 
     # Reconcile positions with T212 before first tick
     await reconcile_positions(t212_holder[0], settings)
+
+    await broker.start_drain()
+    log.info("AsyncBroker drain task started")
 
     # Initialize open_positions gauge from reconciled DB state
     with Session(engine) as _session:
@@ -783,9 +966,6 @@ async def run(settings: Settings) -> None:
     # Pre-resolve all model tickers to populate instrument cache before tick loop.
     _preresolve_tickers(t212_holder[0], engine, registry, static_map)
 
-    # Snapshot initial intervals to determine which scheduler tasks to spawn.
-    # New models on existing intervals are hot-reloaded each tick.
-    # Models introducing a new interval require restart.
     by_interval = registry.snapshot_by_interval()
 
     health_runner = None
@@ -818,10 +998,13 @@ async def run(settings: Settings) -> None:
             registry=registry,
             backtest_scheduler=backtest_scheduler,
             settings=settings,
+            t212_holder=t212_holder,
+            provider_holder=provider_holder,
         )
     except Exception as exc:
         log.error("API server failed to start on :%d: %s", settings.api_port, exc)
 
+    _ALL_INTERVALS = list(_INTERVAL_SECONDS.keys())
     tasks = [
         asyncio.create_task(
             schedule_bar_close(
@@ -837,12 +1020,14 @@ async def run(settings: Settings) -> None:
                     oco_tasks=_oco_tasks,
                     static_map=static_map,
                     alert_manager=alert_manager,
+                    throttle=throttle,
+                    broker=broker,
                 ),
                 stop_event,
                 extended_hours=settings.defaults.extended_hours,
             )
         )
-        for interval, interval_models in by_interval.items()
+        for interval in _ALL_INTERVALS
     ]
 
     async def daily_close_callback() -> None:
@@ -911,8 +1096,11 @@ async def run(settings: Settings) -> None:
         schedule_bar_close("1d", daily_close_callback, stop_event=stop_event)
     ))
 
-    log.info("Scheduler running. Intervals: %s", list(by_interval.keys()))
+    log.info("Scheduler running. Active intervals at boot: %s. All intervals pre-spawned: %s", list(by_interval.keys()), _ALL_INTERVALS)
     await asyncio.gather(*tasks)
+
+    await broker.stop_drain()
+    log.info("AsyncBroker drain task stopped")
 
     # Drain OCO monitor tasks before exit
     for task in list(_oco_tasks):

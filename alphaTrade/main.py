@@ -744,6 +744,7 @@ async def run(settings: Settings) -> None:
         throttle=throttle,
         stale_window_multiplier=settings.risk.order_stale_window_multiplier,
         max_queue_depth=settings.risk.order_queue_max_depth,
+        t212_holder=t212_holder,
     )
 
     async def _on_order_fill(result: OrderResult) -> None:
@@ -753,9 +754,8 @@ async def run(settings: Settings) -> None:
         )
         from alphaTrade.risk.performance import _effective_config, check_retirement, record_trade
         from alphaTrade.notify.alerting import AlertLevel
-        from alphaTrade.broker.oco_monitor import monitor_oco
         from alphaTrade.config import ModelOverride
-        from datetime import timedelta, datetime
+        from alphaTrade.metrics import open_positions as metric_open_positions
 
         req = result.request
 
@@ -791,7 +791,6 @@ async def run(settings: Settings) -> None:
                     avg_entry=fill_price,
                     last_signal_ts=datetime.utcnow(),
                 ))
-                from alphaTrade.metrics import open_positions as metric_open_positions
                 metric_open_positions.set(len(pos_repo.all()))
 
                 if result.stop_order_id and result.limit_order_id:
@@ -838,7 +837,6 @@ async def run(settings: Settings) -> None:
                     avg_entry=0,
                     cooldown_until_ts=datetime.utcnow() + cooldown_td,
                 ))
-                from alphaTrade.metrics import open_positions as metric_open_positions
                 metric_open_positions.set(len(pos_repo.all()))
 
                 if pos:

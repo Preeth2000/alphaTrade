@@ -95,8 +95,10 @@ class AsyncBroker:
         throttle: EndpointThrottle,
         stale_window_multiplier: float = 0.5,
         max_queue_depth: int = 50,
+        t212_holder: list | None = None,
     ) -> None:
         self._t212 = t212
+        self._t212_holder = t212_holder  # if set, always use holder[0] for hot-reload support
         self._throttle = throttle
         self._stale_multiplier = stale_window_multiplier
         self._max_depth = max_queue_depth
@@ -110,6 +112,11 @@ class AsyncBroker:
         self._drain_task: asyncio.Task | None = None
         self._stopping: bool = False
         self._callback: PostFillCallback | None = None
+
+    @property
+    def _live_t212(self) -> T212Client:
+        """Always returns the current T212 client (supports hot-reload via t212_holder)."""
+        return self._t212_holder[0] if self._t212_holder else self._t212
 
     def set_callback(self, cb: PostFillCallback) -> None:
         self._callback = cb
@@ -235,7 +242,7 @@ class AsyncBroker:
 
         try:
             resp = await asyncio.to_thread(
-                self._t212.place_market_order,
+                self._live_t212.place_market_order,
                 instrument_ticker=request.t212_ticker,
                 quantity=request.quantity if request.side == "BUY" else -request.quantity,
             )
@@ -269,7 +276,7 @@ class AsyncBroker:
                 order_throttle_wait_seconds.labels(endpoint="orders_stop").observe(wait)
                 try:
                     stop_resp = await asyncio.to_thread(
-                        self._t212.place_stop_order, request.t212_ticker, request.quantity, sl_price
+                        self._live_t212.place_stop_order, request.t212_ticker, request.quantity, sl_price
                     )
                     result.stop_order_id = str(stop_resp["id"])
                 except Exception as exc:
@@ -280,7 +287,7 @@ class AsyncBroker:
                 order_throttle_wait_seconds.labels(endpoint="orders_limit").observe(wait)
                 try:
                     limit_resp = await asyncio.to_thread(
-                        self._t212.place_limit_order, request.t212_ticker, request.quantity, tp_price
+                        self._live_t212.place_limit_order, request.t212_ticker, request.quantity, tp_price
                     )
                     result.limit_order_id = str(limit_resp["id"])
                 except Exception as exc:

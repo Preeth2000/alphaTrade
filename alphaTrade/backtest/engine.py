@@ -24,6 +24,11 @@ from alphaTrade.store.repos import BacktestRepo
 
 log = logging.getLogger(__name__)
 
+_INTERVAL_SECONDS: dict[str, int] = {
+    "1m": 60, "5m": 300, "15m": 900, "1h": 3600,
+    "4h": 14400, "1d": 86400, "1wk": 604800,
+}
+
 
 @dataclass
 class BacktestState:
@@ -66,6 +71,47 @@ def _check_sl_tp(
     return None
 
 
+def _compute_protected_fraction(
+    queue_position: int,
+    stop_gap: float,
+    limit_gap: float,
+    bar_duration_secs: float,
+) -> float:
+    """Fraction of bar range protected by OCO, accounting for queue position lag.
+
+    Queue position K means (K * (stop_gap + limit_gap)) seconds pass before OCO is placed.
+    During that window, price moves are unprotected. We model the protected portion
+    as the fraction of bar duration remaining after the lag.
+    """
+    lag_secs = queue_position * (stop_gap + limit_gap)
+    return max(0.0, 1.0 - lag_secs / bar_duration_secs)
+
+
+def _check_sl_tp_with_lag(
+    state: "BacktestState",
+    high: float,
+    low: float,
+    protected_fraction: float,
+    bar_open: float | None = None,
+) -> tuple[str, float] | None:
+    """Check SL/TP with OCO lag applied. protected_fraction=1.0 is identical to _check_sl_tp.
+
+    When fraction < 1.0, scales the bar's high/low range around bar_open (or entry_price)
+    to approximate only the portion of the move that occurred after OCO was placed.
+    """
+    if protected_fraction >= 1.0:
+        return _check_sl_tp(state, high=high, low=low)
+
+    if protected_fraction <= 0.0:
+        return None
+
+    # Scale range around open (or entry_price as fallback)
+    origin = bar_open if bar_open is not None else state.entry_price
+    adj_high = origin + (high - origin) * protected_fraction
+    adj_low = origin - (origin - low) * protected_fraction
+    return _check_sl_tp(state, high=adj_high, low=adj_low)
+
+
 def run_backtest(
     session: Session,
     models_dir: Path,
@@ -97,14 +143,25 @@ def run_backtest(
         log.info("backtest: running %s (%s, %s)", manifest.run_name, manifest.ticker, manifest.interval)
         error_msg = ""
         try:
-            trades, status = _run_single_model(
-                manifest=manifest,
-                model=model,
-                provider=provider,  # type: ignore[arg-type]
-                start=start,
-                end=end,
-                cfg=cfg,
-            )
+            if cfg.simulate_oco_lag and len(models) > 1:
+                trades, status = _run_single_model_with_lag(
+                    manifest=manifest,
+                    model=model,
+                    all_models=models,
+                    provider=provider,  # type: ignore[arg-type]
+                    start=start,
+                    end=end,
+                    cfg=cfg,
+                )
+            else:
+                trades, status = _run_single_model(
+                    manifest=manifest,
+                    model=model,
+                    provider=provider,  # type: ignore[arg-type]
+                    start=start,
+                    end=end,
+                    cfg=cfg,
+                )
             for t in trades:
                 repo.record_trade(run_id=run_id, **t)
         except Exception as exc:
@@ -198,6 +255,133 @@ def _run_single_model(
 
         elif signal != "HOLD" and state is not None and signal != state.side:
             # Opposing signal — close position at next open
+            fill_price = _simulate_fill(signal, float(next_bar["Open"]), cfg.slippage_bps)
+            realized = state.pnl(fill_price) - cfg.commission_per_trade
+            equity += realized
+            trades.append(_build_trade(
+                state=state, exit_price=fill_price, exit_bar=i + 1,
+                exit_time=next_bar.name, realized_pnl=realized, exit_reason="SIGNAL",
+                model_id=manifest.run_name,
+            ))
+            state = None
+
+    # Close any open position at last bar's close
+    if state is not None:
+        last_bar = df.iloc[-1]
+        exit_price = float(last_bar["Close"])
+        realized = state.pnl(exit_price) - cfg.commission_per_trade
+        equity += realized
+        trades.append(_build_trade(
+            state=state, exit_price=exit_price, exit_bar=len(df) - 1,
+            exit_time=last_bar.name, realized_pnl=realized, exit_reason="END_OF_DATA",
+            model_id=manifest.run_name,
+        ))
+
+    return trades, "ran"
+
+
+def _run_single_model_with_lag(
+    manifest: Manifest,
+    model: OnnxModel,
+    all_models: list[tuple[Manifest, OnnxModel]],
+    provider: DataProvider,
+    start: str,
+    end: str,
+    cfg: BacktestConfig,
+) -> tuple[list[dict], str]:
+    """Same as _run_single_model but applies OCO lag based on how many same-interval
+    models also signalled BUY on each bar.
+
+    Lag per queue position = (orders_stop_min_gap + orders_limit_min_gap) = 4.0s default.
+    """
+    from alphaTrade.config import T212ThrottleConfig
+
+    _throttle_defaults = T212ThrottleConfig()
+
+    same_interval = [
+        (m, mo) for m, mo in all_models
+        if m.interval == manifest.interval and m.run_name != manifest.run_name
+    ]
+
+    warmup_bars = manifest.window + 50
+    df = provider.fetch_ohlcv_range(manifest.ticker, manifest.interval, start=start, end=end, extra_bars=warmup_bars)
+    if df is None or len(df) < manifest.window + 2:
+        log.warning("backtest: not enough data for %s", manifest.run_name)
+        return [], "no_data"
+
+    # Pre-compute peer signals for every bar to determine queue positions
+    peer_signals: dict[int, list[str]] = {}  # bar_index -> list of peer sides
+    for peer_manifest, peer_model in same_interval:
+        try:
+            peer_df = provider.fetch_ohlcv_range(
+                peer_manifest.ticker, peer_manifest.interval, start=start, end=end, extra_bars=warmup_bars
+            )
+            if peer_df is None or len(peer_df) < len(df):
+                continue
+            for i in range(warmup_bars, min(len(df), len(peer_df)) - 1):
+                window_df = peer_df.iloc[max(0, i - warmup_bars):i + 1]
+                sig = _infer(peer_manifest, peer_model, window_df)
+                if sig == "BUY":
+                    peer_signals.setdefault(i, []).append("BUY")
+        except Exception as exc:
+            log.warning("backtest lag: peer inference failed for %s: %s", peer_manifest.run_name, exc)
+
+    _interval_secs = _INTERVAL_SECONDS.get(manifest.interval, 3600)
+    trades: list[dict] = []
+    state: BacktestState | None = None
+    equity = cfg.initial_equity
+
+    for i in range(warmup_bars, len(df) - 1):
+        bar = df.iloc[i]
+        next_bar = df.iloc[i + 1]
+
+        window_df = df.iloc[max(0, i - warmup_bars):i + 1]
+        signal = _infer(manifest, model, window_df)
+
+        if state is not None:
+            peers_buying = len(peer_signals.get(i, []))
+            queue_pos = peers_buying
+            protected = _compute_protected_fraction(
+                queue_position=queue_pos,
+                stop_gap=_throttle_defaults.orders_stop_min_gap_secs,
+                limit_gap=_throttle_defaults.orders_limit_min_gap_secs,
+                bar_duration_secs=_interval_secs,
+            )
+            hit = _check_sl_tp_with_lag(
+                state,
+                high=float(bar["High"]),
+                low=float(bar["Low"]),
+                protected_fraction=protected,
+                bar_open=float(bar["Open"]),
+            )
+            if hit is not None:
+                reason, exit_price = hit
+                realized = state.pnl(exit_price) - cfg.commission_per_trade
+                equity += realized
+                trades.append(_build_trade(
+                    state=state, exit_price=exit_price, exit_bar=i,
+                    exit_time=bar.name, realized_pnl=realized, exit_reason=reason,
+                    model_id=manifest.run_name,
+                ))
+                state = None
+
+        if signal in ("BUY", "SELL") and state is None:
+            fill_price = _simulate_fill(signal, float(next_bar["Open"]), cfg.slippage_bps)
+            size_pct = cfg.default_size_pct
+            quantity = (equity * size_pct) / fill_price
+            sl_price = fill_price * (1 - cfg.sl_pct / 100) if cfg.sl_pct is not None else None
+            tp_price = fill_price * (1 + cfg.tp_pct / 100) if cfg.tp_pct is not None else None
+            state = BacktestState(
+                side=signal,
+                entry_price=fill_price,
+                quantity=quantity,
+                sl_price=sl_price,
+                tp_price=tp_price,
+                entry_bar=i + 1,
+                entry_time=next_bar.name,
+                model_id=manifest.run_name,
+            )
+        elif signal != "HOLD" and state is not None and signal != state.side:
             fill_price = _simulate_fill(signal, float(next_bar["Open"]), cfg.slippage_bps)
             realized = state.pnl(fill_price) - cfg.commission_per_trade
             equity += realized

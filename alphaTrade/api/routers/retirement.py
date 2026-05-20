@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from alphaTrade.config import ModelRetirementOverride, Settings
 from alphaTrade.risk.performance import _effective_config, _parse_period
-from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelPerformanceRepo
+from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelOverrideRecord, ModelOverrideRepo, ModelPerformanceRepo
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +77,15 @@ class PerModelRetirementResponse(BaseModel):
 def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings) -> APIRouter:
     router = APIRouter()
 
+    _retirement_field_map = {
+        "enabled": "retirement_enabled",
+        "lookback_trades": "retirement_lookback_trades",
+        "min_win_rate": "retirement_min_win_rate",
+        "min_rolling_pnl": "retirement_min_rolling_pnl",
+        "min_trades_before_evaluation": "retirement_min_trades_before_evaluation",
+        "min_evaluation_period": "retirement_min_evaluation_period",
+    }
+
     @router.get("/retirement/config", response_model=GlobalRetirementResponse)
     def get_global_config(_: None = Depends(api_key_dep)):
         cfg = settings.risk.model_retirement
@@ -116,7 +125,6 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         )
 
     def _per_model_response(run_name: str, session: Session) -> PerModelRetirementResponse:
-        from alphaTrade.store.repos import ModelOverrideRepo
         rec = ModelOverrideRepo(session).get(run_name)
         override = ModelRetirementOverride(
             enabled=rec.retirement_enabled if rec else None,
@@ -158,19 +166,10 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         session: Session = Depends(session_dep),
         _: None = Depends(api_key_dep),
     ):
-        from alphaTrade.store.repos import ModelOverrideRepo, ModelOverrideRecord
         repo = ModelOverrideRepo(session)
         rec = repo.get(run_name) or ModelOverrideRecord(run_name=run_name)
-        field_map = {
-            "enabled": "retirement_enabled",
-            "lookback_trades": "retirement_lookback_trades",
-            "min_win_rate": "retirement_min_win_rate",
-            "min_rolling_pnl": "retirement_min_rolling_pnl",
-            "min_trades_before_evaluation": "retirement_min_trades_before_evaluation",
-            "min_evaluation_period": "retirement_min_evaluation_period",
-        }
         for field, val in update.model_dump(exclude_unset=True).items():
-            setattr(rec, field_map[field], val)
+            setattr(rec, _retirement_field_map[field], val)
         repo.upsert(rec)
         return _per_model_response(run_name, session)
 
@@ -180,7 +179,6 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         session: Session = Depends(session_dep),
         _: None = Depends(api_key_dep),
     ):
-        from alphaTrade.store.repos import ModelOverrideRepo
         repo = ModelOverrideRepo(session)
         rec = repo.get(run_name)
         if rec is not None:

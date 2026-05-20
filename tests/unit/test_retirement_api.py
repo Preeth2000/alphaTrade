@@ -123,8 +123,13 @@ class TestPerModelRetirementConfig:
         with Session(engine) as s:
             from alphaTrade.store.repos import ModelOverrideRepo
             rec = ModelOverrideRepo(s).get("my_model")
-            # retirement fields cleared
-            assert rec is None or rec.retirement_enabled is None
+            assert rec is not None  # row still exists, just fields nulled
+            assert rec.retirement_enabled is None
+            assert rec.retirement_lookback_trades is None
+            assert rec.retirement_min_win_rate is None
+            assert rec.retirement_min_rolling_pnl is None
+            assert rec.retirement_min_trades_before_evaluation is None
+            assert rec.retirement_min_evaluation_period is None
 
 
 class TestUnretire:

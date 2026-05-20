@@ -91,6 +91,9 @@ def test_t212_throttle_config_defaults():
     assert cfg.orders_limit_min_gap_secs == 2.0
     assert cfg.orders_market_min_gap_secs == 1.2
     assert cfg.account_cash_min_gap_secs == 5.0
+    assert cfg.orders_cancel_min_gap_secs == 1.2
+    assert cfg.portfolio_min_gap_secs == 1.0
+    assert cfg.orders_status_min_gap_secs == 1.0
 
 
 def test_executors_config_nested():

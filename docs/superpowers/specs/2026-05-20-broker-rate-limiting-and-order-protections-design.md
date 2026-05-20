@@ -26,35 +26,71 @@ Secondary problems: no signal freshness check, no within-tick dedup, no priority
 | GET /equity/portfolio | 1 req/1s | 1.0s |
 | GET /equity/orders/{id} | 1 req/1s | 1.0s |
 
+### Updating Rate Limits
+
+Limits are defaults on `T212ThrottleConfig` (a `BaseSettings` dataclass in `config.py`). Override any value in `settings.yaml` under `executors.trading212.throttle`, then restart. No code change required.
+
+```yaml
+# settings.yaml — only specify values that differ from defaults
+executors:
+  trading212:
+    throttle:
+      orders_stop_min_gap_secs: 1.5   # if T212 relaxes this to 40/min
+```
+
+Adding a new executor: define `<Executor>ThrottleConfig` dataclass in `config.py` and add `executors.<name>` section. `EndpointThrottle` is instantiated from whichever executor config is active.
+
 ## Approach: AsyncBroker Wrapper Layer
 
 New `AsyncBroker` class sits between `main.py` and `T212Client`. The tick loop collects `OrderRequest` objects, then calls `async_broker.execute_tick_orders()` once. All protections are co-located in the broker layer.
 
 ## Components
 
+### `alphaTrade/config.py` additions — `T212ThrottleConfig`
+
+```python
+class T212ThrottleConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    orders_market_min_gap_secs: float = 1.2
+    orders_stop_min_gap_secs: float = 2.0
+    orders_limit_min_gap_secs: float = 2.0
+    orders_cancel_min_gap_secs: float = 1.2
+    account_cash_min_gap_secs: float = 5.0
+    portfolio_min_gap_secs: float = 1.0
+    orders_status_min_gap_secs: float = 1.0
+
+class T212ExecutorConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    throttle: T212ThrottleConfig = T212ThrottleConfig()
+
+class ExecutorsConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    trading212: T212ExecutorConfig = T212ExecutorConfig()
+
+# Added to Settings:
+executors: ExecutorsConfig = ExecutorsConfig()
+```
+
+To update any limit: edit `settings.yaml` under `executors.trading212.throttle.<key>`, restart.
+
 ### `alphaTrade/broker/throttle.py` — `EndpointThrottle`
 
-Per-endpoint async rate limiter using last-call timestamp + `asyncio.sleep`.
+Per-endpoint async rate limiter using last-call timestamp + `asyncio.sleep`. Constructed from `T212ThrottleConfig`.
 
 ```python
 class EndpointThrottle:
-    _min_gap: dict[str, float]   # endpoint -> minimum seconds between calls
-    _last_call: dict[str, float] # endpoint -> monotonic time of last call
+    _min_gap: dict[str, float]   # endpoint key -> minimum seconds between calls
+    _last_call: dict[str, float] # endpoint key -> monotonic time of last call
     _lock: asyncio.Lock
+
+    @classmethod
+    def from_t212_config(cls, cfg: T212ThrottleConfig) -> "EndpointThrottle": ...
 
     async def acquire(self, endpoint: str) -> None:
         """Block until a call to endpoint is within rate limit."""
 ```
 
-Default gaps:
-- `/equity/orders/stop`: 2.0s
-- `/equity/orders/limit`: 2.0s
-- `/equity/orders/market`: 1.2s
-- `/equity/account/cash`: 5.0s
-- `/equity/portfolio`: 1.0s
-- `/equity/orders/id`: 1.0s
-
-Acquired before every T212 HTTP call. Applied at the AsyncBroker level, not inside T212Client (T212Client stays sync).
+`endpoint` keys match `T212ThrottleConfig` field names (e.g., `"orders_stop"`, `"account_cash"`). Acquired before every T212 HTTP call in `AsyncBroker`. T212Client stays sync and unchanged.
 
 ### `alphaTrade/broker/order_queue.py` — `OrderRequest` + priority
 
@@ -182,7 +218,7 @@ risk:
 | `alphaTrade/broker/orders.py` | KEEP (used by backtest/tests) — `submit_order_async` stays |
 | `alphaTrade/main.py` | MODIFY — tick loop, equity fetch, broker instantiation |
 | `alphaTrade/metrics.py` | MODIFY — add 4 new metrics |
-| `alphaTrade/config.py` | MODIFY — add 2 new risk fields |
+| `alphaTrade/config.py` | MODIFY — add `T212ThrottleConfig`, `T212ExecutorConfig`, `ExecutorsConfig`; add 2 new risk fields |
 
 ## Out of Scope
 

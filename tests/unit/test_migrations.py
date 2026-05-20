@@ -56,3 +56,19 @@ class TestAlembicMigrations:
         get_engine(tmp_path / "test.db")
 
         assert calls == [], "create_all must not be called when Alembic is used"
+
+    def test_model_override_has_retirement_and_backtest_cols(self, tmp_path):
+        """model_override table has retirement and backtest config columns after migration."""
+        from alphaTrade.store.db import run_migrations
+        db_path = tmp_path / "test.db"
+        run_migrations(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(model_override)").fetchall()}
+        conn.close()
+        expected = {
+            "retirement_enabled", "retirement_lookback_trades", "retirement_min_win_rate",
+            "retirement_min_rolling_pnl", "retirement_min_trades_before_evaluation",
+            "retirement_min_evaluation_period", "backtest_disabled", "backtest_cron",
+            "backtest_lookback_days",
+        }
+        assert expected <= cols

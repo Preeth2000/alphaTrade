@@ -54,3 +54,98 @@ def test_none_active_account_defaults_to_demo():
     db_s = _make_db_settings(t212_active_account=None)
     key, secret, env = _t212_credentials(db_s)
     assert env == "demo"
+
+
+# Tests for apply_bot_settings with new risk/backtest/sizing fields
+from unittest.mock import MagicMock
+from alphaTrade.config import Settings
+from alphaTrade.main import apply_bot_settings
+import os
+
+
+def _make_settings_for_apply(tmp_path) -> Settings:
+    overrides = tmp_path / "overrides.yaml"
+    overrides.write_text("")
+    os.environ.setdefault("ALPHATRADE_API_KEY", "test-key")
+    return Settings(overrides_path=overrides, state_db_path=tmp_path / "state.db")
+
+
+def test_apply_bot_settings_sizing_mode(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, sizing_mode="atr")
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.sizing_mode == "atr"
+
+
+def test_apply_bot_settings_portfolio_mode(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, portfolio_mode="balanced")
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.portfolio_mode == "balanced"
+
+
+def test_apply_bot_settings_order_stale_window(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, order_stale_window_multiplier=0.75)
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.order_stale_window_multiplier == 0.75
+
+
+def test_apply_bot_settings_atr(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, atr_risk_pct=0.02, atr_multiplier=3.0)
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.atr.risk_pct == 0.02
+    assert settings.risk.atr.atr_multiplier == 3.0
+
+
+def test_apply_bot_settings_vix(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, vix_base_size_pct=0.03, vix_scalar=25.0, vix_max_size_pct=0.20)
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.vix.base_size_pct == 0.03
+    assert settings.risk.vix.vix_scalar == 25.0
+    assert settings.risk.vix.max_size_pct == 0.20
+
+
+def test_apply_bot_settings_balanced(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, balanced_max_sector_pct=0.50)
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.balanced.max_sector_pct == 0.50
+
+
+def test_apply_bot_settings_unbalanced(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(id=1, unbalanced_max_per_sector=5, unbalanced_sector_overrides='{"Technology": 7}')
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.unbalanced.max_per_sector == 5
+    assert settings.risk.unbalanced.sector_overrides == {"Technology": 7}
+
+
+def test_apply_bot_settings_backtest(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    db_s = BotSettings(
+        id=1,
+        backtest_slippage_bps=10,
+        backtest_initial_equity=50000.0,
+        backtest_cron="0 3 * * *",
+        backtest_lookback_days=60,
+        backtest_simulate_oco_lag=True,
+        backtest_oco_stop_gap_secs=3.0,
+    )
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.backtest.slippage_bps == 10
+    assert settings.backtest.initial_equity == 50000.0
+    assert settings.backtest.cron == "0 3 * * *"
+    assert settings.backtest.lookback_days == 60
+    assert settings.backtest.simulate_oco_lag is True
+    assert settings.backtest.oco_stop_gap_secs == 3.0
+
+
+def test_apply_bot_settings_null_fields_not_overwrite(tmp_path):
+    settings = _make_settings_for_apply(tmp_path)
+    settings.risk.sizing_mode = "vix"
+    db_s = BotSettings(id=1)  # all new fields None
+    apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
+    assert settings.risk.sizing_mode == "vix"  # unchanged

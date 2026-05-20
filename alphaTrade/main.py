@@ -147,6 +147,54 @@ def apply_bot_settings(
         settings.risk.model_retirement.min_trades_before_evaluation = db_s.retirement_min_trades_before_evaluation
     if db_s.retirement_min_evaluation_period is not None:
         settings.risk.model_retirement.min_evaluation_period = db_s.retirement_min_evaluation_period
+    if db_s.sizing_mode is not None:
+        settings.risk.sizing_mode = db_s.sizing_mode
+    if db_s.portfolio_mode is not None:
+        settings.risk.portfolio_mode = db_s.portfolio_mode
+    if db_s.order_stale_window_multiplier is not None:
+        settings.risk.order_stale_window_multiplier = db_s.order_stale_window_multiplier
+    if db_s.order_queue_max_depth is not None:
+        settings.risk.order_queue_max_depth = db_s.order_queue_max_depth
+    if db_s.balanced_max_sector_pct is not None:
+        settings.risk.balanced.max_sector_pct = db_s.balanced_max_sector_pct
+    if db_s.unbalanced_max_per_sector is not None:
+        settings.risk.unbalanced.max_per_sector = db_s.unbalanced_max_per_sector
+    if db_s.unbalanced_sector_overrides is not None:
+        settings.risk.unbalanced.sector_overrides = json.loads(db_s.unbalanced_sector_overrides)
+    if db_s.atr_risk_pct is not None:
+        settings.risk.atr.risk_pct = db_s.atr_risk_pct
+    if db_s.atr_multiplier is not None:
+        settings.risk.atr.atr_multiplier = db_s.atr_multiplier
+    if db_s.vix_base_size_pct is not None:
+        settings.risk.vix.base_size_pct = db_s.vix_base_size_pct
+    if db_s.vix_scalar is not None:
+        settings.risk.vix.vix_scalar = db_s.vix_scalar
+    if db_s.vix_max_size_pct is not None:
+        settings.risk.vix.max_size_pct = db_s.vix_max_size_pct
+    if db_s.backtest_slippage_bps is not None:
+        settings.backtest.slippage_bps = db_s.backtest_slippage_bps
+    if db_s.backtest_commission_per_trade is not None:
+        settings.backtest.commission_per_trade = db_s.backtest_commission_per_trade
+    if db_s.backtest_initial_equity is not None:
+        settings.backtest.initial_equity = db_s.backtest_initial_equity
+    if db_s.backtest_default_size_pct is not None:
+        settings.backtest.default_size_pct = db_s.backtest_default_size_pct
+    if db_s.backtest_sl_pct is not None:
+        settings.backtest.sl_pct = db_s.backtest_sl_pct
+    if db_s.backtest_tp_pct is not None:
+        settings.backtest.tp_pct = db_s.backtest_tp_pct
+    if db_s.backtest_schedule_enabled is not None:
+        settings.backtest.schedule_enabled = db_s.backtest_schedule_enabled
+    if db_s.backtest_cron is not None:
+        settings.backtest.cron = db_s.backtest_cron
+    if db_s.backtest_lookback_days is not None:
+        settings.backtest.lookback_days = db_s.backtest_lookback_days
+    if db_s.backtest_simulate_oco_lag is not None:
+        settings.backtest.simulate_oco_lag = db_s.backtest_simulate_oco_lag
+    if db_s.backtest_oco_stop_gap_secs is not None:
+        settings.backtest.oco_stop_gap_secs = db_s.backtest_oco_stop_gap_secs
+    if db_s.backtest_oco_limit_gap_secs is not None:
+        settings.backtest.oco_limit_gap_secs = db_s.backtest_oco_limit_gap_secs
 
 
 def _build_data_provider(settings: Settings) -> DataProvider:

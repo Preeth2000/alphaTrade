@@ -1,7 +1,6 @@
 # tests/unit/test_throttle.py
 """Tests for EndpointThrottle per-endpoint async rate limiter."""
 from __future__ import annotations
-import asyncio
 import time
 import pytest
 from alphaTrade.broker.throttle import EndpointThrottle
@@ -19,7 +18,7 @@ async def test_acquire_returns_immediately_when_no_prior_call():
 
 
 @pytest.mark.asyncio
-async def test_acquire_waits_min_gap_on_second_call(monkeypatch):
+async def test_acquire_waits_min_gap_on_second_call():
     throttle = EndpointThrottle({"orders_stop": 0.1})
     await throttle.acquire("orders_stop")
     t0 = time.monotonic()
@@ -40,10 +39,25 @@ async def test_acquire_unknown_endpoint_does_not_block():
 
 @pytest.mark.asyncio
 async def test_from_t212_config_maps_fields():
-    cfg = T212ThrottleConfig(orders_stop_min_gap_secs=3.0, account_cash_min_gap_secs=6.0)
+    cfg = T212ThrottleConfig(
+        orders_market_min_gap_secs=1.1,
+        orders_stop_min_gap_secs=3.0,
+        orders_limit_min_gap_secs=2.2,
+        orders_cancel_min_gap_secs=1.3,
+        account_cash_min_gap_secs=6.0,
+        portfolio_min_gap_secs=0.9,
+        orders_status_min_gap_secs=0.8,
+    )
     throttle = EndpointThrottle.from_t212_config(cfg)
-    assert throttle._min_gap["orders_stop"] == 3.0
-    assert throttle._min_gap["account_cash"] == 6.0
+    assert throttle._min_gap == {
+        "orders_market": 1.1,
+        "orders_stop": 3.0,
+        "orders_limit": 2.2,
+        "orders_cancel": 1.3,
+        "account_cash": 6.0,
+        "portfolio": 0.9,
+        "orders_status": 0.8,
+    }
 
 
 @pytest.mark.asyncio

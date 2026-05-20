@@ -31,6 +31,8 @@ class EndpointThrottle:
         gap = self._min_gap.get(endpoint, 0.0)
         if gap <= 0.0:
             return 0.0
+        # Lock held across asyncio.sleep — concurrent acquires for other endpoints
+        # block until this call completes. Safe for a single drain worker.
         async with self._lock:
             now = time.monotonic()
             last = self._last_call.get(endpoint, 0.0)

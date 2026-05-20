@@ -102,3 +102,72 @@ async def test_stale_order_dropped_by_drain():
 
     assert len(callback_results) == 1
     assert callback_results[0].status == "stale_dropped"
+
+
+@pytest.mark.asyncio
+async def test_sell_drains_before_buy():
+    """SELL order must be processed before BUY even if BUY was enqueued first."""
+    t212 = _t212()
+    broker = AsyncBroker(t212=t212, throttle=_throttle())
+    processed_order: list[str] = []
+
+    async def cb(result: OrderResult) -> None:
+        processed_order.append(result.request.side)
+
+    broker.set_callback(cb)
+
+    buy_req = _make_request(ticker="AAPL", side="BUY", interval="1m", bar_close_iso="2026-01-01T09:00:00Z")
+    sell_req = _make_request(ticker="TSLA", side="SELL", interval="1m", bar_close_iso="2026-01-01T09:00:00Z")
+
+    broker.enqueue(buy_req)
+    broker.enqueue(sell_req)
+
+    await broker.start_drain()
+    await asyncio.sleep(0.2)
+    await broker.stop_drain()
+
+    assert processed_order[0] == "SELL"
+    assert processed_order[1] == "BUY"
+
+
+@pytest.mark.asyncio
+async def test_filled_order_triggers_callback():
+    t212 = _t212()
+    broker = AsyncBroker(t212=t212, throttle=_throttle())
+    results: list[OrderResult] = []
+
+    async def cb(result: OrderResult) -> None:
+        results.append(result)
+
+    broker.set_callback(cb)
+    broker.enqueue(_make_request())
+
+    await broker.start_drain()
+    await asyncio.sleep(0.2)
+    await broker.stop_drain()
+
+    assert len(results) == 1
+    assert results[0].status == "filled"
+    assert results[0].fill_price == 101.0
+
+
+@pytest.mark.asyncio
+async def test_buy_places_oco_orders():
+    t212 = _t212()
+    broker = AsyncBroker(t212=t212, throttle=_throttle())
+    results: list[OrderResult] = []
+
+    async def cb(result: OrderResult) -> None:
+        results.append(result)
+
+    broker.set_callback(cb)
+    broker.enqueue(_make_request(side="BUY"))
+
+    await broker.start_drain()
+    await asyncio.sleep(0.2)
+    await broker.stop_drain()
+
+    t212.place_stop_order.assert_called_once()
+    t212.place_limit_order.assert_called_once()
+    assert results[0].stop_order_id == "stop-1"
+    assert results[0].limit_order_id == "limit-1"

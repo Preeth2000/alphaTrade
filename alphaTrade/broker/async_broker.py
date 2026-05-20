@@ -153,6 +153,8 @@ class AsyncBroker:
         self._queue.put_nowait((priority, seq, request))
 
     async def start_drain(self) -> None:
+        if self._drain_task is not None and not self._drain_task.done():
+            raise RuntimeError("AsyncBroker drain already running")
         self._stopping = False
         self._drain_task = asyncio.create_task(self._drain_loop(), name="broker-drain")
 
@@ -181,17 +183,32 @@ class AsyncBroker:
             except ValueError:
                 pass
 
-            self._seen.discard(dedup_key)
+            # If evicted, skip silently
+            if dedup_key not in self._seen:
+                self._queue.task_done()
+                continue
 
-            result = await self._process_one(request)
+            try:
+                result = await self._process_one(request)
+                self._seen.discard(dedup_key)  # discard AFTER processing
 
-            if self._callback is not None:
-                try:
-                    await self._callback(result)
-                except Exception as exc:
-                    log.error("Post-fill callback failed for %s: %s", request.t212_ticker, exc)
-
-            self._queue.task_done()
+                if self._callback is not None:
+                    try:
+                        await self._callback(result)
+                    except Exception as exc:
+                        log.error("Post-fill callback failed for %s: %s", request.t212_ticker, exc)
+            except asyncio.CancelledError:
+                self._seen.discard(dedup_key)
+                self._queue.task_done()
+                raise
+            except Exception as exc:
+                log.error(
+                    "Unhandled exception in drain loop for %s %s: %s",
+                    request.t212_ticker, request.side, exc,
+                )
+                self._seen.discard(dedup_key)
+            finally:
+                self._queue.task_done()
 
             if self._stopping and self._queue.empty():
                 return

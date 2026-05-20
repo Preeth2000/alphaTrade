@@ -1,13 +1,13 @@
 """Tests for _merge_overrides — DB fields win over YAML for all fields."""
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from alphaTrade.config import ModelOverride, ModelRetirementOverride, BacktestScheduleOverride
 from alphaTrade.store.repos import ModelOverrideRecord
 from alphaTrade.main import _merge_overrides
 
 
 def _db(run_name, **kwargs) -> ModelOverrideRecord:
-    return ModelOverrideRecord(run_name=run_name, updated_at=datetime.utcnow(), **kwargs)
+    return ModelOverrideRecord(run_name=run_name, updated_at=datetime.now(timezone.utc), **kwargs)
 
 
 def test_db_enabled_wins_over_yaml():
@@ -72,3 +72,10 @@ def test_db_only_model_added_to_result():
     assert "m1" in result
     assert result["m1"].enabled is True
     assert result["m1"].size_pct == 0.05
+
+
+def test_db_dangerously_allow_pyramid_wins_over_yaml():
+    yaml = {"m1": ModelOverride(dangerously_allow_pyramid=False)}
+    db = {"m1": _db("m1", dangerously_allow_pyramid=True)}
+    result = _merge_overrides(yaml, db)
+    assert result["m1"].dangerously_allow_pyramid is True

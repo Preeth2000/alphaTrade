@@ -131,6 +131,8 @@ class BacktestConfig(BaseSettings):
     cron: str = "0 2 * * *"
     lookback_days: int = 30
     simulate_oco_lag: bool = False
+    oco_stop_gap_secs: float = 2.0
+    oco_limit_gap_secs: float = 2.0
 
 
 class RiskConfig(BaseSettings):

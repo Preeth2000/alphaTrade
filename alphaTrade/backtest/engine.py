@@ -294,10 +294,6 @@ def _run_single_model_with_lag(
 
     Lag per queue position = (orders_stop_min_gap + orders_limit_min_gap) = 4.0s default.
     """
-    from alphaTrade.config import T212ThrottleConfig
-
-    _throttle_defaults = T212ThrottleConfig()
-
     same_interval = [
         (m, mo) for m, mo in all_models
         if m.interval == manifest.interval and m.run_name != manifest.run_name
@@ -343,8 +339,8 @@ def _run_single_model_with_lag(
             queue_pos = peers_buying
             protected = _compute_protected_fraction(
                 queue_position=queue_pos,
-                stop_gap=_throttle_defaults.orders_stop_min_gap_secs,
-                limit_gap=_throttle_defaults.orders_limit_min_gap_secs,
+                stop_gap=cfg.oco_stop_gap_secs,
+                limit_gap=cfg.oco_limit_gap_secs,
                 bar_duration_secs=_interval_secs,
             )
             hit = _check_sl_tp_with_lag(
@@ -369,8 +365,9 @@ def _run_single_model_with_lag(
             fill_price = _simulate_fill(signal, float(next_bar["Open"]), cfg.slippage_bps)
             size_pct = cfg.default_size_pct
             quantity = (equity * size_pct) / fill_price
-            sl_price = fill_price * (1 - cfg.sl_pct / 100) if cfg.sl_pct is not None else None
-            tp_price = fill_price * (1 + cfg.tp_pct / 100) if cfg.tp_pct is not None else None
+            direction = 1 if signal == "BUY" else -1
+            sl_price = fill_price * (1 - direction * cfg.sl_pct / 100) if cfg.sl_pct is not None else None
+            tp_price = fill_price * (1 + direction * cfg.tp_pct / 100) if cfg.tp_pct is not None else None
             state = BacktestState(
                 side=signal,
                 entry_price=fill_price,

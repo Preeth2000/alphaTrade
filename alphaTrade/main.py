@@ -648,6 +648,7 @@ async def run(settings: Settings) -> None:
         from alphaTrade.metrics import open_positions as metric_open_positions
 
         req = result.request
+        orders_total.labels(side=req.side, status=result.status).inc()
 
         if result.status not in ("filled",):
             if result.status == "stale_dropped":

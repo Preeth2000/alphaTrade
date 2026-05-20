@@ -29,6 +29,8 @@ def _handle_429(response: httpx.Response, attempt: int) -> None:
 
 
 class T212Client:
+    QUANTITY_PRECISION = 4  # T212 rejects quantities with more than 4 decimal places
+
     def __init__(self, api_key: str, secret_key: str = "", env: str = "demo") -> None:
         if env not in _BASE_URLS:
             raise ValueError(f"T212_ENV must be 'demo' or 'live', got {env!r}")

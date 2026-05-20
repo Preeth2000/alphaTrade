@@ -520,6 +520,8 @@ class BotSettings(SQLModel, table=True):
     retirement_min_rolling_pnl: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     retirement_min_trades_before_evaluation: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
     retirement_min_evaluation_period: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    safe_mode: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
+    dangerously_allow_pyramid: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
 
 
 class BotSettingsRepo:
@@ -554,6 +556,8 @@ class ModelOverrideRecord(SQLModel, table=True):
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
     cooldown_bars: Optional[int] = None
+    safe_mode: Optional[bool] = None
+    dangerously_allow_pyramid: Optional[bool] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

@@ -23,10 +23,13 @@ def _scheduler(schedule_enabled=True, cron="0 2 * * *", lookback_days=30, jobs=N
     s.get_model_status.return_value = {
         "model_id": "AAPL_v1",
         "disabled": False,
+        "cron": None,
+        "lookback_days": None,
         "effective_cron": cron,
         "effective_lookback_days": lookback_days,
         "next_run_time": None,
     }
+    s.get_all_model_statuses.return_value = [s.get_model_status.return_value]
     return s
 
 
@@ -76,6 +79,26 @@ def test_patch_model_schedule_calls_update_model(tmp_path):
     sched.update_model.assert_called_once_with(
         "AAPL_v1", disabled=True, cron=None, lookback_days=None
     )
+
+
+def test_get_all_model_schedules(tmp_path):
+    sched = _scheduler()
+    resp = _client(_engine(tmp_path), sched).get("/api/v1/backtest/schedule/models")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert data[0]["model_id"] == "AAPL_v1"
+    assert "cron" in data[0]
+    assert "lookback_days" in data[0]
+
+
+def test_get_model_schedule_has_raw_fields(tmp_path):
+    sched = _scheduler()
+    resp = _client(_engine(tmp_path), sched).get("/api/v1/backtest/schedule/AAPL_v1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "cron" in data
+    assert "lookback_days" in data
 
 
 def test_get_schedule_no_scheduler_returns_503(tmp_path):

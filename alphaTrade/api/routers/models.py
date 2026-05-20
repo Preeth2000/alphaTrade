@@ -13,6 +13,7 @@ from alphaTrade.store.repos import (
     ModelOverrideRepo,
     Signal,
 )
+from alphaTrade.data.factory import build_data_provider
 
 
 class ModelOverrideUpdate(BaseModel):
@@ -22,6 +23,8 @@ class ModelOverrideUpdate(BaseModel):
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
     cooldown_bars: Optional[int] = None
+    safe_mode: Optional[bool] = None
+    dangerously_allow_pyramid: Optional[bool] = None
 
 
 class ModelOverrideResponse(BaseModel):
@@ -32,6 +35,8 @@ class ModelOverrideResponse(BaseModel):
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
     cooldown_bars: Optional[int] = None
+    safe_mode: Optional[bool] = None
+    dangerously_allow_pyramid: Optional[bool] = None
     updated_at: Optional[datetime] = None
     resolved_ticker: Optional[str] = None
     """Effective broker ticker the tick loop will use. None = resolves at tick time via yaml/cache/API."""
@@ -51,6 +56,7 @@ class ModelSummary(BaseModel):
     retired: bool = False
     retired_at: Optional[datetime] = None
     last_updated: Optional[datetime] = None
+    max_lookback_days: Optional[int] = None
 
 
 def _resolve_ticker(session: Session, run_name: str, broker_ticker_override: Optional[str]) -> Optional[str]:
@@ -75,12 +81,14 @@ def _to_override_response(record: ModelOverrideRecord, session: Session) -> Mode
         stop_loss_pct=record.stop_loss_pct,
         take_profit_pct=record.take_profit_pct,
         cooldown_bars=record.cooldown_bars,
+        safe_mode=record.safe_mode,
+        dangerously_allow_pyramid=record.dangerously_allow_pyramid,
         updated_at=record.updated_at,
         resolved_ticker=_resolve_ticker(session, record.run_name, record.broker_ticker),
     )
 
 
-def make_router(session_dep: Callable, api_key_dep: Callable, registry=None) -> APIRouter:
+def make_router(session_dep: Callable, api_key_dep: Callable, registry=None, settings=None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/models", response_model=list[ModelSummary])
@@ -94,6 +102,8 @@ def make_router(session_dep: Callable, api_key_dep: Callable, registry=None) -> 
         override_by_id: dict[str, ModelOverrideRecord] = {
             r.run_name: r for r in ModelOverrideRepo(session).all()
         }
+
+        provider = build_data_provider(settings) if settings is not None else None
 
         seen: set[str] = set()
         results: list[ModelSummary] = []
@@ -117,6 +127,7 @@ def make_router(session_dep: Callable, api_key_dep: Callable, registry=None) -> 
                     retired=perf.retired if perf else False,
                     retired_at=perf.retired_at if perf else None,
                     last_updated=perf.last_updated if perf else None,
+                    max_lookback_days=provider.max_lookback_days(manifest.interval) if provider and manifest.interval else None,
                 ))
                 seen.add(run_name)
 
@@ -137,6 +148,13 @@ def make_router(session_dep: Callable, api_key_dep: Callable, registry=None) -> 
                 ))
 
         return results
+
+    @router.get("/models/overrides", response_model=list[ModelOverrideResponse])
+    def get_all_overrides(
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ):
+        return [_to_override_response(r, session) for r in ModelOverrideRepo(session).all()]
 
     @router.get("/models/{run_name}/overrides", response_model=ModelOverrideResponse)
     def get_overrides(

@@ -16,6 +16,7 @@ class HealthState:
     last_tick_at: datetime | None = None
     longest_interval_seconds: int = 3600
     t212_ok: bool = False
+    t212_configured: bool = False
     models_loaded: bool = False
 
 
@@ -39,8 +40,6 @@ def make_app(state: HealthState) -> web.Application:
     async def readyz(request: web.Request) -> web.Response:
         if not state.models_loaded:
             return web.Response(status=503, text="no models loaded", headers=_cors_headers())
-        if not state.t212_ok:
-            return web.Response(status=503, text="t212 unreachable", headers=_cors_headers())
         return web.Response(status=200, text="ok", headers=_cors_headers())
 
     app.router.add_get("/healthz", healthz)

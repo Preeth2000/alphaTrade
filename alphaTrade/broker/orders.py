@@ -11,6 +11,8 @@ import hashlib
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.store.repos import Order, OrderRepo
 
+DEFAULT_QUANTITY_PRECISION = 6  # fallback for executors without QUANTITY_PRECISION
+
 
 def make_client_order_id(run_name: str, ticker: str, bar_close_iso: str, side: str) -> str:
     """Deterministic 16-char hex id = sha256(run_name|ticker|bar_close_iso|side)[:16]."""
@@ -40,7 +42,9 @@ def submit_order(
         )
         order_repo.save(rec)
 
-    signed_qty = quantity if side == "BUY" else -quantity
+    precision = getattr(t212, "QUANTITY_PRECISION", DEFAULT_QUANTITY_PRECISION)
+    rounded_qty = round(quantity, precision)
+    signed_qty = rounded_qty if side == "BUY" else -rounded_qty
     return t212.place_market_order(
         instrument_ticker=instrument_ticker,
         quantity=signed_qty,
@@ -69,7 +73,9 @@ async def submit_order_async(
         )
         order_repo.save(rec)
 
-    signed_qty = quantity if side == "BUY" else -quantity
+    precision = getattr(t212, "QUANTITY_PRECISION", DEFAULT_QUANTITY_PRECISION)
+    rounded_qty = round(quantity, precision)
+    signed_qty = rounded_qty if side == "BUY" else -rounded_qty
     return await asyncio.to_thread(
         t212.place_market_order,
         instrument_ticker,

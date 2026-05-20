@@ -10,8 +10,21 @@ from alphaTrade.data.provider import DataProvider
 
 log = logging.getLogger(__name__)
 
+# yfinance hard limits on intraday history
+_MAX_LOOKBACK: dict[str, int] = {
+    "1m":  7,
+    "5m":  60,
+    "15m": 60,
+    "1h":  730,
+    "1d":  36500,
+    "1wk": 36500,
+}
+
 
 class YFinanceProvider(DataProvider):
+    def max_lookback_days(self, interval: str) -> int:
+        return _MAX_LOOKBACK.get(interval, 36500)
+
     def fetch_ohlcv(self, ticker: str, interval: str, bars: int) -> pd.DataFrame:
         import yfinance as yf
 
@@ -66,7 +79,7 @@ class YFinanceProvider(DataProvider):
     ) -> "pd.DataFrame | None":
         """Fetch OHLCV for date range [start, end] plus extra_bars warm-up before start."""
         import pandas as pd
-        from datetime import timedelta
+        from datetime import timedelta, timezone
 
         try:
             # Compute warm-up start: walk back extra_bars × interval duration
@@ -76,7 +89,16 @@ class YFinanceProvider(DataProvider):
             warmup_delta = timedelta(seconds=secs * extra_bars)
             if interval in ("1d", "1wk"):
                 warmup_delta = timedelta(seconds=int(secs * extra_bars * 1.5))
-            start_dt = pd.Timestamp(start) - warmup_delta
+            start_dt = pd.Timestamp(start, tz="UTC") - warmup_delta
+
+            # Clamp to yfinance hard limit for this interval
+            earliest = pd.Timestamp.now(tz=timezone.utc).normalize() - timedelta(days=self.max_lookback_days(interval))
+            if start_dt < earliest:
+                log.debug(
+                    "fetch_ohlcv_range: clamping start %s → %s (yfinance %s limit=%dd)",
+                    start_dt.date(), earliest.date(), interval, self.max_lookback_days(interval),
+                )
+                start_dt = earliest
             start_str = start_dt.strftime("%Y-%m-%d")
 
             import yfinance as yf

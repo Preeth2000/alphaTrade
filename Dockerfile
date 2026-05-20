@@ -24,7 +24,6 @@ COPY . .
 VOLUME ["/app/models", "/app/state.db"]
 
 ENV PYTHONUNBUFFERED=1 \
-    T212_ENV=demo \
     DATA_PROVIDER=yfinance \
     MODELS_DIR=/app/models \
     STATE_DB_PATH=/app/state.db

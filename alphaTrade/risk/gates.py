@@ -7,6 +7,11 @@ from typing import Optional
 
 from alphaTrade.store.repos import PositionRepo
 
+# Intervals where pyramiding is meaningful enough to allow when safe_mode=False
+_PYRAMID_SAFE_INTERVALS: frozenset[str] = frozenset({"1h", "1d", "1wk"})
+# Intervals where pyramiding is too dangerous for normal use — require dangerously_allow_pyramid=True
+_PYRAMID_DANGEROUS_INTERVALS: frozenset[str] = frozenset({"1m", "5m", "15m"})
+
 
 @dataclass
 class GateResult:
@@ -27,6 +32,9 @@ def run_gates(
     equity: float = 0.0,
     sector_repo=None,
     risk_cfg=None,
+    interval: str = "",
+    safe_mode: bool = True,
+    dangerously_allow_pyramid: bool = False,
 ) -> GateResult:
     if now is None:
         now = datetime.utcnow()
@@ -69,7 +77,17 @@ def run_gates(
 
     if signal == "BUY":
         if pos and pos.quantity > 0:
-            return GateResult(False, "already long — no pyramiding")
+            if safe_mode:
+                return GateResult(False, "already long — safe mode: no pyramiding")
+            if interval in _PYRAMID_SAFE_INTERVALS:
+                pass  # pyramiding allowed for this interval
+            elif dangerously_allow_pyramid:
+                pass  # explicitly unlocked despite dangerous interval
+            else:
+                return GateResult(
+                    False,
+                    f"already long — {interval or 'short'} interval pyramiding requires dangerously_allow_pyramid",
+                )
         if open_count >= max_positions:
             return GateResult(False, f"max positions {max_positions} reached")
 

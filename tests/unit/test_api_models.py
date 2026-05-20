@@ -174,6 +174,50 @@ class TestListModelsWithRegistry:
 
 
 # ---------------------------------------------------------------------------
+# GET /models/overrides (bulk)
+# ---------------------------------------------------------------------------
+
+class TestGetAllOverrides:
+    def test_empty_when_no_overrides(self, tmp_path):
+        engine = _make_engine(tmp_path)
+        resp = _client(engine).get("/api/v1/models/overrides")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_returns_only_models_with_override_rows(self, tmp_path):
+        engine = _make_engine(tmp_path)
+        with Session(engine) as s:
+            ModelOverrideRepo(s).upsert(ModelOverrideRecord(run_name="aapl_v1", size_pct=0.05))
+            ModelOverrideRepo(s).upsert(ModelOverrideRecord(run_name="tsla_v1", enabled=False))
+
+        resp = _client(engine).get("/api/v1/models/overrides")
+        data = resp.json()
+        assert len(data) == 2
+        names = {r["run_name"] for r in data}
+        assert names == {"aapl_v1", "tsla_v1"}
+
+    def test_fields_present_on_each_row(self, tmp_path):
+        engine = _make_engine(tmp_path)
+        with Session(engine) as s:
+            ModelOverrideRepo(s).upsert(ModelOverrideRecord(
+                run_name="aapl_v1", broker_ticker="AAPL_US_EQ", size_pct=0.05
+            ))
+
+        resp = _client(engine).get("/api/v1/models/overrides")
+        row = resp.json()[0]
+        assert row["run_name"] == "aapl_v1"
+        assert row["broker_ticker"] == "AAPL_US_EQ"
+        assert row["size_pct"] == pytest.approx(0.05)
+
+    def test_not_shadowed_by_parameterised_route(self, tmp_path):
+        """GET /models/overrides must not be caught by /models/{run_name}/overrides."""
+        engine = _make_engine(tmp_path)
+        resp = _client(engine).get("/api/v1/models/overrides")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+
+# ---------------------------------------------------------------------------
 # GET /models/{run_name}/overrides
 # ---------------------------------------------------------------------------
 

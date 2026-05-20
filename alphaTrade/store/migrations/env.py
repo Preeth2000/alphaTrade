@@ -1,3 +1,4 @@
+import logging
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -9,7 +10,9 @@ from sqlmodel import SQLModel
 
 config = context.config
 
-if config.config_file_name is not None:
+if config.config_file_name is not None and not logging.getLogger().handlers:
+    # Only apply alembic.ini logging when no handlers are configured (CLI usage).
+    # Skip when embedded in the app — the app configures its own JSON handlers.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata

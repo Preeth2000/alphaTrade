@@ -52,12 +52,12 @@ async def test_readyz_no_models(health_client):
 
 
 async def test_readyz_t212_down(health_client):
+    # t212_ok=False no longer blocks readyz — trading_ready in API health handles that
     client, state = health_client
     state.models_loaded = True
     state.t212_ok = False
     resp = await client.get("/readyz")
-    assert resp.status == 503
-    assert "t212 unreachable" in await resp.text()
+    assert resp.status == 200
 
 
 async def test_readyz_ok(health_client):

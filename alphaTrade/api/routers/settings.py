@@ -44,6 +44,8 @@ class BotSettingsUpdate(BaseModel):
     max_positions: Optional[int] = None
     daily_loss_halt_pct: Optional[float] = None
     alphaTrade_api_key: Optional[str] = None
+    safe_mode: Optional[bool] = None
+    dangerously_allow_pyramid: Optional[bool] = None
 
 
 def _mask(s: BotSettings) -> dict:
@@ -54,7 +56,13 @@ def _mask(s: BotSettings) -> dict:
     return d
 
 
-def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
+def make_router(
+    session_dep: Callable,
+    api_key_dep: Callable,
+    settings=None,
+    t212_holder: list | None = None,
+    provider_holder: list | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/settings")
@@ -76,6 +84,10 @@ def make_router(session_dep: Callable, api_key_dep: Callable) -> APIRouter:
         for field, value in update.model_dump(exclude_none=True).items():
             setattr(s, field, value)
         repo.upsert(s)
-        return _mask(repo.get() or BotSettings(id=1))
+        saved = repo.get() or BotSettings(id=1)
+        if settings is not None and t212_holder is not None and provider_holder is not None:
+            from alphaTrade.main import apply_bot_settings
+            apply_bot_settings(saved, settings, t212_holder, provider_holder)
+        return _mask(saved)
 
     return router

@@ -18,6 +18,7 @@ from alphaTrade.adapter.inference import OnnxModel
 from alphaTrade.adapter.manifest import Manifest
 from alphaTrade.backtest.engine import run_backtest
 from alphaTrade.config import BacktestScheduleOverride, ModelOverride, Settings
+from alphaTrade.data.factory import build_data_provider
 from alphaTrade.store.repos import BacktestRepo
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ async def _execute_backtest(
     with Session(engine) as session:
         BacktestRepo(session).update_status(run_id, "running")
     try:
+        provider = build_data_provider(settings)
         with Session(engine) as session:
             run_backtest(
                 session=session,
@@ -45,6 +47,7 @@ async def _execute_backtest(
                 cfg=settings.backtest,
                 run_id=run_id,
                 model_filter=model_filter,
+                provider=provider,
             )
         with Session(engine) as session:
             BacktestRepo(session).update_status(run_id, "done")
@@ -174,10 +177,16 @@ class BacktestScheduler:
         return {
             "model_id": model_id,
             "disabled": ov.disabled,
+            "cron": ov.cron,
+            "lookback_days": ov.lookback_days,
             "effective_cron": ov.cron if ov.cron is not None else self._settings.backtest.cron,
             "effective_lookback_days": ov.lookback_days if ov.lookback_days is not None else self._settings.backtest.lookback_days,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
+
+    def get_all_model_statuses(self) -> list[dict[str, Any]]:
+        return [self.get_model_status(model_id) for model_id in self._models]
+
 
     def _rebuild_all_jobs(self) -> None:
         for run_name, (manifest, model) in self._models.items():

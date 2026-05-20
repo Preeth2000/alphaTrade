@@ -1,8 +1,12 @@
 """Unit tests for _t212_credentials account selection."""
 from __future__ import annotations
 
+import os
+from unittest.mock import MagicMock
+
+from alphaTrade.config import Settings
+from alphaTrade.main import _t212_credentials, apply_bot_settings
 from alphaTrade.store.repos import BotSettings
-from alphaTrade.main import _t212_credentials
 
 
 def _make_db_settings(**kwargs) -> BotSettings:
@@ -57,10 +61,6 @@ def test_none_active_account_defaults_to_demo():
 
 
 # Tests for apply_bot_settings with new risk/backtest/sizing fields
-from unittest.mock import MagicMock
-from alphaTrade.config import Settings
-from alphaTrade.main import apply_bot_settings
-import os
 
 
 def _make_settings_for_apply(tmp_path) -> Settings:
@@ -86,9 +86,10 @@ def test_apply_bot_settings_portfolio_mode(tmp_path):
 
 def test_apply_bot_settings_order_stale_window(tmp_path):
     settings = _make_settings_for_apply(tmp_path)
-    db_s = BotSettings(id=1, order_stale_window_multiplier=0.75)
+    db_s = BotSettings(id=1, order_stale_window_multiplier=0.75, order_queue_max_depth=10)
     apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
     assert settings.risk.order_stale_window_multiplier == 0.75
+    assert settings.risk.order_queue_max_depth == 10
 
 
 def test_apply_bot_settings_atr(tmp_path):
@@ -133,6 +134,12 @@ def test_apply_bot_settings_backtest(tmp_path):
         backtest_lookback_days=60,
         backtest_simulate_oco_lag=True,
         backtest_oco_stop_gap_secs=3.0,
+        backtest_commission_per_trade=1.50,
+        backtest_default_size_pct=0.05,
+        backtest_sl_pct=0.02,
+        backtest_tp_pct=0.04,
+        backtest_schedule_enabled=False,
+        backtest_oco_limit_gap_secs=1.5,
     )
     apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
     assert settings.backtest.slippage_bps == 10
@@ -141,6 +148,12 @@ def test_apply_bot_settings_backtest(tmp_path):
     assert settings.backtest.lookback_days == 60
     assert settings.backtest.simulate_oco_lag is True
     assert settings.backtest.oco_stop_gap_secs == 3.0
+    assert settings.backtest.commission_per_trade == 1.50
+    assert settings.backtest.default_size_pct == 0.05
+    assert settings.backtest.sl_pct == 0.02
+    assert settings.backtest.tp_pct == 0.04
+    assert settings.backtest.schedule_enabled is False
+    assert settings.backtest.oco_limit_gap_secs == 1.5
 
 
 def test_apply_bot_settings_null_fields_not_overwrite(tmp_path):

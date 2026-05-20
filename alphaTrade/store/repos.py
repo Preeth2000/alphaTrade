@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy import Boolean, Column, Float, Integer, String
 from sqlmodel import Field, SQLModel, Session, select
+from pydantic import field_validator
 
 
 class Signal(SQLModel, table=True):
@@ -552,6 +553,19 @@ class BotSettings(SQLModel, table=True):
     backtest_simulate_oco_lag: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     backtest_oco_stop_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     backtest_oco_limit_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+
+    @field_validator("unbalanced_sector_overrides", mode="before")
+    @classmethod
+    def _validate_sector_overrides_json(cls, v):
+        if v is not None:
+            import json
+            try:
+                parsed = json.loads(v)
+            except (json.JSONDecodeError, TypeError) as exc:
+                raise ValueError(f"unbalanced_sector_overrides must be valid JSON: {exc}") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("unbalanced_sector_overrides must be a JSON object (dict)")
+        return v
 
 
 class BotSettingsRepo:

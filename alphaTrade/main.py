@@ -540,152 +540,42 @@ def make_tick(
 
                 cid = make_client_order_id(manifest.run_name, t212_ticker, bar_close_iso, signal)
 
-                try:
-                    resp = await submit_order_async(
-                        t212=t212,
-                        instrument_ticker=t212_ticker,
+                # DB idempotency: skip if already recorded for this bar
+                existing = order_repo.find_by_client_order_id(cid)
+                if existing:
+                    log.info("Duplicate order skipped (cid=%s)", cid)
+                    orders_total.labels(side=signal, status="skipped_duplicate").inc()
+                    continue
+
+                # Record intent before enqueue so crash between enqueue and drain is detectable
+                rec = Order(
+                    t212_ticker=t212_ticker,
+                    side=signal,
+                    quantity=qty,
+                    client_order_id=cid,
+                )
+                order_repo.save(rec)
+
+                if broker is not None:
+                    req = OrderRequest(
+                        t212_ticker=t212_ticker,
                         side=signal,
                         quantity=qty,
-                        order_repo=order_repo,
                         client_order_id=cid,
+                        interval=manifest.interval,
+                        signal_ts=datetime.utcnow(),
+                        yf_ticker=yf_ticker,
+                        stop_loss_pct=eff_stop_loss_pct,
+                        take_profit_pct=eff_take_profit_pct,
+                        entry_price=current_price,
+                        run_name=manifest.run_name,
+                        bar_close_iso=bar_close_iso,
                     )
-                    if resp.get("skipped_duplicate"):
-                        log.info("Duplicate order skipped (cid=%s)", cid)
-                        orders_total.labels(side=signal, status="skipped_duplicate").inc()
-                        continue
-                    fill_price = resp.get("fillPrice")
-                    t212_id = str(resp.get("id", ""))
-                    saved_rec = order_repo.find_by_client_order_id(cid)
-                    if saved_rec:
-                        order_repo.update_fill(saved_rec.id, "filled", fill_price, t212_id)
-                    log.info("Filled %s %s qty=%s", signal, t212_ticker, qty)
-                    _sb.publish({"type": "order_filled", "ticker": t212_ticker, "side": signal,
-                                 "qty": qty, "fill_price": fill_price, "ts": bar_close_iso})
-                    fill_price_alert = resp.get("fillPrice") or 0.0
-                    if alert_manager is not None:
-                        alert_manager.notify(
-                            f"Order filled: {signal} {qty:.2f}x {t212_ticker} @ {float(fill_price_alert):.4f}",
-                            AlertLevel.INFO,
-                        )
-                    orders_total.labels(side=signal, status="filled").inc()
-
-                    cooldown_td = timedelta(
-                        seconds=_INTERVAL_SECONDS.get(manifest.interval, 86400)
-                        * eff_cooldown_bars
-                    )
-
-                    if signal == "BUY":
-                        pos_repo.upsert(Position(
-                            t212_ticker=t212_ticker,
-                            quantity=qty,
-                            avg_entry=current_price,
-                            last_signal_ts=datetime.utcnow(),
-                        ))
-                        metric_open_positions.set(len(pos_repo.all()))
-                        raw_fill = resp.get("fillPrice")
-                        entry_price = float(raw_fill) if raw_fill else current_price
-                        sl_price = entry_price * (1 - eff_stop_loss_pct)
-                        tp_price = entry_price * (1 + eff_take_profit_pct)
-                        stop_resp = None
-                        per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
-                        _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
-                        try:
-                            stop_resp = await asyncio.to_thread(
-                                t212.place_stop_order, t212_ticker, qty, sl_price
-                            )
-                            limit_resp = await asyncio.to_thread(
-                                t212.place_limit_order, t212_ticker, qty, tp_price
-                            )
-                            stop_id = str(stop_resp["id"])
-                            limit_id = str(limit_resp["id"])
-                            pos_repo.update_oco_ids(t212_ticker, stop_id, limit_id)
-                            _task = asyncio.create_task(monitor_oco(
-                                t212=t212,
-                                t212_ticker=t212_ticker,
-                                stop_order_id=stop_id,
-                                limit_order_id=limit_id,
-                                engine=engine,
-                                cooldown_td=cooldown_td,
-                                entry_price=entry_price,
-                                sl_price=sl_price,
-                                tp_price=tp_price,
-                                quantity=qty,
-                                model_id=manifest.run_name,
-                                entry_time=datetime.utcnow(),
-                                retirement_cfg=_ret_cfg,
-                            ))
-                            oco_tasks.add(_task)
-                            _task.add_done_callback(oco_tasks.discard)
-                            log.info(
-                                "OCO submitted for %s: SL=%.4f TP=%.4f",
-                                t212_ticker, sl_price, tp_price,
-                            )
-                        except Exception as exc:
-                            log.error("OCO setup failed for %s: %s", t212_ticker, exc)
-                            if stop_resp is not None:
-                                try:
-                                    await asyncio.to_thread(
-                                        t212.cancel_order, str(stop_resp["id"])
-                                    )
-                                    log.info("Cancelled orphaned stop leg %s for %s", stop_resp["id"], t212_ticker)
-                                except Exception as cancel_exc:
-                                    log.warning("Could not cancel orphaned stop leg for %s: %s", t212_ticker, cancel_exc)
-                    elif signal == "SELL":
-                        pos_repo.remove(t212_ticker)
-                        pos_repo.upsert(Position(
-                            t212_ticker=t212_ticker,
-                            quantity=0,
-                            avg_entry=0,
-                            cooldown_until_ts=datetime.utcnow() + cooldown_td,
-                        ))
-                        metric_open_positions.set(len(pos_repo.all()))
-                        if pos:
-                            from alphaTrade.store.repos import TradeJournalRepo
-                            fill_price_raw = resp.get("fillPrice") if isinstance(resp, dict) else None
-                            exit_p = float(fill_price_raw) if fill_price_raw else current_price
-                            journal_repo = TradeJournalRepo(session)
-                            journal_repo.save(build_sell_journal_entry(
-                                model_id=manifest.run_name,
-                                t212_ticker=t212_ticker,
-                                exit_price=exit_p,
-                                quantity=qty,
-                                position=pos,
-                            ))
-                            per_model_ret = settings.model_overrides.get(manifest.run_name, ModelOverride()).retirement
-                            _ret_cfg = _effective_config(settings.risk.model_retirement, per_model_ret)
-                            pnl_for_perf = (exit_p - pos.avg_entry) * qty
-                            try:
-                                record_trade(session, model_id=manifest.run_name,
-                                             realized_pnl=pnl_for_perf,
-                                             cfg=_ret_cfg)
-                                if check_retirement(session, model_id=manifest.run_name,
-                                                    cfg=_ret_cfg):
-                                    msg = f"Model {manifest.run_name} auto-retired: performance below threshold"
-                                    wh.notify("WARNING", msg, category="model-retirement")
-                                    if alert_manager is not None:
-                                        alert_manager.notify(msg, AlertLevel.WARNING)
-                            except Exception as perf_exc:
-                                log.warning("Retirement tracking failed for %s: %s", manifest.run_name, perf_exc)
-
-                except Exception as exc:
-                    err_rec = order_repo.find_by_client_order_id(cid)
-                    if err_rec:
-                        order_repo.update_fill(err_rec.id, "error", None, "")
-                    orders_total.labels(side=signal, status="error").inc()
-                    import httpx as _httpx
-                    _body = ""
-                    if isinstance(exc, _httpx.HTTPStatusError):
-                        try:
-                            _body = exc.response.text
-                        except Exception:
-                            pass
-                    log.error("Order failed for %s: %s%s", t212_ticker, exc,
-                              f" | T212 response: {_body}" if _body else "")
-                    if alert_manager is not None:
-                        alert_manager.notify(
-                            f"Order error for {t212_ticker}: {exc}",
-                            AlertLevel.ERROR,
-                        )
+                    broker.enqueue(req)
+                    log.info("Enqueued %s %s qty=%s", signal, t212_ticker, qty)
+                    orders_total.labels(side=signal, status="enqueued").inc()
+                    _sb.publish({"type": "order_enqueued", "ticker": t212_ticker,
+                                 "side": signal, "qty": qty, "ts": bar_close_iso})
 
         _sb.publish({"type": "tick_complete", "interval": interval, "ts": bar_close_iso})
         health_state.last_tick_at = datetime.now(timezone.utc)

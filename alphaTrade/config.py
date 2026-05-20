@@ -43,6 +43,8 @@ class ModelOverride(BaseSettings):
     enabled: bool = True
     t212_ticker: Optional[str] = None
     size_pct: Optional[float] = None
+    safe_mode: Optional[bool] = None                  # per-model override; None = use global RiskConfig value
+    dangerously_allow_pyramid: Optional[bool] = None  # per-model override; None = use global RiskConfig value
     backtest: BacktestScheduleOverride = BacktestScheduleOverride()
     retirement: ModelRetirementOverride = ModelRetirementOverride()
 
@@ -69,6 +71,27 @@ class VixSizingConfig(BaseSettings):
     base_size_pct: float = 0.05
     vix_scalar: float = 20.0
     max_size_pct: float = 0.15
+
+
+class T212ThrottleConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    orders_market_min_gap_secs: float = 1.2
+    orders_stop_min_gap_secs: float = 2.0
+    orders_limit_min_gap_secs: float = 2.0
+    orders_cancel_min_gap_secs: float = 1.2
+    account_cash_min_gap_secs: float = 5.0
+    portfolio_min_gap_secs: float = 1.0
+    orders_status_min_gap_secs: float = 1.0
+
+
+class T212ExecutorConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    throttle: T212ThrottleConfig = T212ThrottleConfig()
+
+
+class ExecutorsConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    trading212: T212ExecutorConfig = T212ExecutorConfig()
 
 
 class AlertSlackConfig(BaseSettings):
@@ -107,6 +130,7 @@ class BacktestConfig(BaseSettings):
     schedule_enabled: bool = True
     cron: str = "0 2 * * *"
     lookback_days: int = 30
+    simulate_oco_lag: bool = False
 
 
 class RiskConfig(BaseSettings):
@@ -116,6 +140,10 @@ class RiskConfig(BaseSettings):
     daily_loss_halt_pct: float = 0.05
     sizing_mode: str = "fixed"          # fixed | atr | vix
     portfolio_mode: str = "unbalanced"  # balanced | unbalanced
+    safe_mode: bool = True              # True = no pyramiding anywhere
+    dangerously_allow_pyramid: bool = False  # global fallback for short-interval pyramid override
+    order_stale_window_multiplier: float = 0.5
+    order_queue_max_depth: int = 50
     model_retirement: ModelRetirementConfig = ModelRetirementConfig()
     balanced: BalancedPortfolioConfig = BalancedPortfolioConfig()
     unbalanced: UnbalancedPortfolioConfig = UnbalancedPortfolioConfig()
@@ -159,6 +187,7 @@ class Settings(BaseSettings):
     model_overrides: dict[str, ModelOverride] = {}
     alerts: AlertsConfig = AlertsConfig()
     backtest: BacktestConfig = BacktestConfig()
+    executors: ExecutorsConfig = ExecutorsConfig()
 
     @field_validator("webhook_level")
     @classmethod
@@ -185,6 +214,8 @@ class Settings(BaseSettings):
                 self.alerts = AlertsConfig(**raw["alerts"])
             if "backtest" in raw:
                 self.backtest = BacktestConfig(**raw["backtest"])
+            if "executors" in raw:
+                self.executors = ExecutorsConfig(**raw["executors"])
         if self.data_provider == "polygon" and not self.polygon_api_key:
             raise ValueError("POLYGON_API_KEY is required when DATA_PROVIDER=polygon")
         if self.t212_active_account not in ("demo", "invest", "isa"):

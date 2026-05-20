@@ -82,3 +82,37 @@ def test_risk_config_unbalanced_overrides():
     })
     assert cfg.unbalanced.max_per_sector == 2
     assert cfg.unbalanced.sector_overrides["technology"] == 4
+
+
+def test_t212_throttle_config_defaults():
+    from alphaTrade.config import T212ThrottleConfig
+    cfg = T212ThrottleConfig()
+    assert cfg.orders_stop_min_gap_secs == 2.0
+    assert cfg.orders_limit_min_gap_secs == 2.0
+    assert cfg.orders_market_min_gap_secs == 1.2
+    assert cfg.account_cash_min_gap_secs == 5.0
+
+
+def test_executors_config_nested():
+    from alphaTrade.config import ExecutorsConfig
+    cfg = ExecutorsConfig()
+    assert cfg.trading212.throttle.orders_stop_min_gap_secs == 2.0
+
+
+def test_settings_has_executors():
+    from alphaTrade.config import Settings
+    s = Settings()
+    assert s.executors.trading212.throttle.account_cash_min_gap_secs == 5.0
+
+
+def test_risk_config_queue_fields():
+    from alphaTrade.config import RiskConfig
+    cfg = RiskConfig()
+    assert cfg.order_stale_window_multiplier == 0.5
+    assert cfg.order_queue_max_depth == 50
+
+
+def test_backtest_config_simulate_oco_lag_default_false():
+    from alphaTrade.config import BacktestConfig
+    cfg = BacktestConfig()
+    assert cfg.simulate_oco_lag is False

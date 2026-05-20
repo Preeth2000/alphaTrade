@@ -72,3 +72,25 @@ class TestAlembicMigrations:
             "backtest_lookback_days",
         }
         assert expected <= cols
+
+    def test_botsettings_has_risk_and_backtest_cols(self, tmp_path):
+        """botsettings table has risk sizing and backtest config columns after migration."""
+        from alphaTrade.store.db import run_migrations
+        db_path = tmp_path / "test.db"
+        run_migrations(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(botsettings)").fetchall()}
+        conn.close()
+        expected = {
+            "sizing_mode", "portfolio_mode", "order_stale_window_multiplier",
+            "order_queue_max_depth", "balanced_max_sector_pct",
+            "unbalanced_max_per_sector", "unbalanced_sector_overrides",
+            "atr_risk_pct", "atr_multiplier",
+            "vix_base_size_pct", "vix_scalar", "vix_max_size_pct",
+            "backtest_slippage_bps", "backtest_commission_per_trade",
+            "backtest_initial_equity", "backtest_default_size_pct",
+            "backtest_sl_pct", "backtest_tp_pct", "backtest_schedule_enabled",
+            "backtest_cron", "backtest_lookback_days", "backtest_simulate_oco_lag",
+            "backtest_oco_stop_gap_secs", "backtest_oco_limit_gap_secs",
+        }
+        assert expected <= cols

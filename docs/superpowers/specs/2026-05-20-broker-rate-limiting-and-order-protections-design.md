@@ -40,9 +40,11 @@ executors:
 
 Adding a new executor: define `<Executor>ThrottleConfig` dataclass in `config.py` and add `executors.<name>` section. `EndpointThrottle` is instantiated from whichever executor config is active.
 
-## Approach: AsyncBroker Wrapper Layer
+## Approach: AsyncBroker Wrapper Layer + Cross-Tick Queue
 
-New `AsyncBroker` class sits between `main.py` and `T212Client`. The tick loop collects `OrderRequest` objects, then calls `async_broker.execute_tick_orders()` once. All protections are co-located in the broker layer.
+New `AsyncBroker` class sits between `main.py` and `T212Client`. Ticks enqueue `OrderRequest` objects into a single shared `asyncio.PriorityQueue`. A background drain task pulls from the queue, applies rate limiting, and submits orders. All protections are co-located in the broker layer.
+
+**Why cross-tick queue is required:** At 1 req/2s for stop/limit orders, 15+ models at 1m interval produce OCO setup time exceeding the bar duration. Without a shared queue, multiple tick coroutines fight over the throttle lock with no global priority. A persistent queue ensures SELL orders from any tick always preempt BUY orders from any other tick, and the drain task is the sole writer to T212.
 
 ## Components
 
@@ -144,52 +146,62 @@ class AsyncBroker:
         stale_window_multiplier: float = 0.5,
     ): ...
 
-    async def execute_tick_orders(
-        self,
-        requests: list[OrderRequest],
-        bar_close_iso: str,
-    ) -> list[OrderResult]: ...
+    def enqueue(self, request: OrderRequest) -> None:
+        """Add order to the persistent priority queue. Called by tick coroutines."""
+
+    async def start_drain(self) -> None:
+        """Start background drain task. Called once at bot startup."""
+
+    async def stop_drain(self) -> None:
+        """Graceful shutdown: drain remaining queue then exit."""
 ```
 
-Execution sequence per tick:
-1. Sort requests by `order_priority(side, interval)`
-2. If `len > max_queue_depth`: keep top N by priority, log dropped count + metric
-3. For each request in sorted order:
-   a. **Stale check**: `now - signal_ts > interval_secs * stale_window_multiplier` → `status=stale_dropped`, metric inc
-   b. **Dedup check**: `(t212_ticker, side)` in `seen_this_tick` → `status=deduped`, metric inc
-   c. `throttle.acquire("/equity/orders/market")`
-   d. `place_market_order()` via `asyncio.to_thread`
-   e. Record `order_submission_age_seconds` histogram metric
-   f. On BUY success: `throttle.acquire("/equity/orders/stop")` → `place_stop_order()` → `throttle.acquire("/equity/orders/limit")` → `place_limit_order()`
-   g. If stop OR limit fails: log + alert, record partial failure in result (do not abort the other)
-4. Return `list[OrderResult]`
+**Queue structure:** `asyncio.PriorityQueue` of `(priority, sequence_num, OrderRequest)`. `sequence_num` is a monotonic counter ensuring FIFO within equal priority (avoids `dataclass` comparison on `OrderRequest`).
+
+**Drain task — continuous loop:**
+1. `request = await queue.get()`
+2. **Stale check**: `now - signal_ts > interval_secs * stale_window_multiplier` → drop + metric
+3. **Dedup check**: `(t212_ticker, side)` in `seen: set` (persists across ticks, TTL = interval_secs) → skip + metric
+4. `throttle.acquire("orders_market")`
+5. `place_market_order()` via `asyncio.to_thread`
+6. Record `order_submission_age_seconds` metric
+7. On BUY success: `throttle.acquire("orders_stop")` → `place_stop_order()` → `throttle.acquire("orders_limit")` → `place_limit_order()`
+8. If stop OR limit fails: log + alert, continue (partial OCO better than none)
+9. `queue.task_done()`
+
+**Queue depth enforcement:** `enqueue()` checks `queue.qsize() >= max_queue_depth`. If full: find lowest-priority item already in queue, drop it if new request has higher priority, else drop new request. Log + metric either way.
+
+**Dedup TTL:** `seen` entries expire after `interval_secs` so a ticker can re-enter after its bar has closed.
 
 ### `alphaTrade/main.py` changes
 
 **Tick loop refactor:**
 - Remove direct `submit_order_async` call
 - Build `OrderRequest` for each gate-approved signal
-- After signal loop, call `broker.execute_tick_orders(requests, bar_close_iso)`
-- Process results: upsert positions, update order fill in DB, start OCO monitor tasks, send alerts
+- Call `broker.enqueue(request)` for each — tick returns immediately, drain task handles submission
+- Post-fill result handling (position upsert, OCO monitor, alerts) moves into the drain task's result callback
 
 **Equity fetch throttling:**
 ```python
-await throttle.acquire("/equity/account/cash")
+await throttle.acquire("account_cash")
 equity = await asyncio.to_thread(t212.get_total_equity)
 ```
 
-**`AsyncBroker` instantiation:** Created once at bot startup alongside `T212Client`, stored in holder list for hot-reload compatibility.
+**Bot startup:** `await broker.start_drain()` after T212Client init. `await broker.stop_drain()` on SIGTERM/SIGINT before shutdown.
 
-## Six Protections Summary
+**`AsyncBroker` instantiation:** Created once at bot startup alongside `T212Client`, stored in holder list for hot-reload compatibility. Hot-reload updates `T212Client` reference inside broker.
+
+## Protections Summary
 
 | # | Protection | Location | Config key |
 |---|-----------|----------|------------|
-| 1 | Per-endpoint rate limiting | EndpointThrottle | hardcoded limits per T212 docs |
-| 2 | Priority ordering (SELL > short-interval BUY > long-interval BUY) | AsyncBroker.execute_tick_orders | n/a |
-| 3 | Stale signal guard | AsyncBroker.execute_tick_orders | `risk.order_stale_window_multiplier` (default 0.5) |
-| 4 | Queue depth cap | AsyncBroker.execute_tick_orders | `risk.order_queue_max_depth` (default 50) |
-| 5 | Within-tick dedup | AsyncBroker.execute_tick_orders | n/a |
-| 6 | Submission age metrics | AsyncBroker + metrics.py | n/a |
+| 1 | Per-endpoint rate limiting | EndpointThrottle | `executors.trading212.throttle.*` |
+| 2 | Cross-tick priority queue (SELL > short BUY > long BUY) | AsyncBroker drain task | n/a |
+| 3 | Stale signal guard | drain task | `risk.order_stale_window_multiplier` (default 0.5) |
+| 4 | Queue depth cap with priority eviction | `enqueue()` | `risk.order_queue_max_depth` (default 50) |
+| 5 | Cross-interval dedup with TTL | drain task | n/a |
+| 6 | Submission age metrics | drain task + metrics.py | n/a |
+| 7 | Backtest OCO lag simulation | backtest engine | `backtest.simulate_oco_lag` (default false) |
 
 ## New Prometheus Metrics
 
@@ -208,6 +220,50 @@ risk:
   order_queue_max_depth: 50            # max orders per tick before priority-dropping
 ```
 
+## Backtest OCO Lag Simulation
+
+Backtest currently checks SL/TP at bar level, assuming OCO placed instantly at bar open. In live trading, OCO placement is delayed by the throttle queue. For short intervals (1m, 5m) with many models, the backtest overstates performance by assuming instant stop/limit protection.
+
+### Per-Bar Computed Lag (Option 3)
+
+Since backtest runs all models together, it knows exactly how many BUY signals fire on each bar. Use that to compute each ticker's actual queue position and apply a precise lag before checking SL/TP.
+
+**Algorithm per bar:**
+
+```
+1. Run inference for all models → collect all (ticker, side, signal) for this bar
+2. Sort by order_priority(side, interval)  ← same sort as live drain task
+3. For each BUY at queue position K (0-indexed):
+     oco_lag_secs = K * (orders_stop_min_gap_secs + orders_limit_min_gap_secs)
+                  = K * (2.0 + 2.0) = K * 4.0s
+4. When checking SL/TP for this ticker on this bar:
+     effective_bar_open = bar_open + timedelta(seconds=oco_lag_secs)
+     only check SL/TP for sub-bar timestamps >= effective_bar_open
+     for OHLC-only data (no sub-bar): scale high/low range proportionally
+         protected_fraction = max(0, 1 - oco_lag_secs / bar_duration_secs)
+         adjusted_high = open + (high - open) * protected_fraction
+         adjusted_low  = open - (open - low)  * protected_fraction
+```
+
+For OHLC-only bars, the proportional scaling is an approximation assuming price moves linearly through the bar. This is conservative (slightly underestimates protection) but correct on average.
+
+**SELL signals:** Queue position 0, lag = 0. SELLs always get priority and are assumed to submit instantly.
+
+**Config:**
+```yaml
+backtest:
+  simulate_oco_lag: true   # default false for backwards compatibility
+```
+
+When `simulate_oco_lag: false` (default): existing behaviour, no lag applied.
+
+### Files Changed for Backtest
+
+| File | Action |
+|------|--------|
+| `alphaTrade/backtest/engine.py` | MODIFY — per-bar lag computation in `_run_single_model`, `_check_sl_tp` accepts `protected_fraction` |
+| `alphaTrade/config.py` | MODIFY — add `BacktestConfig.simulate_oco_lag: bool = False` |
+
 ## Files Changed / Created
 
 | File | Action |
@@ -215,13 +271,12 @@ risk:
 | `alphaTrade/broker/throttle.py` | CREATE |
 | `alphaTrade/broker/order_queue.py` | CREATE |
 | `alphaTrade/broker/async_broker.py` | CREATE |
-| `alphaTrade/broker/orders.py` | KEEP (used by backtest/tests) — `submit_order_async` stays |
-| `alphaTrade/main.py` | MODIFY — tick loop, equity fetch, broker instantiation |
+| `alphaTrade/broker/orders.py` | KEEP — `submit_order_async` stays for tests |
+| `alphaTrade/main.py` | MODIFY — tick loop enqueues, startup/shutdown wires drain task |
 | `alphaTrade/metrics.py` | MODIFY — add 4 new metrics |
-| `alphaTrade/config.py` | MODIFY — add `T212ThrottleConfig`, `T212ExecutorConfig`, `ExecutorsConfig`; add 2 new risk fields |
+| `alphaTrade/config.py` | MODIFY — add `T212ThrottleConfig`, `T212ExecutorConfig`, `ExecutorsConfig`; add 2 risk fields; add `BacktestConfig.simulate_oco_lag` |
+| `alphaTrade/backtest/engine.py` | MODIFY — per-bar OCO lag computation |
 
 ## Out of Scope
 
-- Cross-tick persistent queue (signals from one tick don't carry into the next)
 - Modifying T212Client internals (stays sync, throttle lives outside it)
-- Backtest changes (backtest uses `submit_order_async` directly, unchanged)

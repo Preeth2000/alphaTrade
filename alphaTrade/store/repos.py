@@ -522,6 +522,36 @@ class BotSettings(SQLModel, table=True):
     retirement_min_evaluation_period: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
     safe_mode: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     dangerously_allow_pyramid: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
+    # risk sizing / portfolio
+    sizing_mode: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    portfolio_mode: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    order_stale_window_multiplier: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    order_queue_max_depth: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    # balanced portfolio
+    balanced_max_sector_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    # unbalanced portfolio
+    unbalanced_max_per_sector: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    unbalanced_sector_overrides: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    # ATR sizing
+    atr_risk_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    atr_multiplier: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    # VIX sizing
+    vix_base_size_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    vix_scalar: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    vix_max_size_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    # backtest
+    backtest_slippage_bps: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    backtest_commission_per_trade: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_initial_equity: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_default_size_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_sl_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_tp_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_schedule_enabled: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
+    backtest_cron: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    backtest_lookback_days: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    backtest_simulate_oco_lag: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
+    backtest_oco_stop_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    backtest_oco_limit_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
 
 
 class BotSettingsRepo:
@@ -558,6 +588,17 @@ class ModelOverrideRecord(SQLModel, table=True):
     cooldown_bars: Optional[int] = None
     safe_mode: Optional[bool] = None
     dangerously_allow_pyramid: Optional[bool] = None
+    # retirement sub-override
+    retirement_enabled: Optional[bool] = None
+    retirement_lookback_trades: Optional[int] = None
+    retirement_min_win_rate: Optional[float] = None
+    retirement_min_rolling_pnl: Optional[float] = None
+    retirement_min_trades_before_evaluation: Optional[int] = None
+    retirement_min_evaluation_period: Optional[str] = None
+    # backtest schedule sub-override
+    backtest_disabled: Optional[bool] = None
+    backtest_cron: Optional[str] = None
+    backtest_lookback_days: Optional[int] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

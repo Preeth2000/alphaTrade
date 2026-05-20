@@ -53,3 +53,27 @@ t212_request_latency_seconds = Histogram(
     "Wall time for each Trading212 HTTP request",
     ["endpoint"],
 )
+
+order_submission_age_seconds = Histogram(
+    "order_submission_age_seconds",
+    "Seconds from signal generation to order submission",
+    ["interval", "side"],
+)
+
+orders_stale_dropped_total = Counter(
+    "orders_stale_dropped_total",
+    "Orders dropped because signal was too old at dequeue time",
+    ["interval", "ticker"],
+)
+
+orders_deduped_total = Counter(
+    "orders_deduped_total",
+    "Orders skipped due to same ticker+side+bar already queued",
+    ["ticker", "side"],
+)
+
+order_throttle_wait_seconds = Histogram(
+    "order_throttle_wait_seconds",
+    "Seconds spent waiting for endpoint throttle before submission",
+    ["endpoint"],
+)

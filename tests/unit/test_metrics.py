@@ -35,6 +35,19 @@ def test_metrics_module_exports_all_expected_names():
     assert hasattr(m, "t212_request_latency_seconds")
 
 
+def test_new_broker_metrics_importable():
+    from alphaTrade.metrics import (
+        order_submission_age_seconds,
+        orders_stale_dropped_total,
+        orders_deduped_total,
+        order_throttle_wait_seconds,
+    )
+    assert order_submission_age_seconds is not None
+    assert orders_stale_dropped_total is not None
+    assert orders_deduped_total is not None
+    assert order_throttle_wait_seconds is not None
+
+
 def test_metrics_generate_valid_prometheus_text():
     import alphaTrade.metrics  # noqa: F401 — ensure metrics registered
 

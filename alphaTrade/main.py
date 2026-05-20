@@ -23,7 +23,7 @@ from alphaTrade.broker.async_broker import AsyncBroker
 from alphaTrade.broker.instrument_map import InstrumentMap
 from alphaTrade.broker.oco_monitor import monitor_oco
 from alphaTrade.broker.order_queue import OrderRequest, OrderResult
-from alphaTrade.broker.orders import make_client_order_id, submit_order_async
+from alphaTrade.broker.orders import make_client_order_id
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.broker.throttle import EndpointThrottle
 from alphaTrade.config import ModelOverride, Settings

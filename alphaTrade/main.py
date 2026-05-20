@@ -276,17 +276,43 @@ def _merge_overrides(
     yaml_overrides: dict,
     db_overrides: dict[str, ModelOverrideRecord],
 ) -> dict:
-    """Merge DB enabled flag on top of yaml overrides for registry.refresh()."""
-    from alphaTrade.config import ModelOverride
+    """Merge DB fields on top of YAML overrides. DB wins for any non-None field."""
+    from alphaTrade.config import ModelOverride, ModelRetirementOverride, BacktestScheduleOverride
     merged = dict(yaml_overrides)
     for run_name, db_ov in db_overrides.items():
-        if db_ov.enabled is not None:
-            existing = merged.get(run_name, ModelOverride())
-            merged[run_name] = ModelOverride(
-                enabled=db_ov.enabled,
-                t212_ticker=existing.t212_ticker,
-                size_pct=existing.size_pct,
-            )
+        existing = merged.get(run_name, ModelOverride())
+
+        ret_base = existing.retirement.model_dump()
+        if db_ov.retirement_enabled is not None:
+            ret_base["enabled"] = db_ov.retirement_enabled
+        if db_ov.retirement_lookback_trades is not None:
+            ret_base["lookback_trades"] = db_ov.retirement_lookback_trades
+        if db_ov.retirement_min_win_rate is not None:
+            ret_base["min_win_rate"] = db_ov.retirement_min_win_rate
+        if db_ov.retirement_min_rolling_pnl is not None:
+            ret_base["min_rolling_pnl"] = db_ov.retirement_min_rolling_pnl
+        if db_ov.retirement_min_trades_before_evaluation is not None:
+            ret_base["min_trades_before_evaluation"] = db_ov.retirement_min_trades_before_evaluation
+        if db_ov.retirement_min_evaluation_period is not None:
+            ret_base["min_evaluation_period"] = db_ov.retirement_min_evaluation_period
+
+        bt_base = existing.backtest.model_dump()
+        if db_ov.backtest_disabled is not None:
+            bt_base["disabled"] = db_ov.backtest_disabled
+        if db_ov.backtest_cron is not None:
+            bt_base["cron"] = db_ov.backtest_cron
+        if db_ov.backtest_lookback_days is not None:
+            bt_base["lookback_days"] = db_ov.backtest_lookback_days
+
+        merged[run_name] = ModelOverride(
+            enabled=db_ov.enabled if db_ov.enabled is not None else existing.enabled,
+            t212_ticker=db_ov.broker_ticker if db_ov.broker_ticker is not None else existing.t212_ticker,
+            size_pct=db_ov.size_pct if db_ov.size_pct is not None else existing.size_pct,
+            safe_mode=db_ov.safe_mode if db_ov.safe_mode is not None else existing.safe_mode,
+            dangerously_allow_pyramid=db_ov.dangerously_allow_pyramid if db_ov.dangerously_allow_pyramid is not None else existing.dangerously_allow_pyramid,
+            retirement=ModelRetirementOverride(**ret_base),
+            backtest=BacktestScheduleOverride(**bt_base),
+        )
     return merged
 
 

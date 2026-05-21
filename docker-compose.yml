@@ -1,22 +1,55 @@
 services:
+  db:
+    image: postgres:16
+    networks:
+      - appnet
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-localuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alphapass}
+      POSTGRES_DB: ${POSTGRES_DB:-alphatrade}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-localuser} -d ${POSTGRES_DB:-alphatrade}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   bot:
     build: .
+    networks:
+      - appnet
     env_file: .env
     environment:
       - DATA_PROVIDER=${DATA_PROVIDER:-yfinance}
       - MODELS_DIR=/app/models
-      - STATE_DB_PATH=/app/state.db
-    # state.db must be a HOST FILE before `docker compose up`.
-    # Create it once with: touch state.db
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-localuser}:${POSTGRES_PASSWORD:-alphapass}@db/${POSTGRES_DB:-alphatrade}
+      - MINIO__ENDPOINT=minio:9000
+      - MINIO__ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO__SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO__BUCKET=${MINIO_BUCKET:-models}
+      - MODEL_SYNC__USER=${MODEL_USER:-default}
+      - MODEL_SYNC__ACCOUNT=${MODEL_ACCOUNT:-default}
+      - MODEL_SYNC__POLL_INTERVAL=${MODEL_SYNC_POLL_INTERVAL:-60}
+      - MODEL_SYNC__MAX_VERSIONS=${MODEL_MAX_VERSIONS:-5}
+      - MODEL_SYNC__VALIDATION__MIN_SHARPE=${MODEL_VALIDATION_MIN_SHARPE:-0.5}
+      - MODEL_SYNC__VALIDATION__MAX_DRAWDOWN=${MODEL_VALIDATION_MAX_DRAWDOWN:-0.20}
+      - MODEL_SYNC__VALIDATION__MIN_HIT_RATE=${MODEL_VALIDATION_MIN_HIT_RATE:-0.45}
     volumes:
       - ./alphaTrade:/app/alphaTrade:ro
       - ./models:/app/models:ro
-      - ./state.db:/app/state.db
       - ./overrides.yaml:/app/overrides.yaml:ro
     ports:
       - "8080:8080"   # aiohttp health / readyz
       - "8081:8081"   # FastAPI REST API
       - "9090:9090"   # Prometheus metrics
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
@@ -24,3 +57,46 @@ services:
       timeout: 5s
       start_period: 60s
       retries: 3
+
+  minio:
+    image: minio/minio:latest
+    networks:
+      - appnet
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    networks:
+      - appnet
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      mc mb --ignore-existing local/models;
+      mc mb --ignore-existing local/mlflow;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+
+volumes:
+  pgdata:
+  minio_data:
+
+networks:
+  appnet:

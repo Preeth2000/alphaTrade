@@ -38,3 +38,50 @@ class ValidationGate:
         if metrics["hit_rate"] < self._t.min_hit_rate:
             return ValidationResult(False, f"hit_rate {metrics['hit_rate']:.3f} < {self._t.min_hit_rate}")
         return ValidationResult(True)
+
+
+class ModelSyncDaemon:
+    _SYNC_DIR = ".sync"
+
+    def __init__(
+        self,
+        minio_cfg: MinioConfig,
+        sync_cfg: ModelSyncConfig,
+        models_dir: Path,
+    ) -> None:
+        self._minio_cfg = minio_cfg
+        self._cfg = sync_cfg
+        self._models_dir = models_dir
+        self._gate = ValidationGate(sync_cfg.validation)
+        self._sync_dir = models_dir / self._SYNC_DIR
+        self._sync_dir.mkdir(parents=True, exist_ok=True)
+        self._models_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---------- version record helpers ----------
+
+    def _write_sync_record(self, run_name: str, version: str) -> None:
+        (self._sync_dir / run_name).write_text(version)
+
+    def _read_sync_record(self, run_name: str) -> Optional[str]:
+        p = self._sync_dir / run_name
+        return p.read_text().strip() if p.exists() else None
+
+    # ---------- promotion ----------
+
+    def _promote(self, src: Path, run_name: str, version: str) -> None:
+        dest = self._models_dir / run_name
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        self._write_sync_record(run_name, version)
+        log.info("model_sync: promoted %s %s", run_name, version)
+
+    # ---------- retention ----------
+
+    def _versions_to_prune(self, versions: list[str], promoted: str) -> list[str]:
+        if self._cfg.max_versions == -1:
+            return []
+        sorted_versions = sorted(versions, key=lambda v: int(v[1:]))
+        if len(sorted_versions) <= self._cfg.max_versions:
+            return []
+        return sorted_versions[: len(sorted_versions) - self._cfg.max_versions]

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -112,6 +112,18 @@ class AlertEmailConfig(BaseSettings):
     to_addrs: list[str] = []
     min_level: str = "CRITICAL"
 
+    @field_validator("to_addrs", mode="before")
+    @classmethod
+    def _parse_to_addrs(cls, v: Any) -> Any:
+        """Accept a comma-separated string or a JSON array from env vars."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                import json
+                return json.loads(v)
+            return [addr.strip() for addr in v.split(",") if addr.strip()]
+        return v
+
 
 class AlertsConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
@@ -153,15 +165,13 @@ class RiskConfig(BaseSettings):
     vix: VixSizingConfig = VixSizingConfig()
 
 
-class ValidationThresholds(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class ValidationThresholds(BaseModel):
     min_sharpe: float = 0.5
     max_drawdown: float = 0.20      # absolute value — backtest.json stores negative
     min_hit_rate: float = 0.45
 
 
-class MinioConfig(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class MinioConfig(BaseModel):
     endpoint: str = "localhost:9000"
     access_key: str = "minioadmin"
     secret_key: str = "minioadmin"
@@ -169,8 +179,7 @@ class MinioConfig(BaseSettings):
     secure: bool = False
 
 
-class ModelSyncConfig(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore", env_prefix="MODEL_SYNC_")
+class ModelSyncConfig(BaseModel):
     enabled: bool = True
     user: str = "default"
     account: str = "default"
@@ -190,7 +199,7 @@ class Defaults(BaseSettings):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_nested_delimiter="__", protected_namespaces=())
 
     t212_active_account: str = "demo"  # "demo" | "invest" | "isa"
     t212_demo_api_key: str = ""

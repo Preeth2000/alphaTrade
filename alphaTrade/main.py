@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 # third-party
 from sqlmodel import Session
@@ -36,7 +37,8 @@ from alphaTrade.risk.performance import _effective_config, check_retirement, rec
 from alphaTrade.risk.sizing import compute_quantity
 from alphaTrade.kill_switch import is_halted
 from alphaTrade.scheduler.bar_close import schedule_bar_close
-from alphaTrade.store.db import get_engine
+from alphaTrade.store.db import get_engine, url_from_settings
+from alphaTrade.store.model_sync import ModelSyncDaemon
 from alphaTrade.store.repos import (
     BotSettings,
     BotSettingsRepo,
@@ -255,7 +257,7 @@ async def reconcile_positions(t212: T212Client, settings: Settings) -> None:
 
     Prevents stale SQLite state from causing wrong gate decisions after downtime.
     """
-    engine = get_engine(settings.state_db_path)
+    engine = get_engine(url_from_settings(settings))
     try:
         t212_positions = await asyncio.to_thread(t212.get_positions)
     except Exception as exc:
@@ -851,7 +853,7 @@ async def run(settings: Settings) -> None:
         log.warning("T212 startup probe failed: %s", exc)
         health_state.t212_ok = False
 
-    engine = get_engine(settings.state_db_path)
+    engine = get_engine(url_from_settings(settings))
 
     # Apply DB-persisted settings immediately so backtest scheduler and first tick use correct provider/config.
     with Session(engine) as _s0:
@@ -1058,6 +1060,18 @@ async def run(settings: Settings) -> None:
     tasks.append(asyncio.create_task(
         schedule_bar_close("1d", daily_close_callback, stop_event=stop_event)
     ))
+
+    model_sync_daemon: Optional[ModelSyncDaemon] = None
+    if settings.model_sync.enabled:
+        model_sync_daemon = ModelSyncDaemon(
+            minio_cfg=settings.minio,
+            sync_cfg=settings.model_sync,
+            models_dir=settings.models_dir,
+        )
+        tasks.append(asyncio.create_task(model_sync_daemon.run(stop_event=stop_event)))
+        log.info("model_sync: daemon enabled, polling MinIO every %ds", settings.model_sync.poll_interval)
+    else:
+        log.info("model_sync: daemon disabled (MODEL_SYNC__ENABLED=false)")
 
     log.info("Scheduler running. Active intervals at boot: %s. All intervals pre-spawned: %s", list(by_interval.keys()), _ALL_INTERVALS)
     await asyncio.gather(*tasks)

@@ -2,10 +2,11 @@
 import json
 from pathlib import Path
 from typing import Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from alphaTrade.config import Settings, ValidationThresholds
-from alphaTrade.store.model_sync import ValidationGate
+from alphaTrade.store.model_sync import ModelSyncDaemon, ValidationGate
 
 
 def test_settings_has_minio_defaults():
@@ -89,10 +90,6 @@ def test_validation_gate_fails_missing_key():
     result = gate.check({"sharpe": 1.2})  # missing max_drawdown, hit_rate
     assert result.passed is False
     assert "missing" in result.reason.lower()
-
-
-from unittest.mock import AsyncMock, MagicMock, patch
-from alphaTrade.store.model_sync import ModelSyncDaemon
 
 
 def _make_daemon(tmp_path: Path, cfg=None) -> ModelSyncDaemon:

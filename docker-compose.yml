@@ -39,7 +39,7 @@ services:
       - MODEL_SYNC__VALIDATION__MIN_HIT_RATE=${MODEL_VALIDATION_MIN_HIT_RATE:-0.45}
     volumes:
       - ./alphaTrade:/app/alphaTrade:ro
-      - ./models:/app/models:ro
+      - ./models:/app/models
       - ./overrides.yaml:/app/overrides.yaml:ro
     ports:
       - "8080:8080"   # aiohttp health / readyz

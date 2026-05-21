@@ -153,6 +153,32 @@ class RiskConfig(BaseSettings):
     vix: VixSizingConfig = VixSizingConfig()
 
 
+class ValidationThresholds(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    min_sharpe: float = 0.5
+    max_drawdown: float = 0.20      # absolute value — backtest.json stores negative
+    min_hit_rate: float = 0.45
+
+
+class MinioConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    endpoint: str = "localhost:9000"
+    access_key: str = "minioadmin"
+    secret_key: str = "minioadmin"
+    bucket: str = "models"
+    secure: bool = False
+
+
+class ModelSyncConfig(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="MODEL_SYNC_")
+    enabled: bool = True
+    user: str = "default"
+    account: str = "default"
+    poll_interval: int = 60         # seconds
+    max_versions: int = 5           # -1 = unbounded
+    validation: ValidationThresholds = ValidationThresholds()
+
+
 class Defaults(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
@@ -176,12 +202,15 @@ class Settings(BaseSettings):
     data_provider: str = "yfinance"
     polygon_api_key: str = ""
     models_dir: Path = Path("./models")
-    state_db_path: Path = Path("./state.db")
+    database_url: str = ""  # set to postgresql+psycopg2://... to use Postgres; empty = SQLite fallback
+    state_db_path: Path = Path("./state.db")  # used only when database_url is empty
     overrides_path: Path = Path("./overrides.yaml")
     webhook_url: str = ""
     webhook_level: str = "WARNING"
     log_file: Path = Path("./alphaTrade.log")
     api_port: int = 8081
+    minio: MinioConfig = MinioConfig()
+    model_sync: ModelSyncConfig = ModelSyncConfig()
 
     # Populated from overrides.yaml after load
     defaults: Defaults = Defaults()

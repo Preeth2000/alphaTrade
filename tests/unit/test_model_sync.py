@@ -1,5 +1,11 @@
 # tests/unit/test_model_sync.py
-from alphaTrade.config import Settings
+import json
+from pathlib import Path
+from typing import Optional
+
+import pytest
+from alphaTrade.config import Settings, ValidationThresholds
+from alphaTrade.store.model_sync import ValidationGate
 
 
 def test_settings_has_minio_defaults():
@@ -37,13 +43,6 @@ def test_model_sync_poll_interval_overridable_via_env(monkeypatch):
     monkeypatch.setenv("MODEL_SYNC__POLL_INTERVAL", "120")
     s = Settings()
     assert s.model_sync.poll_interval == 120
-
-
-import json
-from pathlib import Path
-import pytest
-from alphaTrade.config import ValidationThresholds
-from alphaTrade.store.model_sync import ValidationGate
 
 
 def _write_backtest(tmp_path: Path, data: dict) -> Path:

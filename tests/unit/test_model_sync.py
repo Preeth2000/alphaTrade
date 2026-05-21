@@ -141,3 +141,108 @@ def test_prune_unbounded_keeps_all(tmp_path):
     daemon = _make_daemon(tmp_path, cfg=MSC(max_versions=-1))
     versions = ["v1", "v2", "v3", "v4", "v5"]
     assert daemon._versions_to_prune(versions, promoted="v5") == []
+
+
+@pytest.mark.asyncio
+async def test_sync_once_skips_when_version_unchanged(tmp_path):
+    daemon = _make_daemon(tmp_path)
+    daemon._write_sync_record("AAPL_Transformer", "v2")
+
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2 = MagicMock(return_value={
+        "CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]
+    })
+    mock_s3.get_object = MagicMock(return_value={
+        "Body": MagicMock(read=lambda: json.dumps({"version": "v2"}).encode())
+    })
+
+    with patch("alphaTrade.store.model_sync.ModelSyncDaemon._make_s3_client", return_value=mock_s3):
+        downloaded = await daemon._sync_once()
+
+    assert downloaded == []
+    mock_s3.get_object.assert_called_once()  # only fetched latest, no download
+
+
+@pytest.mark.asyncio
+async def test_sync_once_downloads_and_promotes_on_new_version(tmp_path):
+    daemon = _make_daemon(tmp_path)
+    daemon._write_sync_record("AAPL_Transformer", "v1")
+
+    backtest_data = json.dumps({
+        "sharpe": 1.5, "max_drawdown": -0.05, "hit_rate": 0.60, "n_trades": 50
+    }).encode()
+    manifest_data = json.dumps({"run_name": "AAPL_Transformer", "model_hash": "abc123"}).encode()
+
+    def fake_download(Bucket, Key, Filename):
+        p = Path(Filename)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if Key.endswith("backtest.json"):
+            p.write_bytes(backtest_data)
+        elif Key.endswith("manifest.json"):
+            p.write_bytes(manifest_data)
+        elif Key.endswith("model.onnx"):
+            p.write_bytes(b"\x00" * 8)
+
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2 = MagicMock(side_effect=[
+        # first call: list run prefixes
+        {"CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]},
+        # second call: list files in v2/
+        {"Contents": [
+            {"Key": "models/default/default/AAPL_Transformer/v2/manifest.json"},
+            {"Key": "models/default/default/AAPL_Transformer/v2/model.onnx"},
+            {"Key": "models/default/default/AAPL_Transformer/v2/backtest.json"},
+        ]}
+    ])
+    mock_s3.get_object = MagicMock(return_value={
+        "Body": MagicMock(read=lambda: json.dumps({"version": "v2"}).encode())
+    })
+    mock_s3.download_file = MagicMock(side_effect=fake_download)
+
+    with patch("alphaTrade.store.model_sync.ModelSyncDaemon._make_s3_client", return_value=mock_s3):
+        promoted = await daemon._sync_once()
+
+    assert "AAPL_Transformer" in promoted
+    assert daemon._read_sync_record("AAPL_Transformer") == "v2"
+    assert (tmp_path / "models" / "AAPL_Transformer" / "manifest.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sync_once_rejects_failed_validation(tmp_path):
+    daemon = _make_daemon(tmp_path)
+
+    backtest_data = json.dumps({
+        "sharpe": -2.1, "max_drawdown": -0.12, "hit_rate": 0.0, "n_trades": 1
+    }).encode()
+    manifest_data = json.dumps({"run_name": "AAPL_Transformer", "model_hash": "abc123"}).encode()
+
+    def fake_download(Bucket, Key, Filename):
+        p = Path(Filename)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if Key.endswith("backtest.json"):
+            p.write_bytes(backtest_data)
+        elif Key.endswith("manifest.json"):
+            p.write_bytes(manifest_data)
+        elif Key.endswith("model.onnx"):
+            p.write_bytes(b"\x00" * 8)
+
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2 = MagicMock(side_effect=[
+        {"CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]},
+        {"Contents": [
+            {"Key": "models/default/default/AAPL_Transformer/v1/manifest.json"},
+            {"Key": "models/default/default/AAPL_Transformer/v1/model.onnx"},
+            {"Key": "models/default/default/AAPL_Transformer/v1/backtest.json"},
+        ]}
+    ])
+    mock_s3.get_object = MagicMock(return_value={
+        "Body": MagicMock(read=lambda: json.dumps({"version": "v1"}).encode())
+    })
+    mock_s3.download_file = MagicMock(side_effect=fake_download)
+
+    with patch("alphaTrade.store.model_sync.ModelSyncDaemon._make_s3_client", return_value=mock_s3):
+        promoted = await daemon._sync_once()
+
+    assert promoted == []
+    assert daemon._read_sync_record("AAPL_Transformer") is None
+    assert not (tmp_path / "models" / "AAPL_Transformer").exists()

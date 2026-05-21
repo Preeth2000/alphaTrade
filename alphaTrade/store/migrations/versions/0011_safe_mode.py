@@ -16,8 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    bs_cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(botsettings)"))]
+    bind = op.get_bind()
+    bs_cols = [c["name"] for c in sa.inspect(bind).get_columns("botsettings")]
     for col_name in ("safe_mode", "dangerously_allow_pyramid"):
         if col_name not in bs_cols:
             op.add_column("botsettings", sa.Column(col_name, sa.Boolean(), nullable=True))

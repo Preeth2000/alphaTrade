@@ -16,15 +16,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
+    bind = op.get_bind()
 
     # Add first_trade_at to modelperformance
-    mp_cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(modelperformance)"))]
+    mp_cols = [c["name"] for c in sa.inspect(bind).get_columns("modelperformance")]
     if "first_trade_at" not in mp_cols:
         op.add_column("modelperformance", sa.Column("first_trade_at", sa.DateTime(), nullable=True))
 
     # Add retirement fields to botsettings
-    bs_cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(botsettings)"))]
+    bs_cols = [c["name"] for c in sa.inspect(bind).get_columns("botsettings")]
     new_cols = [
         ("retirement_enabled", sa.Boolean(), None),
         ("retirement_lookback_trades", sa.Integer(), None),

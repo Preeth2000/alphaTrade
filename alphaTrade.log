@@ -468,3 +468,107 @@
 {"ts": "2026-05-15 12:19:19,398", "level": "INFO", "module": "alphaTrade.api.app", "message": "API server listening on :8081"}
 {"ts": "2026-05-15 12:19:19,398", "level": "INFO", "module": "alphaTrade.main", "message": "Scheduler running. Intervals: []"}
 {"ts": "2026-05-15 12:19:19,409", "level": "INFO", "module": "alphaTrade.main", "message": "Graceful shutdown complete."}
+{"ts": "2026-05-20 19:54:46,984", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:54:46,985", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:54:47,241", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:54:47,242", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:54:47,310", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:54:47,311", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:56:58,052", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:56:58,053", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:56:58,055", "level": "INFO", "module": "alembic.runtime.migration", "message": "Context impl SQLiteImpl."}
+{"ts": "2026-05-20 19:56:58,055", "level": "INFO", "module": "alembic.runtime.migration", "message": "Will assume non-transactional DDL."}
+{"ts": "2026-05-20 19:56:58,062", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade  -> 0001, initial schema"}
+{"ts": "2026-05-20 19:56:58,095", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0001 -> 0002, enhancement tables: trade_journal, pnl_snapshot, model_performance, sector_cache, backtest_run, backtest_trade"}
+{"ts": "2026-05-20 19:56:58,145", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0002 -> 0003, bot settings table"}
+{"ts": "2026-05-20 19:56:58,152", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0003 -> 0004, Add stop_order_id and limit_order_id to position table for OCO re-attach on restart."}
+{"ts": "2026-05-20 19:56:58,160", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0004 -> 0005, Add t212_secret_key to botsettings for Basic Auth support."}
+{"ts": "2026-05-20 19:56:58,166", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0005 -> 0006"}
+{"ts": "2026-05-20 19:56:58,172", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0006 -> 0007"}
+{"ts": "2026-05-20 19:56:58,178", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0007 -> 0008, Replace t212 single key pair with per-account key pairs."}
+{"ts": "2026-05-20 19:56:58,205", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0008 -> 0009, Add first_trade_at to modelperformance and retirement fields to botsettings."}
+{"ts": "2026-05-20 19:56:58,227", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0009 -> 0010, Add backtestmodelrun table for per-model run tracking."}
+{"ts": "2026-05-20 19:56:58,236", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0010 -> 0011, Add safe_mode and dangerously_allow_pyramid to botsettings."}
+{"ts": "2026-05-20 19:56:58,245", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0011 -> 0012, Add safe_mode and dangerously_allow_pyramid to model_override."}
+{"ts": "2026-05-20 19:56:58,254", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0012 -> 0013, Add retirement and backtest schedule fields to model_override."}
+{"ts": "2026-05-20 19:56:58,280", "level": "INFO", "module": "alembic.runtime.migration", "message": "Running upgrade 0013 -> 0014, Add risk sizing, portfolio, ATR, VIX, and backtest fields to botsettings."}
+{"ts": "2026-05-20 19:56:58,352", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task started"}
+{"ts": "2026-05-20 19:56:58,353", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-05-20 19:56:58,354", "level": "INFO", "module": "apscheduler.scheduler", "message": "Added job \"BacktestScheduler._add_job.<locals>._job\" to job store \"default\""}
+{"ts": "2026-05-20 19:56:58,354", "level": "INFO", "module": "alphaTrade.main", "message": "BacktestScheduler started (enabled=True)"}
+{"ts": "2026-05-20 19:56:58,354", "level": "INFO", "module": "alphaTrade.main", "message": "Scheduler running. Active intervals at boot: []. All intervals pre-spawned: ['1m', '5m', '15m', '1h', '1d', '1wk']"}
+{"ts": "2026-05-20 19:56:58,355", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task stopped"}
+{"ts": "2026-05-20 19:56:58,357", "level": "INFO", "module": "alphaTrade.main", "message": "Graceful shutdown complete."}
+{"ts": "2026-05-20 19:56:58,357", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+{"ts": "2026-05-20 19:56:58,366", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:56:58,366", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:56:58,368", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task started"}
+{"ts": "2026-05-20 19:56:58,371", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-05-20 19:56:58,371", "level": "INFO", "module": "apscheduler.scheduler", "message": "Added job \"BacktestScheduler._add_job.<locals>._job\" to job store \"default\""}
+{"ts": "2026-05-20 19:56:58,371", "level": "INFO", "module": "alphaTrade.main", "message": "BacktestScheduler started (enabled=True)"}
+{"ts": "2026-05-20 19:56:58,372", "level": "INFO", "module": "alphaTrade.main", "message": "Scheduler running. Active intervals at boot: []. All intervals pre-spawned: ['1m', '5m', '15m', '1h', '1d', '1wk']"}
+{"ts": "2026-05-20 19:56:58,372", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task stopped"}
+{"ts": "2026-05-20 19:56:58,373", "level": "INFO", "module": "alphaTrade.main", "message": "Graceful shutdown complete."}
+{"ts": "2026-05-20 19:56:58,373", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+{"ts": "2026-05-20 19:56:58,383", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:56:58,384", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:56:58,387", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task started"}
+{"ts": "2026-05-20 19:56:58,388", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-05-20 19:56:58,388", "level": "INFO", "module": "apscheduler.scheduler", "message": "Added job \"BacktestScheduler._add_job.<locals>._job\" to job store \"default\""}
+{"ts": "2026-05-20 19:56:58,388", "level": "INFO", "module": "alphaTrade.main", "message": "BacktestScheduler started (enabled=True)"}
+{"ts": "2026-05-20 19:56:58,389", "level": "INFO", "module": "alphaTrade.main", "message": "Scheduler running. Active intervals at boot: []. All intervals pre-spawned: ['1m', '5m', '15m', '1h', '1d', '1wk']"}
+{"ts": "2026-05-20 19:56:58,389", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task stopped"}
+{"ts": "2026-05-20 19:56:58,390", "level": "INFO", "module": "alphaTrade.main", "message": "Graceful shutdown complete."}
+{"ts": "2026-05-20 19:56:58,394", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-20 19:56:58,395", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-20 19:56:58,395", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+{"ts": "2026-05-20 19:56:58,397", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task started"}
+{"ts": "2026-05-20 19:56:58,398", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-05-20 19:56:58,399", "level": "INFO", "module": "apscheduler.scheduler", "message": "Added job \"BacktestScheduler._add_job.<locals>._job\" to job store \"default\""}
+{"ts": "2026-05-20 19:56:58,399", "level": "INFO", "module": "alphaTrade.main", "message": "BacktestScheduler started (enabled=True)"}
+{"ts": "2026-05-20 19:56:58,399", "level": "INFO", "module": "alphaTrade.main", "message": "Scheduler running. Active intervals at boot: []. All intervals pre-spawned: ['1m', '5m', '15m', '1h', '1d', '1wk']"}
+{"ts": "2026-05-20 19:56:58,400", "level": "INFO", "module": "alphaTrade.main", "message": "AsyncBroker drain task stopped"}
+{"ts": "2026-05-20 19:56:58,400", "level": "INFO", "module": "alphaTrade.main", "message": "Graceful shutdown complete."}
+{"ts": "2026-05-20 19:56:58,401", "level": "INFO", "module": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+{"ts": "2026-05-21 23:07:37,506", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:07:37,506", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:07:37,721", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:07:37,722", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:07:37,781", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:07:37,781", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:14:22,179", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:14:22,180", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:14:22,419", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:14:22,419", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:14:22,479", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:14:22,480", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:59:12,506", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:59:12,507", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:59:12,713", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:59:12,714", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-21 23:59:12,769", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-21 23:59:12,769", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:33:11,333", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:33:11,333", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:33:11,569", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:33:11,570", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:33:11,638", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:33:11,639", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:34:39,314", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:34:39,314", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:34:39,543", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:34:39,543", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:34:39,609", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:34:39,610", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:43:10,659", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:43:10,659", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:43:10,892", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:43:10,892", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:43:10,954", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:43:10,954", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:55:23,370", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:55:23,371", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:55:23,429", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:55:23,429", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}
+{"ts": "2026-05-22 00:55:23,487", "level": "INFO", "module": "alphaTrade.main", "message": "Trading halted on startup \u2014 call POST /resume to begin trading"}
+{"ts": "2026-05-22 00:55:23,487", "level": "INFO", "module": "alphaTrade.main", "message": "Metrics server listening on :9090"}

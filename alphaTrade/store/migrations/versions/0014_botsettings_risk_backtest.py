@@ -16,8 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(botsettings)"))]
+    bind = op.get_bind()
+    cols = [c["name"] for c in sa.inspect(bind).get_columns("botsettings")]
     new_cols = [
         ("sizing_mode", sa.String()),
         ("portfolio_mode", sa.String()),

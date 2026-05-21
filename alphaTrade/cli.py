@@ -95,7 +95,7 @@ def verify(
 def status():
     """Show loaded models, open positions, and today's PnL from state.db."""
     from alphaTrade.config import Settings
-    from alphaTrade.store.db import get_session
+    from alphaTrade.store.db import get_session, url_from_settings
     from alphaTrade.store.repos import PositionRepo, EquityRepo
     from alphaTrade.main import scan_models
 
@@ -111,7 +111,7 @@ def status():
     for manifest, _ in models:
         console.print(f"  {manifest.run_name}  ({manifest.ticker}, {manifest.interval})")
 
-    with get_session(settings.state_db_path) as session:
+    with get_session(url_from_settings(settings)) as session:
         positions = PositionRepo(session).all()
         if positions:
             t = Table("ticker", "qty", "avg_entry", "cooldown_until")
@@ -159,14 +159,14 @@ def backtest(
     from alphaTrade.config import Settings
     from alphaTrade.backtest.engine import run_backtest
     from alphaTrade.backtest.reporter import compute_summary, format_text
-    from alphaTrade.store.db import get_session
+    from alphaTrade.store.db import get_session, url_from_settings
 
     settings = Settings()
     mdir = models_dir or settings.models_dir
 
     console.print(f"[bold]Running backtest[/bold] {start} → {end} from {mdir}")
 
-    with get_session(settings.state_db_path) as session:
+    with get_session(url_from_settings(settings)) as session:
         result = run_backtest(
             session=session,
             models_dir=mdir,
@@ -194,7 +194,7 @@ def report(
     import sys
     from datetime import date, timedelta
     from alphaTrade.config import Settings
-    from alphaTrade.store.db import get_session
+    from alphaTrade.store.db import get_session, url_from_settings
     from alphaTrade.store.repos import PnlSnapshotRepo, TradeJournalRepo
 
     try:
@@ -205,7 +205,7 @@ def report(
         raise typer.Exit(1)
     since_date = since or (date.today() - timedelta(days=30)).isoformat()
 
-    with get_session(settings.state_db_path) as session:
+    with get_session(url_from_settings(settings)) as session:
         snapshots = PnlSnapshotRepo(session).since(since_date)
         trades = TradeJournalRepo(session).since(since_date)
 

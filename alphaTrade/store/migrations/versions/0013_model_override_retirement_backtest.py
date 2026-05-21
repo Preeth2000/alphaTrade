@@ -16,8 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    cols = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(model_override)"))]
+    bind = op.get_bind()
+    cols = [c["name"] for c in sa.inspect(bind).get_columns("model_override")]
     new_cols = [
         ("retirement_enabled", sa.Boolean()),
         ("retirement_lookback_trades", sa.Integer()),

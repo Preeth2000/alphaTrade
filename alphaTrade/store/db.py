@@ -1,4 +1,4 @@
-"""SQLite engine and schema. Migrations via Alembic."""
+"""Database engine and schema. Migrations via Alembic."""
 from __future__ import annotations
 
 import importlib.resources as pkg_resources
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlmodel import create_engine, Session
 
-_engines: dict[str, object] = {}
+_engine = None
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
@@ -22,24 +22,46 @@ def _alembic_ini_path() -> str:
         return str(p)
 
 
-def run_migrations(db_path: str | Path) -> None:
-    """Run alembic upgrade head against db_path. Idempotent."""
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+    # Fallback: SQLite for local dev / tests
+    db_path = os.environ.get("STATE_DB_PATH", "state.db")
+    return f"sqlite:///{Path(db_path).resolve()}"
+
+
+def url_from_settings(settings) -> str:
+    """Resolve effective DB URL from a Settings object."""
+    if settings.database_url:
+        return settings.database_url
+    return f"sqlite:///{Path(settings.state_db_path).resolve()}"
+
+
+def run_migrations(database_url: str | Path | None = None) -> None:
+    """Run alembic upgrade head. Idempotent."""
     from alembic.config import Config
     from alembic import command
 
+    if isinstance(database_url, Path):
+        database_url = f"sqlite:///{database_url.resolve()}"
+    url = database_url or _database_url()
     cfg = Config(_alembic_ini_path())
-    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    cfg.set_main_option("sqlalchemy.url", url)
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
     command.upgrade(cfg, "head")
 
 
-def get_engine(db_path: str | Path = "state.db"):
-    key = str(Path(db_path).resolve())
-    if key not in _engines:
-        run_migrations(db_path)
-        _engines[key] = create_engine(f"sqlite:///{key}", echo=False)
-    return _engines[key]
+def get_engine(database_url: str | Path | None = None):
+    global _engine
+    if _engine is None:
+        if isinstance(database_url, Path):
+            database_url = f"sqlite:///{database_url.resolve()}"
+        url = database_url or _database_url()
+        run_migrations(url)
+        _engine = create_engine(url, echo=False)
+    return _engine
 
 
-def get_session(db_path: str | Path = "state.db") -> Session:
-    return Session(get_engine(db_path))
+def get_session(database_url: str | None = None) -> Session:
+    return Session(get_engine(database_url))

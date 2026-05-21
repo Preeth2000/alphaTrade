@@ -50,10 +50,10 @@ class TestAlembicMigrations:
         monkeypatch.setattr(SQLModel.metadata, "create_all", lambda *a, **kw: calls.append(1))
 
         from alphaTrade.store import db as db_mod
-        monkeypatch.setattr(db_mod, "_engines", {})
+        monkeypatch.setattr(db_mod, "_engine", None)
 
         from alphaTrade.store.db import get_engine
-        get_engine(tmp_path / "test.db")
+        get_engine(f"sqlite:///{tmp_path / 'test.db'}")
 
         assert calls == [], "create_all must not be called when Alembic is used"
 

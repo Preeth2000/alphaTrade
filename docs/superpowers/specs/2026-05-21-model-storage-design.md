@@ -59,7 +59,7 @@ models/
             └── v3/
 ```
 
-**Run name convention:** `{ticker}_{arch}` for standard models, `{ticker}_{arch}_{variant}` only when strategy differs meaningfully (e.g. `AAPL_Transformer_highvol`). Hyperparameters are recorded in `config.snapshot.yaml`, not encoded in the name.
+**Run name:** fully configurable by producer — consumer treats it as an opaque string. No naming convention enforced.
 
 **`latest` object contents:**
 ```json

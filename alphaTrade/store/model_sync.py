@@ -60,19 +60,25 @@ class ModelSyncDaemon:
     # ---------- version record helpers ----------
 
     def _write_sync_record(self, run_name: str, version: str) -> None:
-        (self._sync_dir / run_name).write_text(version)
+        safe_name = Path(run_name).name.replace("/", "_")
+        (self._sync_dir / safe_name).write_text(version)
 
     def _read_sync_record(self, run_name: str) -> Optional[str]:
-        p = self._sync_dir / run_name
+        safe_name = Path(run_name).name.replace("/", "_")
+        p = self._sync_dir / safe_name
         return p.read_text().strip() if p.exists() else None
 
     # ---------- promotion ----------
 
     def _promote(self, src: Path, run_name: str, version: str) -> None:
         dest = self._models_dir / run_name
+        tmp = dest.with_suffix(".tmp")
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        shutil.copytree(src, tmp)
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(src, dest)
+        tmp.rename(dest)
         self._write_sync_record(run_name, version)
         log.info("model_sync: promoted %s %s", run_name, version)
 
@@ -81,7 +87,17 @@ class ModelSyncDaemon:
     def _versions_to_prune(self, versions: list[str], promoted: str) -> list[str]:
         if self._cfg.max_versions == -1:
             return []
-        sorted_versions = sorted(versions, key=lambda v: int(v[1:]))
-        if len(sorted_versions) <= self._cfg.max_versions:
+
+        def _version_int(v: str) -> int:
+            try:
+                return int(v[1:]) if v.startswith("v") else 0
+            except ValueError:
+                return 0
+
+        sorted_versions = sorted(versions, key=_version_int)
+        # never prune the just-promoted version
+        candidates = [v for v in sorted_versions if v != promoted]
+        excess = len(sorted_versions) - self._cfg.max_versions
+        if excess <= 0:
             return []
-        return sorted_versions[: len(sorted_versions) - self._cfg.max_versions]
+        return candidates[:excess]

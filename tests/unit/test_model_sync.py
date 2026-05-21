@@ -150,7 +150,7 @@ async def test_sync_once_skips_when_version_unchanged(tmp_path):
 
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2 = MagicMock(return_value={
-        "CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]
+        "CommonPrefixes": [{"Prefix": "default/default/AAPL_Transformer/"}]
     })
     mock_s3.get_object = MagicMock(return_value={
         "Body": MagicMock(read=lambda: json.dumps({"version": "v2"}).encode())
@@ -186,12 +186,12 @@ async def test_sync_once_downloads_and_promotes_on_new_version(tmp_path):
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2 = MagicMock(side_effect=[
         # first call: list run prefixes
-        {"CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]},
+        {"CommonPrefixes": [{"Prefix": "default/default/AAPL_Transformer/"}]},
         # second call: list files in v2/
         {"Contents": [
-            {"Key": "models/default/default/AAPL_Transformer/v2/manifest.json"},
-            {"Key": "models/default/default/AAPL_Transformer/v2/model.onnx"},
-            {"Key": "models/default/default/AAPL_Transformer/v2/backtest.json"},
+            {"Key": "default/default/AAPL_Transformer/v2/manifest.json"},
+            {"Key": "default/default/AAPL_Transformer/v2/model.onnx"},
+            {"Key": "default/default/AAPL_Transformer/v2/backtest.json"},
         ]}
     ])
     mock_s3.get_object = MagicMock(return_value={
@@ -228,11 +228,11 @@ async def test_sync_once_rejects_failed_validation(tmp_path):
 
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2 = MagicMock(side_effect=[
-        {"CommonPrefixes": [{"Prefix": "models/default/default/AAPL_Transformer/"}]},
+        {"CommonPrefixes": [{"Prefix": "default/default/AAPL_Transformer/"}]},
         {"Contents": [
-            {"Key": "models/default/default/AAPL_Transformer/v1/manifest.json"},
-            {"Key": "models/default/default/AAPL_Transformer/v1/model.onnx"},
-            {"Key": "models/default/default/AAPL_Transformer/v1/backtest.json"},
+            {"Key": "default/default/AAPL_Transformer/v1/manifest.json"},
+            {"Key": "default/default/AAPL_Transformer/v1/model.onnx"},
+            {"Key": "default/default/AAPL_Transformer/v1/backtest.json"},
         ]}
     ])
     mock_s3.get_object = MagicMock(return_value={

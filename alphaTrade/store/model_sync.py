@@ -131,20 +131,16 @@ class ModelSyncDaemon:
             resp = s3.get_object(Bucket=self._minio_cfg.bucket, Key=key)
             data = json.loads(resp["Body"].read())
             return data.get("version")
-        except Exception:
+        except Exception as exc:
+            log.warning("model_sync: failed to read latest for %s: %s", run_name, exc)
             return None
 
     def _download_version(self, s3, run_name: str, version: str, dest: Path) -> None:
         prefix = f"{self._cfg.user}/{self._cfg.account}/{run_name}/{version}/"
         resp = s3.list_objects_v2(Bucket=self._minio_cfg.bucket, Prefix=prefix)
-        version_marker = f"/{version}/"
         for obj in resp.get("Contents") or []:
             key = obj["Key"]
-            # strip everything up to and including the version segment
-            if version_marker in key:
-                rel = key.split(version_marker, 1)[1]
-            else:
-                rel = key[len(prefix):]
+            rel = key[len(prefix):]
             local = dest / rel
             local.parent.mkdir(parents=True, exist_ok=True)
             s3.download_file(self._minio_cfg.bucket, key, str(local))
@@ -173,6 +169,8 @@ class ModelSyncDaemon:
 
         log.info("model_sync: new version %s for %s (local=%s)", remote_version, run_name, local_version)
         tmp_dir = tmp_root / run_name
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
         tmp_dir.mkdir(parents=True, exist_ok=True)
         try:
             self._download_version(s3, run_name, remote_version, tmp_dir)

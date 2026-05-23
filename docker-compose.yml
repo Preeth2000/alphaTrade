@@ -7,7 +7,7 @@ services:
     environment:
       - DATA_PROVIDER=${DATA_PROVIDER:-yfinance}
       - MODELS_DIR=/app/models
-      - DATABASE_URL=postgresql+psycopg2://platform:${POSTGRES_PASSWORD}@postgres/alphatrade
+      - DATABASE_URL=postgresql+psycopg2://platform:${POSTGRES_PASSWORD}@postgres:5432/alphatrade
       - REDIS__URL=redis://redis:6379/0
       - MINIO__ENDPOINT=minio:9000
       - MINIO__ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}

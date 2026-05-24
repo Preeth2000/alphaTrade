@@ -41,7 +41,14 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
     app.include_router(orders.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(signals.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(pnl.make_router(session_dep, api_key_dep), prefix="/api/v1")
-    app.include_router(models.make_router(session_dep, api_key_dep, registry, settings), prefix="/api/v1")
+    import os as _os
+    app.include_router(
+        models.make_router(
+            session_dep, api_key_dep, registry, settings,
+            mlflow_tracking_uri=_os.environ.get("MLFLOW_TRACKING_URI"),
+        ),
+        prefix="/api/v1",
+    )
     app.include_router(backtest.make_router(session_dep, api_key_dep, backtest_scheduler), prefix="/api/v1")
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
     app.include_router(settings_router.make_router(session_dep, api_key_dep, settings, t212_holder, provider_holder), prefix="/api/v1")

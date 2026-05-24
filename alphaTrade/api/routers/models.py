@@ -1,8 +1,10 @@
 from __future__ import annotations
+import os
 from collections.abc import Callable
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from mlflow import MlflowClient
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from alphaTrade.store.repos import (
@@ -88,7 +90,34 @@ def _to_override_response(record: ModelOverrideRecord, session: Session) -> Mode
     )
 
 
-def make_router(session_dep: Callable, api_key_dep: Callable, registry=None, settings=None) -> APIRouter:
+class MLflowVersionInfo(BaseModel):
+    version: str
+    stage: str
+    run_id: str
+
+
+class MLflowModelInfo(BaseModel):
+    name: str
+    versions: list[MLflowVersionInfo]
+
+
+class MLflowPromoteRequest(BaseModel):
+    version: Optional[str] = None
+
+
+class MLflowPromoteResponse(BaseModel):
+    model_name: str
+    version: str
+    stage: str
+
+
+def make_router(
+    session_dep: Callable,
+    api_key_dep: Callable,
+    registry=None,
+    settings=None,
+    mlflow_tracking_uri: Optional[str] = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/models", response_model=list[ModelSummary])
@@ -189,5 +218,71 @@ def make_router(session_dep: Callable, api_key_dep: Callable, registry=None, set
         if not deleted:
             raise HTTPException(status_code=404, detail=f"No overrides found for {run_name!r}")
         return {"deleted": True, "run_name": run_name}
+
+    def _get_mlflow_client() -> MlflowClient:
+        uri = mlflow_tracking_uri or os.environ.get("MLFLOW_TRACKING_URI")
+        if not uri:
+            raise HTTPException(status_code=503, detail="MLFLOW_TRACKING_URI not configured")
+        return MlflowClient(tracking_uri=uri)
+
+    @router.get("/models/registry", response_model=list[MLflowModelInfo])
+    def list_registry_models(_: None = Depends(api_key_dep)):
+        client = _get_mlflow_client()
+        registered = client.search_registered_models()
+        return [
+            MLflowModelInfo(
+                name=rm.name,
+                versions=[
+                    MLflowVersionInfo(
+                        version=v.version,
+                        stage=v.current_stage,
+                        run_id=v.run_id,
+                    )
+                    for v in rm.latest_versions
+                ],
+            )
+            for rm in registered
+        ]
+
+    @router.post("/models/{model_name}/promote", response_model=MLflowPromoteResponse)
+    def promote_model(
+        model_name: str,
+        body: MLflowPromoteRequest,
+        _: None = Depends(api_key_dep),
+    ):
+        client = _get_mlflow_client()
+        version = body.version
+        if version is None:
+            staging = client.get_latest_versions(model_name, stages=["Staging"])
+            if not staging:
+                raise HTTPException(status_code=404, detail=f"No Staging version for {model_name!r}")
+            version = staging[0].version
+        client.transition_model_version_stage(
+            name=model_name,
+            version=version,
+            to_stage="Production",
+            archive_existing_versions=True,
+        )
+        return MLflowPromoteResponse(model_name=model_name, version=version, stage="Production")
+
+    @router.post("/models/{model_name}/demote", response_model=MLflowPromoteResponse)
+    def demote_model(
+        model_name: str,
+        body: MLflowPromoteRequest,
+        _: None = Depends(api_key_dep),
+    ):
+        client = _get_mlflow_client()
+        version = body.version
+        if version is None:
+            production = client.get_latest_versions(model_name, stages=["Production"])
+            if not production:
+                raise HTTPException(status_code=404, detail=f"No Production version for {model_name!r}")
+            version = production[0].version
+        client.transition_model_version_stage(
+            name=model_name,
+            version=version,
+            to_stage="Staging",
+        )
+        return MLflowPromoteResponse(model_name=model_name, version=version, stage="Staging")
 
     return router

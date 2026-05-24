@@ -855,6 +855,11 @@ async def run(settings: Settings) -> None:
 
     engine = get_engine(url_from_settings(settings))
 
+    from alphaTrade.cache.redis_client import create_redis
+    from alphaTrade.api import stream_bus as _stream_bus
+    _redis_client = await create_redis(settings.redis)
+    _stream_bus.configure(_redis_client)
+
     # Apply DB-persisted settings immediately so backtest scheduler and first tick use correct provider/config.
     with Session(engine) as _s0:
         _startup_db_s = BotSettingsRepo(_s0).get()
@@ -1064,12 +1069,11 @@ async def run(settings: Settings) -> None:
     model_sync_daemon: Optional[ModelSyncDaemon] = None
     if settings.model_sync.enabled:
         model_sync_daemon = ModelSyncDaemon(
-            minio_cfg=settings.minio,
             sync_cfg=settings.model_sync,
             models_dir=settings.models_dir,
         )
         tasks.append(asyncio.create_task(model_sync_daemon.run(stop_event=stop_event)))
-        log.info("model_sync: daemon enabled, polling MinIO every %ds", settings.model_sync.poll_interval)
+        log.info("model_sync: daemon enabled, polling MLflow every %ds", settings.model_sync.poll_interval)
     else:
         log.info("model_sync: daemon disabled (MODEL_SYNC__ENABLED=false)")
 
@@ -1090,5 +1094,8 @@ async def run(settings: Settings) -> None:
         api_server.should_exit = True
     if health_runner is not None:
         await health_runner.cleanup()
+    await _stream_bus.shutdown()
+    if _redis_client is not None:
+        await _redis_client.aclose()
     alert_manager.shutdown(timeout=5.0)
     log.info("Graceful shutdown complete.")

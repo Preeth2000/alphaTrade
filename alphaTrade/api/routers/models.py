@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from alphaTrade.store.repos import (
@@ -106,6 +107,7 @@ class MLflowPromoteRequest(BaseModel):
 
 
 class MLflowPromoteResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     model_name: str
     version: str
     stage: str
@@ -228,7 +230,10 @@ def make_router(
     @router.get("/models/registry", response_model=list[MLflowModelInfo])
     def list_registry_models(_: None = Depends(api_key_dep)):
         client = _get_mlflow_client()
-        registered = client.search_registered_models()
+        try:
+            registered = client.search_registered_models()
+        except MlflowException as exc:
+            raise HTTPException(status_code=502, detail=f"MLflow error: {exc}")
         return [
             MLflowModelInfo(
                 name=rm.name,
@@ -252,17 +257,22 @@ def make_router(
     ):
         client = _get_mlflow_client()
         version = body.version
-        if version is None:
-            staging = client.get_latest_versions(model_name, stages=["Staging"])
-            if not staging:
-                raise HTTPException(status_code=404, detail=f"No Staging version for {model_name!r}")
-            version = staging[0].version
-        client.transition_model_version_stage(
-            name=model_name,
-            version=version,
-            to_stage="Production",
-            archive_existing_versions=True,
-        )
+        try:
+            if version is None:
+                staging = client.get_latest_versions(model_name, stages=["Staging"])
+                if not staging:
+                    raise HTTPException(status_code=404, detail=f"No Staging version for {model_name!r}")
+                version = staging[0].version
+            client.transition_model_version_stage(
+                name=model_name,
+                version=version,
+                to_stage="Production",
+                archive_existing_versions=True,
+            )
+        except HTTPException:
+            raise
+        except MlflowException as exc:
+            raise HTTPException(status_code=502, detail=f"MLflow error: {exc}")
         return MLflowPromoteResponse(model_name=model_name, version=version, stage="Production")
 
     @router.post("/models/{model_name}/demote", response_model=MLflowPromoteResponse)
@@ -273,16 +283,21 @@ def make_router(
     ):
         client = _get_mlflow_client()
         version = body.version
-        if version is None:
-            production = client.get_latest_versions(model_name, stages=["Production"])
-            if not production:
-                raise HTTPException(status_code=404, detail=f"No Production version for {model_name!r}")
-            version = production[0].version
-        client.transition_model_version_stage(
-            name=model_name,
-            version=version,
-            to_stage="Staging",
-        )
+        try:
+            if version is None:
+                production = client.get_latest_versions(model_name, stages=["Production"])
+                if not production:
+                    raise HTTPException(status_code=404, detail=f"No Production version for {model_name!r}")
+                version = production[0].version
+            client.transition_model_version_stage(
+                name=model_name,
+                version=version,
+                to_stage="Staging",
+            )
+        except HTTPException:
+            raise
+        except MlflowException as exc:
+            raise HTTPException(status_code=502, detail=f"MLflow error: {exc}")
         return MLflowPromoteResponse(model_name=model_name, version=version, stage="Staging")
 
     return router

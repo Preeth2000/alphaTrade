@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+import os
 import time
 from sqlalchemy.engine import Engine
 from fastapi import FastAPI, Request
@@ -41,11 +42,10 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
     app.include_router(orders.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(signals.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(pnl.make_router(session_dep, api_key_dep), prefix="/api/v1")
-    import os as _os
     app.include_router(
         models.make_router(
             session_dep, api_key_dep, registry, settings,
-            mlflow_tracking_uri=_os.environ.get("MLFLOW_TRACKING_URI"),
+            mlflow_tracking_uri=os.environ.get("MLFLOW_TRACKING_URI"),
         ),
         prefix="/api/v1",
     )

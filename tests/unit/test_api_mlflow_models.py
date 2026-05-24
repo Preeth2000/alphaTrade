@@ -161,3 +161,29 @@ def test_demote_transitions_to_staging():
         version="2",
         to_stage="Staging",
     )
+
+
+def test_promote_returns_404_when_no_staging_version():
+    app = _make_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    mock_mlflow_client = MagicMock()
+    mock_mlflow_client.get_latest_versions.return_value = []  # no Staging versions
+
+    with patch("alphaTrade.api.routers.models.MlflowClient", return_value=mock_mlflow_client):
+        resp = client.post("/api/v1/models/AAPL_mlp/promote", json={})
+
+    assert resp.status_code == 404
+
+
+def test_demote_returns_404_when_no_production_version():
+    app = _make_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    mock_mlflow_client = MagicMock()
+    mock_mlflow_client.get_latest_versions.return_value = []  # no Production versions
+
+    with patch("alphaTrade.api.routers.models.MlflowClient", return_value=mock_mlflow_client):
+        resp = client.post("/api/v1/models/AAPL_mlp/demote", json={})
+
+    assert resp.status_code == 404

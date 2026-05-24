@@ -873,8 +873,14 @@ async def run(settings: Settings) -> None:
     registry = ModelRegistry(engine=engine)
     await registry.refresh(settings.models_dir, settings.model_overrides)
     if not registry.by_run_name:
-        log.error("No models loaded from %s. Exiting.", settings.models_dir)
-        return
+        if settings.model_sync.enabled:
+            log.warning(
+                "No models loaded from %s — model_sync daemon will deliver models when available.",
+                settings.models_dir,
+            )
+        else:
+            log.error("No models loaded from %s and model_sync is disabled. Exiting.", settings.models_dir)
+            return
 
     health_state.models_loaded = bool(registry.by_run_name)
     health_state.longest_interval_seconds = max(
@@ -1068,9 +1074,13 @@ async def run(settings: Settings) -> None:
 
     model_sync_daemon: Optional[ModelSyncDaemon] = None
     if settings.model_sync.enabled:
+        from sqlmodel import Session as _SyncSession
+        def _sync_session_factory():
+            return _SyncSession(engine)
         model_sync_daemon = ModelSyncDaemon(
             sync_cfg=settings.model_sync,
             models_dir=settings.models_dir,
+            session_factory=_sync_session_factory,
         )
         tasks.append(asyncio.create_task(model_sync_daemon.run(stop_event=stop_event)))
         log.info("model_sync: daemon enabled, polling MLflow every %ds", settings.model_sync.poll_interval)

@@ -38,8 +38,6 @@ def make_app(state: HealthState) -> web.Application:
         return web.Response(status=200, text="ok", headers=_cors_headers())
 
     async def readyz(request: web.Request) -> web.Response:
-        if not state.models_loaded:
-            return web.Response(status=503, text="no models loaded", headers=_cors_headers())
         return web.Response(status=200, text="ok", headers=_cors_headers())
 
     app.router.add_get("/healthz", healthz)

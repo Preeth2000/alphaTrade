@@ -647,3 +647,76 @@ class ModelOverrideRepo:
             self._s.commit()
             return True
         return False
+
+
+# ---------------------------------------------------------------------------
+# ModelDeployment (migration 0015)
+# ---------------------------------------------------------------------------
+
+class ModelDeployment(SQLModel, table=True):
+    __tablename__ = "model_deployments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_name: str = Field(index=True)
+    promoted_at: datetime = Field(default_factory=datetime.utcnow)
+    activated_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+    failure_msg: Optional[str] = None
+    status: str = Field(default="launching")  # launching | active | failed
+
+
+class ModelDeploymentRepo:
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def insert_launching(self, run_name: str) -> ModelDeployment:
+        row = ModelDeployment(run_name=run_name, promoted_at=datetime.utcnow(), status="launching")
+        self._s.add(row)
+        self._s.commit()
+        self._s.refresh(row)
+        return row
+
+    def mark_active(self, run_name: str) -> bool:
+        row = self._s.exec(
+            select(ModelDeployment)
+            .where(ModelDeployment.run_name == run_name, ModelDeployment.status == "launching")
+            .order_by(ModelDeployment.promoted_at.desc())
+        ).first()
+        if not row:
+            return False
+        row.activated_at = datetime.utcnow()
+        row.status = "active"
+        self._s.commit()
+        return True
+
+    def mark_failed(self, run_name: str, failure_msg: str) -> bool:
+        row = self._s.exec(
+            select(ModelDeployment)
+            .where(ModelDeployment.run_name == run_name, ModelDeployment.status == "launching")
+            .order_by(ModelDeployment.promoted_at.desc())
+        ).first()
+        if not row:
+            return False
+        row.failed_at = datetime.utcnow()
+        row.failure_msg = failure_msg
+        row.status = "failed"
+        self._s.commit()
+        return True
+
+    def latest_per_model(self) -> list[ModelDeployment]:
+        """Return latest deployment row per run_name."""
+        subq = (
+            select(ModelDeployment.run_name, ModelDeployment.promoted_at)
+            .group_by(ModelDeployment.run_name)
+        )
+        # SQLite compatible: fetch all, deduplicate in Python
+        all_rows = list(self._s.exec(
+            select(ModelDeployment).order_by(ModelDeployment.promoted_at.desc())
+        ).all())
+        seen: set[str] = set()
+        result: list[ModelDeployment] = []
+        for row in all_rows:
+            if row.run_name not in seen:
+                seen.add(row.run_name)
+                result.append(row)
+        return result

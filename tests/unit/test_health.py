@@ -44,11 +44,11 @@ async def test_healthz_ok(health_client):
 
 
 async def test_readyz_no_models(health_client):
+    # readyz returns 200 even without models — model_sync daemon delivers them later
     client, state = health_client
     state.t212_ok = True
     resp = await client.get("/readyz")
-    assert resp.status == 503
-    assert "no models loaded" in await resp.text()
+    assert resp.status == 200
 
 
 async def test_readyz_t212_down(health_client):

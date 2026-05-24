@@ -20,6 +20,7 @@ services:
       - MODEL_SYNC__VALIDATION__MIN_SHARPE=${MODEL_VALIDATION_MIN_SHARPE:-0.5}
       - MODEL_SYNC__VALIDATION__MAX_DRAWDOWN=${MODEL_VALIDATION_MAX_DRAWDOWN:-0.20}
       - MODEL_SYNC__VALIDATION__MIN_HIT_RATE=${MODEL_VALIDATION_MIN_HIT_RATE:-0.45}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ./alphaTrade:/app/alphaTrade:ro
       - ./models:/app/models

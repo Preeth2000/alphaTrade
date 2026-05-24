@@ -62,19 +62,20 @@ class ModelSyncDaemon:
     # ---------- version record helpers ----------
 
     def _write_sync_record(self, model_name: str, version: str) -> None:
-        safe_name = Path(model_name).name.replace("/", "_")
+        safe_name = model_name.replace("/", "_")
         (self._sync_dir / safe_name).write_text(version)
 
     def _read_sync_record(self, model_name: str) -> Optional[str]:
-        safe_name = Path(model_name).name.replace("/", "_")
+        safe_name = model_name.replace("/", "_")
         p = self._sync_dir / safe_name
         return p.read_text().strip() if p.exists() else None
 
     # ---------- promotion ----------
 
     def _promote(self, src: Path, model_name: str, version: str) -> None:
-        dest = self._models_dir / model_name
-        tmp = dest.with_suffix(".tmp")
+        safe_name = model_name.replace("/", "_")
+        dest = self._models_dir / safe_name
+        tmp = dest.parent / f"{dest.name}.tmp"
         if tmp.exists():
             shutil.rmtree(tmp)
         shutil.copytree(src, tmp)

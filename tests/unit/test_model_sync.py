@@ -5,8 +5,9 @@ from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from alphaTrade.config import Settings, ValidationThresholds
-from alphaTrade.store.model_sync import ModelSyncDaemon, ValidationGate
+from mlflow.exceptions import MlflowException
+from alphaTrade.config import Settings
+from alphaTrade.store.model_sync import ModelSyncDaemon
 
 
 # --- Settings / config tests ---
@@ -24,59 +25,10 @@ def test_settings_has_sync_defaults():
     assert s.model_sync.enabled is True
 
 
-def test_settings_has_validation_defaults():
-    s = Settings()
-    assert s.model_sync.validation.min_sharpe == 0.5
-    assert s.model_sync.validation.max_drawdown == 0.20
-    assert s.model_sync.validation.min_hit_rate == 0.45
-
-
 def test_model_sync_poll_interval_overridable_via_env(monkeypatch):
     monkeypatch.setenv("MODEL_SYNC__POLL_INTERVAL", "120")
     s = Settings()
     assert s.model_sync.poll_interval == 120
-
-
-# --- ValidationGate tests ---
-
-def test_validation_gate_passes():
-    thresholds = ValidationThresholds(min_sharpe=0.5, max_drawdown=0.20, min_hit_rate=0.45)
-    gate = ValidationGate(thresholds)
-    result = gate.check({"sharpe": 1.2, "max_drawdown": -0.08, "hit_rate": 0.55, "n_trades": 20})
-    assert result.passed is True
-    assert result.reason is None
-
-
-def test_validation_gate_fails_sharpe():
-    thresholds = ValidationThresholds(min_sharpe=0.5, max_drawdown=0.20, min_hit_rate=0.45)
-    gate = ValidationGate(thresholds)
-    result = gate.check({"sharpe": 0.3, "max_drawdown": -0.08, "hit_rate": 0.55, "n_trades": 20})
-    assert result.passed is False
-    assert "sharpe" in result.reason
-
-
-def test_validation_gate_fails_drawdown():
-    thresholds = ValidationThresholds(min_sharpe=0.5, max_drawdown=0.20, min_hit_rate=0.45)
-    gate = ValidationGate(thresholds)
-    result = gate.check({"sharpe": 1.2, "max_drawdown": -0.35, "hit_rate": 0.55, "n_trades": 20})
-    assert result.passed is False
-    assert "drawdown" in result.reason
-
-
-def test_validation_gate_fails_hit_rate():
-    thresholds = ValidationThresholds(min_sharpe=0.5, max_drawdown=0.20, min_hit_rate=0.45)
-    gate = ValidationGate(thresholds)
-    result = gate.check({"sharpe": 1.2, "max_drawdown": -0.08, "hit_rate": 0.30, "n_trades": 20})
-    assert result.passed is False
-    assert "hit_rate" in result.reason
-
-
-def test_validation_gate_fails_missing_key():
-    thresholds = ValidationThresholds()
-    gate = ValidationGate(thresholds)
-    result = gate.check({"sharpe": 1.2})
-    assert result.passed is False
-    assert "missing" in result.reason.lower()
 
 
 # --- ModelSyncDaemon helper ---
@@ -143,10 +95,10 @@ async def test_sync_once_skips_when_version_unchanged(tmp_path):
     mock_client.search_registered_models.return_value = [
         _make_mock_registered_model("AAPL_mlp")
     ]
-    mock_client.get_latest_versions.side_effect = lambda name, stages: (
-        [_make_mock_production_version("AAPL_mlp", "3", "run999")]
-        if "Production" in stages
-        else []
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        _make_mock_production_version("AAPL_mlp", "3", "run999")
+        if alias == "production"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
     )
 
     with patch("alphaTrade.store.model_sync.MlflowClient", return_value=mock_client):
@@ -164,7 +116,7 @@ async def test_sync_once_downloads_and_promotes_on_new_production_version(tmp_pa
         "sharpe": 1.5, "max_drawdown": -0.05, "hit_rate": 0.60, "n_trades": 50
     })
 
-    def fake_download_artifacts(uri, dst_path):
+    def fake_download_artifacts(run_id=None, artifact_path=None, dst_path=None):
         dst = Path(dst_path)
         dst.mkdir(parents=True, exist_ok=True)
         (dst / "backtest.json").write_text(backtest_data)
@@ -176,10 +128,10 @@ async def test_sync_once_downloads_and_promotes_on_new_production_version(tmp_pa
     mock_client.search_registered_models.return_value = [
         _make_mock_registered_model("AAPL_mlp")
     ]
-    mock_client.get_latest_versions.side_effect = lambda name, stages: (
-        [_make_mock_production_version("AAPL_mlp", "3", "run456")]
-        if "Production" in stages
-        else []
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        _make_mock_production_version("AAPL_mlp", "3", "run456")
+        if alias == "production"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
     )
 
     with patch("alphaTrade.store.model_sync.MlflowClient", return_value=mock_client), \
@@ -193,28 +145,24 @@ async def test_sync_once_downloads_and_promotes_on_new_production_version(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_sync_once_rejects_failed_validation(tmp_path):
+async def test_sync_once_fails_permanently_when_backtest_json_missing(tmp_path):
     daemon = _make_daemon(tmp_path)
 
-    bad_metrics = json.dumps({
-        "sharpe": 0.1, "max_drawdown": -0.60, "hit_rate": 0.30, "n_trades": 5
-    })
-
-    def fake_download_artifacts(uri, dst_path):
+    def fake_download_artifacts(run_id=None, artifact_path=None, dst_path=None):
         dst = Path(dst_path)
         dst.mkdir(parents=True, exist_ok=True)
-        (dst / "backtest.json").write_text(bad_metrics)
         (dst / "model.onnx").write_bytes(b"\x00")
+        # deliberately no backtest.json
         return str(dst)
 
     mock_client = MagicMock()
     mock_client.search_registered_models.return_value = [
         _make_mock_registered_model("AAPL_mlp")
     ]
-    mock_client.get_latest_versions.side_effect = lambda name, stages: (
-        [_make_mock_production_version("AAPL_mlp", "1", "run789")]
-        if "Production" in stages
-        else []
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        _make_mock_production_version("AAPL_mlp", "1", "run001")
+        if alias == "production"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
     )
 
     with patch("alphaTrade.store.model_sync.MlflowClient", return_value=mock_client), \
@@ -223,7 +171,34 @@ async def test_sync_once_rejects_failed_validation(tmp_path):
         promoted = await daemon._sync_once()
 
     assert promoted == []
-    assert daemon._read_sync_record("AAPL_mlp") is None
+    assert daemon._read_sync_record("AAPL_mlp") == "FAILED:1"
+
+
+@pytest.mark.asyncio
+async def test_sync_once_fails_permanently_when_no_run_id(tmp_path):
+    daemon = _make_daemon(tmp_path)
+
+    no_run_id_version = MagicMock()
+    no_run_id_version.version = "1"
+    no_run_id_version.run_id = None
+    no_run_id_version.name = "AAPL_mlp"
+
+    mock_client = MagicMock()
+    mock_client.search_registered_models.return_value = [
+        _make_mock_registered_model("AAPL_mlp")
+    ]
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        no_run_id_version
+        if alias == "production"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
+    )
+
+    with patch("alphaTrade.store.model_sync.MlflowClient", return_value=mock_client), \
+         patch("alphaTrade.store.model_sync.mlflow"):
+        promoted = await daemon._sync_once()
+
+    assert promoted == []
+    assert daemon._read_sync_record("AAPL_mlp") == "FAILED:1"
 
 
 @pytest.mark.asyncio
@@ -238,8 +213,9 @@ async def test_sync_once_notifies_new_staging_model(tmp_path):
     mock_client.search_registered_models.return_value = [
         _make_mock_registered_model("AAPL_lstm")
     ]
-    mock_client.get_latest_versions.side_effect = lambda name, stages: (
-        [staging_v] if "Staging" in stages else []
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        staging_v if alias == "staging"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
     )
 
     notify_calls = []
@@ -265,8 +241,9 @@ async def test_sync_once_does_not_re_notify_seen_staging(tmp_path):
     mock_client.search_registered_models.return_value = [
         _make_mock_registered_model("AAPL_lstm")
     ]
-    mock_client.get_latest_versions.side_effect = lambda name, stages: (
-        [staging_v] if "Staging" in stages else []
+    mock_client.get_model_version_by_alias.side_effect = lambda name, alias: (
+        staging_v if alias == "staging"
+        else (_ for _ in ()).throw(MlflowException("no alias"))
     )
 
     notify_calls = []

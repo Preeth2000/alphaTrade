@@ -165,10 +165,9 @@ class RiskConfig(BaseSettings):
     vix: VixSizingConfig = VixSizingConfig()
 
 
-class ValidationThresholds(BaseModel):
-    min_sharpe: float = 0.5
-    max_drawdown: float = 0.20      # absolute value — backtest.json stores negative
-    min_hit_rate: float = 0.45
+class RedisConfig(BaseModel):
+    url: str = "redis://localhost:6379/0"
+    enabled: bool = True
 
 
 class MinioConfig(BaseModel):
@@ -185,7 +184,7 @@ class ModelSyncConfig(BaseModel):
     account: str = "default"
     poll_interval: int = 60         # seconds
     max_versions: int = 5           # -1 = unbounded
-    validation: ValidationThresholds = ValidationThresholds()
+    max_download_attempts: int = 3  # retries before marking deployment failed
 
 
 class Defaults(BaseSettings):
@@ -218,6 +217,7 @@ class Settings(BaseSettings):
     webhook_level: str = "WARNING"
     log_file: Path = Path("./alphaTrade.log")
     api_port: int = 8081
+    redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()
     model_sync: ModelSyncConfig = ModelSyncConfig()
 

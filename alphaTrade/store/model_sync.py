@@ -2,62 +2,40 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import shutil
-from dataclasses import dataclass
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Callable, Optional
 
 import mlflow
 from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
 
-from alphaTrade.config import ModelSyncConfig, ValidationThresholds
+from alphaTrade.config import ModelSyncConfig
 
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class ValidationResult:
-    passed: bool
-    reason: Optional[str] = None
-
-
-class ValidationGate:
-    _REQUIRED_KEYS = ("sharpe", "max_drawdown", "hit_rate")
-
-    def __init__(self, thresholds: ValidationThresholds) -> None:
-        self._t = thresholds
-
-    def check(self, metrics: dict[str, Any]) -> ValidationResult:
-        missing = [k for k in self._REQUIRED_KEYS if k not in metrics]
-        if missing:
-            return ValidationResult(False, f"missing keys: {missing}")
-        if metrics["sharpe"] < self._t.min_sharpe:
-            return ValidationResult(False, f"sharpe {metrics['sharpe']:.3f} < {self._t.min_sharpe}")
-        drawdown = abs(metrics["max_drawdown"])
-        if drawdown > self._t.max_drawdown:
-            return ValidationResult(False, f"drawdown {drawdown:.3f} > {self._t.max_drawdown}")
-        if metrics["hit_rate"] < self._t.min_hit_rate:
-            return ValidationResult(False, f"hit_rate {metrics['hit_rate']:.3f} < {self._t.min_hit_rate}")
-        return ValidationResult(True)
 
 
 class ModelSyncDaemon:
     _SYNC_DIR = ".sync"
 
+    _FAILED_PREFIX = "FAILED:"
+
     def __init__(
         self,
         sync_cfg: ModelSyncConfig,
         models_dir: Path,
+        session_factory: Optional[Callable] = None,
     ) -> None:
         self._cfg = sync_cfg
         self._models_dir = models_dir
-        self._gate = ValidationGate(sync_cfg.validation)
         self._sync_dir = models_dir / self._SYNC_DIR
         self._sync_dir.mkdir(parents=True, exist_ok=True)
         self._models_dir.mkdir(parents=True, exist_ok=True)
         self._seen_staging: set[str] = set()
+        self._session_factory = session_factory
+        self._download_fail_counts: dict[str, int] = defaultdict(int)  # key: "{name}:v{version}"
 
     # ---------- version record helpers ----------
 
@@ -85,6 +63,22 @@ class ModelSyncDaemon:
         self._write_sync_record(model_name, version)
         log.info("model_sync: promoted %s v%s", model_name, version)
 
+    def _permanently_fail(self, model_name: str, version: str, reason: str) -> None:
+        """Write failed sync record and update model_deployments. Stops daemon retrying this version."""
+        self._write_sync_record(model_name, f"{self._FAILED_PREFIX}{version}")
+        log.error("model_sync: permanently failed %s v%s — %s", model_name, version, reason)
+        if self._session_factory is None:
+            return
+        try:
+            from alphaTrade.store.repos import ModelDeploymentRepo
+            session = self._session_factory()
+            try:
+                ModelDeploymentRepo(session).mark_failed(model_name, reason)
+            finally:
+                session.close()
+        except Exception as exc:
+            log.error("model_sync: could not write deployment failure for %s: %s", model_name, exc)
+
     # ---------- staging notification stub ----------
 
     def _notify_staging(self, name: str, version: str) -> None:
@@ -103,9 +97,9 @@ class ModelSyncDaemon:
             for rm in registered:
                 name = rm.name
 
-                # Staging: notify on new versions
-                staging = client.get_latest_versions(name, stages=["Staging"])
-                for sv in staging:
+                # Staging: notify on new versions (alias-based, MLflow 3.x)
+                try:
+                    sv = client.get_model_version_by_alias(name, "staging")
                     key = f"{name}:v{sv.version}"
                     if key not in self._seen_staging:
                         self._seen_staging.add(key)
@@ -114,14 +108,17 @@ class ModelSyncDaemon:
                             name, sv.version,
                         )
                         self._notify_staging(name, sv.version)
+                except MlflowException:
+                    pass  # no staging alias set
 
-                # Production: sync if version changed
-                production = client.get_latest_versions(name, stages=["Production"])
-                if not production:
-                    continue
-                pv = production[0]
+                # Production: sync if version changed (alias-based, MLflow 3.x)
+                try:
+                    pv = client.get_model_version_by_alias(name, "production")
+                except MlflowException:
+                    continue  # no production alias
                 local_version = self._read_sync_record(name)
-                if local_version == pv.version:
+                # skip if already synced or permanently failed for this version
+                if local_version == pv.version or local_version == f"{self._FAILED_PREFIX}{pv.version}":
                     continue
 
                 log.info(
@@ -134,32 +131,39 @@ class ModelSyncDaemon:
                     shutil.rmtree(tmp_dir)
                 tmp_dir.mkdir(parents=True, exist_ok=True)
 
+                # Unrecoverable: no run attached — fail immediately
+                if not pv.run_id:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    self._permanently_fail(name, pv.version, "no run_id — registered without mlflow.log_model")
+                    continue
+
+                fail_key = f"{name}:v{pv.version}"
                 try:
                     mlflow.artifacts.download_artifacts(
-                        f"runs:/{pv.run_id}", dst_path=str(tmp_dir)
+                        run_id=pv.run_id, artifact_path="", dst_path=str(tmp_dir)
                     )
+                    self._download_fail_counts.pop(fail_key, None)  # reset on success
                 except Exception as exc:
-                    log.error("model_sync: download failed for %s v%s: %s", name, pv.version, exc)
+                    self._download_fail_counts[fail_key] += 1
+                    attempts = self._download_fail_counts[fail_key]
                     shutil.rmtree(tmp_dir, ignore_errors=True)
+                    if attempts >= self._cfg.max_download_attempts:
+                        self._permanently_fail(
+                            name, pv.version,
+                            f"download failed after {attempts} attempts: {exc}",
+                        )
+                    else:
+                        log.warning(
+                            "model_sync: download failed for %s v%s (attempt %d/%d): %s",
+                            name, pv.version, attempts, self._cfg.max_download_attempts, exc,
+                        )
                     continue
 
+                # Unrecoverable: backtest.json absent
                 backtest_path = tmp_dir / "backtest.json"
                 if not backtest_path.exists():
-                    log.error(
-                        "model_sync: backtest.json missing for %s v%s — rejected",
-                        name, pv.version,
-                    )
                     shutil.rmtree(tmp_dir, ignore_errors=True)
-                    continue
-
-                metrics = json.loads(backtest_path.read_text())
-                result = self._gate.check(metrics)
-                if not result.passed:
-                    log.warning(
-                        "model_sync: validation failed for %s v%s: %s",
-                        name, pv.version, result.reason,
-                    )
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    self._permanently_fail(name, pv.version, "backtest.json missing from artifacts")
                     continue
 
                 self._promote(tmp_dir, name, pv.version)

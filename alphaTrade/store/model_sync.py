@@ -1,4 +1,4 @@
-"""ModelSyncDaemon: poll MinIO for new model versions, validate, promote to models_dir."""
+"""ModelSyncDaemon: poll MLflow Registry for Production models, validate, promote to models_dir."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from alphaTrade.config import MinioConfig, ModelSyncConfig, ValidationThresholds
+import mlflow
+from mlflow import MlflowClient
+
+from alphaTrade.config import ModelSyncConfig, ValidationThresholds
 
 log = logging.getLogger(__name__)
 
@@ -45,33 +48,32 @@ class ModelSyncDaemon:
 
     def __init__(
         self,
-        minio_cfg: MinioConfig,
         sync_cfg: ModelSyncConfig,
         models_dir: Path,
     ) -> None:
-        self._minio_cfg = minio_cfg
         self._cfg = sync_cfg
         self._models_dir = models_dir
         self._gate = ValidationGate(sync_cfg.validation)
         self._sync_dir = models_dir / self._SYNC_DIR
         self._sync_dir.mkdir(parents=True, exist_ok=True)
         self._models_dir.mkdir(parents=True, exist_ok=True)
+        self._seen_staging: set[str] = set()
 
     # ---------- version record helpers ----------
 
-    def _write_sync_record(self, run_name: str, version: str) -> None:
-        safe_name = Path(run_name).name.replace("/", "_")
+    def _write_sync_record(self, model_name: str, version: str) -> None:
+        safe_name = Path(model_name).name.replace("/", "_")
         (self._sync_dir / safe_name).write_text(version)
 
-    def _read_sync_record(self, run_name: str) -> Optional[str]:
-        safe_name = Path(run_name).name.replace("/", "_")
+    def _read_sync_record(self, model_name: str) -> Optional[str]:
+        safe_name = Path(model_name).name.replace("/", "_")
         p = self._sync_dir / safe_name
         return p.read_text().strip() if p.exists() else None
 
     # ---------- promotion ----------
 
-    def _promote(self, src: Path, run_name: str, version: str) -> None:
-        dest = self._models_dir / run_name
+    def _promote(self, src: Path, model_name: str, version: str) -> None:
+        dest = self._models_dir / model_name
         tmp = dest.with_suffix(".tmp")
         if tmp.exists():
             shutil.rmtree(tmp)
@@ -79,152 +81,90 @@ class ModelSyncDaemon:
         if dest.exists():
             shutil.rmtree(dest)
         tmp.rename(dest)
-        self._write_sync_record(run_name, version)
-        log.info("model_sync: promoted %s %s", run_name, version)
+        self._write_sync_record(model_name, version)
+        log.info("model_sync: promoted %s v%s", model_name, version)
 
-    # ---------- retention ----------
+    # ---------- staging notification stub ----------
 
-    def _versions_to_prune(self, versions: list[str], promoted: str) -> list[str]:
-        if self._cfg.max_versions == -1:
-            return []
-
-        def _version_int(v: str) -> int:
-            try:
-                return int(v[1:]) if v.startswith("v") else 0
-            except ValueError:
-                return 0
-
-        sorted_versions = sorted(versions, key=_version_int)
-        # never prune the just-promoted version
-        candidates = [v for v in sorted_versions if v != promoted]
-        excess = len(sorted_versions) - self._cfg.max_versions
-        if excess <= 0:
-            return []
-        return candidates[:excess]
-
-    # ---------- S3 client ----------
-
-    def _make_s3_client(self):
-        import boto3
-        return boto3.client(
-            "s3",
-            endpoint_url=f"{'https' if self._minio_cfg.secure else 'http'}://{self._minio_cfg.endpoint}",
-            aws_access_key_id=self._minio_cfg.access_key,
-            aws_secret_access_key=self._minio_cfg.secret_key,
-        )
+    def _notify_staging(self, name: str, version: str) -> None:
+        pass  # stub: wire Slack/email here
 
     # ---------- polling ----------
 
-    def _list_run_names(self, s3) -> list[str]:
-        prefix = f"{self._cfg.user}/{self._cfg.account}/"
-        resp = s3.list_objects_v2(
-            Bucket=self._minio_cfg.bucket,
-            Prefix=prefix,
-            Delimiter="/",
-        )
-        prefixes = resp.get("CommonPrefixes") or []
-        return [p["Prefix"].rstrip("/").split("/")[-1] for p in prefixes]
-
-    def _read_latest(self, s3, run_name: str) -> Optional[str]:
-        key = f"{self._cfg.user}/{self._cfg.account}/{run_name}/latest"
-        try:
-            resp = s3.get_object(Bucket=self._minio_cfg.bucket, Key=key)
-            data = json.loads(resp["Body"].read())
-            return data.get("version")
-        except Exception as exc:
-            log.warning("model_sync: failed to read latest for %s: %s", run_name, exc)
-            return None
-
-    def _download_version(self, s3, run_name: str, version: str, dest: Path) -> None:
-        prefix = f"{self._cfg.user}/{self._cfg.account}/{run_name}/{version}/"
-        resp = s3.list_objects_v2(Bucket=self._minio_cfg.bucket, Prefix=prefix)
-        for obj in resp.get("Contents") or []:
-            key = obj["Key"]
-            rel = key[len(prefix):]
-            local = dest / rel
-            local.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(self._minio_cfg.bucket, key, str(local))
-
-    def _prune_remote(self, s3, run_name: str, to_delete: list[str]) -> None:
-        for version in to_delete:
-            prefix = f"{self._cfg.user}/{self._cfg.account}/{run_name}/{version}/"
-            resp = s3.list_objects_v2(Bucket=self._minio_cfg.bucket, Prefix=prefix)
-            objects = [{"Key": o["Key"]} for o in resp.get("Contents") or []]
-            if objects:
-                s3.delete_objects(
-                    Bucket=self._minio_cfg.bucket,
-                    Delete={"Objects": objects},
-                )
-            log.info("model_sync: pruned remote %s %s", run_name, version)
-
-    def _sync_run(self, s3, run_name: str, tmp_root: Path) -> bool:
-        remote_version = self._read_latest(s3, run_name)
-        if remote_version is None:
-            log.warning("model_sync: no latest for %s", run_name)
-            return False
-
-        local_version = self._read_sync_record(run_name)
-        if local_version == remote_version:
-            return False
-
-        log.info("model_sync: new version %s for %s (local=%s)", remote_version, run_name, local_version)
-        tmp_dir = tmp_root / run_name
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir)
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            self._download_version(s3, run_name, remote_version, tmp_dir)
-        except Exception as exc:
-            log.error("model_sync: download failed for %s %s: %s", run_name, remote_version, exc)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return False
-
-        backtest_path = tmp_dir / "backtest.json"
-        if not backtest_path.exists():
-            log.error("model_sync: backtest.json missing for %s %s — rejected", run_name, remote_version)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return False
-
-        metrics = json.loads(backtest_path.read_text())
-        result = self._gate.check(metrics)
-        if not result.passed:
-            log.warning("model_sync: validation failed for %s %s: %s", run_name, remote_version, result.reason)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return False
-
-        self._promote(tmp_dir, run_name, remote_version)
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-        # prune old remote versions (best-effort — don't fail promotion on prune errors)
-        try:
-            prefix = f"{self._cfg.user}/{self._cfg.account}/{run_name}/"
-            resp = s3.list_objects_v2(Bucket=self._minio_cfg.bucket, Prefix=prefix, Delimiter="/")
-            all_versions = [
-                p["Prefix"].rstrip("/").split("/")[-1]
-                for p in (resp.get("CommonPrefixes") or [])
-                if p["Prefix"].rstrip("/").split("/")[-1].startswith("v")
-            ]
-            to_prune = self._versions_to_prune(all_versions, promoted=remote_version)
-            if to_prune:
-                self._prune_remote(s3, run_name, to_prune)
-        except Exception as exc:
-            log.warning("model_sync: remote prune failed for %s: %s", run_name, exc)
-
-        return True
-
     async def _sync_once(self) -> list[str]:
         def _run() -> list[str]:
-            s3 = self._make_s3_client()
-            run_names = self._list_run_names(s3)
+            client = MlflowClient()
+            registered = client.search_registered_models()
             tmp_root = self._models_dir / ".tmp"
             tmp_root.mkdir(parents=True, exist_ok=True)
-            promoted = []
-            for run_name in run_names:
+            promoted: list[str] = []
+
+            for rm in registered:
+                name = rm.name
+
+                # Staging: notify on new versions
+                staging = client.get_latest_versions(name, stages=["Staging"])
+                for sv in staging:
+                    key = f"{name}:v{sv.version}"
+                    if key not in self._seen_staging:
+                        self._seen_staging.add(key)
+                        log.info(
+                            "model_sync: new staging model %s v%s — ready for review",
+                            name, sv.version,
+                        )
+                        self._notify_staging(name, sv.version)
+
+                # Production: sync if version changed
+                production = client.get_latest_versions(name, stages=["Production"])
+                if not production:
+                    continue
+                pv = production[0]
+                local_version = self._read_sync_record(name)
+                if local_version == pv.version:
+                    continue
+
+                log.info(
+                    "model_sync: new Production version %s for %s (local=%s)",
+                    pv.version, name, local_version,
+                )
+                safe_name = name.replace("/", "_")
+                tmp_dir = tmp_root / safe_name
+                if tmp_dir.exists():
+                    shutil.rmtree(tmp_dir)
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+
                 try:
-                    if self._sync_run(s3, run_name, tmp_root):
-                        promoted.append(run_name)
+                    mlflow.artifacts.download_artifacts(
+                        f"runs:/{pv.run_id}", dst_path=str(tmp_dir)
+                    )
                 except Exception as exc:
-                    log.error("model_sync: error syncing %s: %s", run_name, exc)
+                    log.error("model_sync: download failed for %s v%s: %s", name, pv.version, exc)
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    continue
+
+                backtest_path = tmp_dir / "backtest.json"
+                if not backtest_path.exists():
+                    log.error(
+                        "model_sync: backtest.json missing for %s v%s — rejected",
+                        name, pv.version,
+                    )
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    continue
+
+                metrics = json.loads(backtest_path.read_text())
+                result = self._gate.check(metrics)
+                if not result.passed:
+                    log.warning(
+                        "model_sync: validation failed for %s v%s: %s",
+                        name, pv.version, result.reason,
+                    )
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    continue
+
+                self._promote(tmp_dir, name, pv.version)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                promoted.append(name)
+
             return promoted
 
         return await asyncio.to_thread(_run)

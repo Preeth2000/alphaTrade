@@ -20,6 +20,11 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
 
     app = FastAPI(title="alphaTrade API", version="1.0")
 
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    FastAPIInstrumentor.instrument_app(app)
+    SQLAlchemyInstrumentor().instrument(engine=engine)
+
     @app.middleware("http")
     async def _log_requests(request: Request, call_next):
         t0 = time.perf_counter()

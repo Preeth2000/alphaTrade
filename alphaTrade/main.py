@@ -40,6 +40,7 @@ from alphaTrade.scheduler.bar_close import schedule_bar_close
 from alphaTrade.store.db import get_engine, url_from_settings
 from alphaTrade.store.model_sync import ModelSyncDaemon
 from alphaTrade.store.repos import (
+    BacktestRepo,
     BotSettings,
     BotSettingsRepo,
     EquityRepo,
@@ -660,6 +661,12 @@ def make_tick(
 
 
 async def run(settings: Settings) -> None:
+    import os as _os
+    from alphaTrade.telemetry import setup_telemetry as _setup_telemetry
+    _setup_telemetry(
+        service_name=_os.environ.get("OTEL_SERVICE_NAME", "alphatrade"),
+        otlp_endpoint=_os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"),
+    )
     from alphaTrade.logging_config import configure_logging
     configure_logging(log_file=settings.log_file)
 
@@ -879,8 +886,11 @@ async def run(settings: Settings) -> None:
                 settings.models_dir,
             )
         else:
-            log.error("No models loaded from %s and model_sync is disabled. Exiting.", settings.models_dir)
-            return
+            log.warning(
+                "No models loaded from %s and model_sync is disabled. "
+                "Bot will not trade until models are available. UI remains accessible.",
+                settings.models_dir,
+            )
 
     health_state.models_loaded = bool(registry.by_run_name)
     health_state.longest_interval_seconds = max(
@@ -949,6 +959,11 @@ async def run(settings: Settings) -> None:
         health_runner = await start_health_server(health_state)
     except Exception as exc:
         log.error("Health server failed to start on :8080: %s", exc)
+
+    with Session(engine) as _btr_s:
+        _interrupted = BacktestRepo(_btr_s).reset_interrupted()
+    if _interrupted:
+        log.warning("Startup: reset %d interrupted backtest run(s) to failed", _interrupted)
 
     backtest_scheduler = None
     try:
@@ -1077,10 +1092,20 @@ async def run(settings: Settings) -> None:
         from sqlmodel import Session as _SyncSession
         def _sync_session_factory():
             return _SyncSession(engine)
+        async def _on_promote(promoted: list[str]) -> None:
+            with Session(engine) as _s:
+                db_ovs = {r.run_name: r for r in ModelOverrideRepo(_s).all()}
+            await registry.refresh(
+                settings.models_dir,
+                _merge_overrides(settings.model_overrides, db_ovs),
+            )
+            log.info("model_sync: registry refreshed after promoting %s", promoted)
         model_sync_daemon = ModelSyncDaemon(
             sync_cfg=settings.model_sync,
             models_dir=settings.models_dir,
             session_factory=_sync_session_factory,
+            redis_client=_redis_client,
+            on_promote=_on_promote,
         )
         tasks.append(asyncio.create_task(model_sync_daemon.run(stop_event=stop_event)))
         log.info("model_sync: daemon enabled, polling MLflow every %ds", settings.model_sync.poll_interval)

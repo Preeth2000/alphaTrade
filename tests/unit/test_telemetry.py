@@ -20,3 +20,15 @@ def test_setup_telemetry_returns_meter_provider_with_trace_based_exemplar_filter
 
     assert isinstance(meter_provider, MeterProvider)
     assert isinstance(meter_provider._sdk_config.exemplar_filter, TraceBasedExemplarFilter)
+
+
+def test_setup_telemetry_sets_global_providers():
+    from opentelemetry import trace, metrics
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.metrics import MeterProvider
+    from alphaTrade.telemetry import setup_telemetry
+
+    setup_telemetry("test-svc", otlp_endpoint="http://localhost:4317")
+
+    assert isinstance(trace.get_tracer_provider(), TracerProvider)
+    assert isinstance(metrics.get_meter_provider(), MeterProvider)

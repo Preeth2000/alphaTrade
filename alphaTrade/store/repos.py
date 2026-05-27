@@ -15,7 +15,7 @@ class Signal(SQLModel, table=True):
     ticker: str
     signal: str          # BUY | SELL | HOLD
     model_count: int = 1
-    raw_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
+    raw_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
 
 
 class Order(SQLModel, table=True):
@@ -243,7 +243,7 @@ class PnlSnapshot(SQLModel, table=True):
     day_pnl_pct: float
     realized_pnl: float
     unrealized_pnl: float
-    positions_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, server_default="{}"))
+    positions_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     open_positions: int = 0
     trade_count: int = 0
 
@@ -254,7 +254,7 @@ class ModelPerformance(SQLModel, table=True):
     trade_count: int = 0
     win_count: int = 0
     rolling_pnl: float = 0.0
-    rolling_trades_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
+    rolling_trades_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     retired: bool = False
     retired_at: Optional[datetime] = None
     first_trade_at: Optional[datetime] = None
@@ -273,7 +273,7 @@ class BacktestRun(SQLModel, table=True):
     ts: datetime = Field(default_factory=datetime.utcnow)
     start_date: str
     end_date: str
-    config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, server_default="{}"))
+    config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     status: str = "done"
 
 

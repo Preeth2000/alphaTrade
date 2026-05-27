@@ -205,7 +205,7 @@ def make_router(session_dep: Callable, api_key_dep: Callable, settings: Settings
         perf.trade_count = 0
         perf.win_count = 0
         perf.rolling_pnl = 0.0
-        perf.rolling_trades_json = "[]"
+        perf.rolling_trades_json = []
         repo.update(perf)
         return {"unretired": True, "run_name": run_name}
 

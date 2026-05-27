@@ -17,6 +17,7 @@ from alphaTrade.adapter.window import build_input
 from alphaTrade.config import BacktestConfig
 from alphaTrade.consensus.softmax_avg import CLASS_NAMES
 from alphaTrade.consensus.softmax_avg import consensus as softmax_vote
+from alphaTrade.data.fundamentals import merge_fundamentals_into
 from alphaTrade.data.provider import DataProvider
 from alphaTrade.data.yfinance_provider import YFinanceProvider
 from alphaTrade.main import scan_models
@@ -135,7 +136,7 @@ def run_backtest(
         provider = YFinanceProvider()
     repo = BacktestRepo(session)
     if run_id is None:
-        run_id = repo.create_run(start=start, end=end, config_json=cfg.model_dump_json())
+        run_id = repo.create_run(start=start, end=end, config_json=cfg.model_dump())
 
     all_trades: list[dict] = []
 
@@ -200,6 +201,7 @@ def _run_single_model(
     if df is None or len(df) < manifest.window + 2:
         log.warning("backtest: not enough data for %s", manifest.run_name)
         return [], "no_data"
+    df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
 
     trades: list[dict] = []
     state: BacktestState | None = None
@@ -304,6 +306,7 @@ def _run_single_model_with_lag(
     if df is None or len(df) < manifest.window + 2:
         log.warning("backtest: not enough data for %s", manifest.run_name)
         return [], "no_data"
+    df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
 
     # Pre-compute peer signals for every bar to determine queue positions
     peer_signals: dict[int, list[str]] = {}  # bar_index -> list of peer sides
@@ -312,6 +315,8 @@ def _run_single_model_with_lag(
             peer_df = provider.fetch_ohlcv_range(
                 peer_manifest.ticker, peer_manifest.interval, start=start, end=end, extra_bars=warmup_bars
             )
+            if peer_df is not None:
+                peer_df = merge_fundamentals_into(peer_df, peer_manifest.ticker, peer_manifest.feature_names)
             if peer_df is None or len(peer_df) < len(df):
                 continue
             for i in range(warmup_bars, min(len(df), len(peer_df)) - 1):

@@ -19,7 +19,7 @@ from alphaTrade.adapter.manifest import Manifest
 from alphaTrade.backtest.engine import run_backtest
 from alphaTrade.config import BacktestScheduleOverride, ModelOverride, Settings
 from alphaTrade.data.factory import build_data_provider
-from alphaTrade.store.repos import BacktestRepo
+from alphaTrade.store.repos import BacktestRepo, ModelDeploymentRepo
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,13 @@ async def _execute_backtest(
             BacktestRepo(session).update_status(run_id, "failed")
 
 
+async def _expire_stale_deployments(engine: Engine) -> None:
+    with Session(engine) as session:
+        expired = ModelDeploymentRepo(session).expire_stale(timeout_minutes=5)
+    if expired:
+        log.warning("Expired %d stale launching deployment(s) (timeout=5min)", expired)
+
+
 class BacktestScheduler:
     def __init__(
         self,
@@ -74,6 +81,14 @@ class BacktestScheduler:
 
     def start(self) -> None:
         self._scheduler.start()
+        self._scheduler.add_job(
+            _expire_stale_deployments,
+            "interval",
+            minutes=1,
+            id="expire_stale_deployments",
+            args=[self._engine],
+            replace_existing=True,
+        )
         if self._settings.backtest.schedule_enabled:
             self._rebuild_all_jobs()
 
@@ -96,7 +111,7 @@ class BacktestScheduler:
         run_id = BacktestRepo(session).create_run(
             start=resolved_start,
             end=resolved_end,
-            config_json=self._settings.backtest.model_dump_json(),
+            config_json=self._settings.backtest.model_dump(),
             status="queued",
         )
         task = asyncio.create_task(
@@ -207,7 +222,7 @@ class BacktestScheduler:
             with Session(engine) as session:
                 run_id = BacktestRepo(session).create_run(
                     start=start, end=end,
-                    config_json=settings.backtest.model_dump_json(),
+                    config_json=settings.backtest.model_dump(),
                     status="queued",
                 )
             await _execute_backtest(engine, settings, models_dir, run_id, start, end, manifest.run_name)

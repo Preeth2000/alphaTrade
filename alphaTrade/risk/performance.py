@@ -1,7 +1,6 @@
 """Rolling model performance tracking and auto-retirement."""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timedelta
 
@@ -37,12 +36,12 @@ def record_trade(
     repo = ModelPerformanceRepo(session)
     perf = repo.get_or_create(model_id)
 
-    trades: list[float] = json.loads(perf.rolling_trades_json)
+    trades: list[float] = list(perf.rolling_trades_json)
     trades.append(realized_pnl)
     if len(trades) > cfg.lookback_trades:
         trades = trades[-cfg.lookback_trades:]
 
-    perf.rolling_trades_json = json.dumps(trades)
+    perf.rolling_trades_json = trades
     if perf.trade_count == 0:
         perf.first_trade_at = datetime.utcnow()
     perf.trade_count += 1
@@ -78,7 +77,7 @@ def check_retirement(
     if not (age_ok or trades_ok):
         return False
 
-    trades: list[float] = json.loads(perf.rolling_trades_json)
+    trades: list[float] = list(perf.rolling_trades_json)
     win_rate = sum(1 for t in trades if t > 0) / len(trades) if trades else 0.0
     rolling_pnl = sum(trades)
 

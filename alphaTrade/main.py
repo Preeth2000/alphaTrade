@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import signal
 import time
@@ -163,7 +162,7 @@ def apply_bot_settings(
     if db_s.unbalanced_max_per_sector is not None:
         settings.risk.unbalanced.max_per_sector = db_s.unbalanced_max_per_sector
     if db_s.unbalanced_sector_overrides is not None:
-        settings.risk.unbalanced.sector_overrides = json.loads(db_s.unbalanced_sector_overrides)
+        settings.risk.unbalanced.sector_overrides = db_s.unbalanced_sector_overrides
     if db_s.atr_risk_pct is not None:
         settings.risk.atr.risk_pct = db_s.atr_risk_pct
     if db_s.atr_multiplier is not None:
@@ -430,6 +429,8 @@ def make_tick(
             try:
                 t0 = time.perf_counter()
                 df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
+                from alphaTrade.data.fundamentals import merge_fundamentals_into
+                df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
                 features = compute_features(df, manifest.feature_names)
                 features = features.dropna()
                 # Save raw ATR before normalization (ATR sizing uses price units)
@@ -539,7 +540,7 @@ def make_tick(
                     ticker=yf_ticker,
                     signal=signal,
                     model_count=len(ticker_logits[yf_ticker]),
-                    raw_json=json.dumps([l.tolist() for l in ticker_logits[yf_ticker]]),
+                    raw_json=[l.tolist() for l in ticker_logits[yf_ticker]],
                 )
                 signal_repo.save(sig_rec)
                 signals_total.labels(ticker=yf_ticker, signal=signal).inc()

@@ -145,7 +145,7 @@ class TestUnretire:
             perf.trade_count = 10
             perf.win_count = 3
             perf.rolling_pnl = -300.0
-            perf.rolling_trades_json = "[-50, -100]"
+            perf.rolling_trades_json = [-50, -100]
             perf.first_trade_at = datetime.utcnow()
             s.add(perf)
             s.commit()
@@ -158,7 +158,7 @@ class TestUnretire:
             assert perf.trade_count == 0
             assert perf.win_count == 0
             assert perf.rolling_pnl == 0.0
-            assert perf.rolling_trades_json == "[]"
+            assert perf.rolling_trades_json == []
             assert perf.first_trade_at is None
 
     def test_unretire_nonexistent_model_returns_404(self, tmp_path):

@@ -47,7 +47,7 @@ def test_model_performance_defaults(engine):
         s.refresh(perf)
     assert perf.retired is False
     assert perf.trade_count == 0
-    assert perf.rolling_trades_json == "[]"
+    assert perf.rolling_trades_json == []
 
 
 def test_sector_cache_round_trip(engine):

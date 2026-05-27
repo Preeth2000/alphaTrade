@@ -1,5 +1,4 @@
 """Tests for rolling model performance tracking and retirement logic."""
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -51,7 +50,7 @@ def test_rolling_window_trims_to_lookback(engine):
             record_trade(s, model_id="model_a", realized_pnl=pnl, cfg=cfg)
     with Session(engine) as s:
         perf = ModelPerformanceRepo(s).get_or_create("model_a")
-        trades = json.loads(perf.rolling_trades_json)
+        trades = perf.rolling_trades_json
     assert len(trades) == 3
     assert trades == [20.0, 30.0, 40.0]
 
@@ -96,9 +95,9 @@ def test_check_retirement_not_triggered_when_not_enough_trades(engine):
 
 
 def test_registry_skips_retired_model(engine, tmp_path):
-    manifest_a = MagicMock(); manifest_a.run_name = "model_a"; manifest_a.interval = "1d"
+    manifest_a = MagicMock(); manifest_a.run_name = "model_a"; manifest_a.interval = "1d"; manifest_a.model_hash = "hash_a"
     model_a = MagicMock()
-    manifest_b = MagicMock(); manifest_b.run_name = "model_b"; manifest_b.interval = "1d"
+    manifest_b = MagicMock(); manifest_b.run_name = "model_b"; manifest_b.interval = "1d"; manifest_b.model_hash = "hash_b"
     model_b = MagicMock()
 
     with Session(engine) as s:
@@ -107,10 +106,11 @@ def test_registry_skips_retired_model(engine, tmp_path):
         perf.retired = True
         repo.update(perf)
 
-    with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
-        from alphaTrade.model_registry import ModelRegistry
-        registry = ModelRegistry(engine=engine)
-        asyncio.run(registry.refresh(Path("/fake"), {}))
+    from alphaTrade.model_registry import ModelRegistry
+    registry = ModelRegistry(engine=engine)
+    with patch.object(ModelRegistry, "_scan_manifests", return_value=[(manifest_a, tmp_path), (manifest_b, tmp_path)]), \
+         patch("alphaTrade.model_registry.OnnxModel", side_effect=[model_a, model_b]):
+        asyncio.run(registry.refresh(tmp_path, {}))
 
     assert "model_a" not in registry.by_run_name
     assert "model_b" in registry.by_run_name

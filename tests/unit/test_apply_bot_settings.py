@@ -118,7 +118,7 @@ def test_apply_bot_settings_balanced(tmp_path):
 
 def test_apply_bot_settings_unbalanced(tmp_path):
     settings = _make_settings_for_apply(tmp_path)
-    db_s = BotSettings(id=1, unbalanced_max_per_sector=5, unbalanced_sector_overrides='{"Technology": 7}')
+    db_s = BotSettings(id=1, unbalanced_max_per_sector=5, unbalanced_sector_overrides={"Technology": 7})
     apply_bot_settings(db_s, settings, [MagicMock()], [MagicMock()])
     assert settings.risk.unbalanced.max_per_sector == 5
     assert settings.risk.unbalanced.sector_overrides == {"Technology": 7}

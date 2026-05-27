@@ -1,12 +1,11 @@
 """ORM models and repos: signals, orders, positions, equity_curve, instruments."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, Float, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, JSON, String
 from sqlmodel import Field, SQLModel, Session, select
-from pydantic import field_validator
 
 
 class Signal(SQLModel, table=True):
@@ -16,7 +15,7 @@ class Signal(SQLModel, table=True):
     ticker: str
     signal: str          # BUY | SELL | HOLD
     model_count: int = 1
-    raw_json: str = ""   # JSON-encoded logits list for audit
+    raw_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
 
 
 class Order(SQLModel, table=True):
@@ -77,6 +76,11 @@ class SignalRepo:
         return list(self._s.exec(
             select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)
         ).all())
+
+    def latest_for_model(self, run_name: str) -> Signal | None:
+        return self._s.exec(
+            select(Signal).where(Signal.run_name == run_name).order_by(Signal.ts.desc()).limit(1)
+        ).first()
 
 
 class OrderRepo:
@@ -239,7 +243,7 @@ class PnlSnapshot(SQLModel, table=True):
     day_pnl_pct: float
     realized_pnl: float
     unrealized_pnl: float
-    positions_json: str = "{}"
+    positions_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, server_default="{}"))
     open_positions: int = 0
     trade_count: int = 0
 
@@ -250,7 +254,7 @@ class ModelPerformance(SQLModel, table=True):
     trade_count: int = 0
     win_count: int = 0
     rolling_pnl: float = 0.0
-    rolling_trades_json: str = "[]"  # JSON list of last N realized_pnl values
+    rolling_trades_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
     retired: bool = False
     retired_at: Optional[datetime] = None
     first_trade_at: Optional[datetime] = None
@@ -269,7 +273,7 @@ class BacktestRun(SQLModel, table=True):
     ts: datetime = Field(default_factory=datetime.utcnow)
     start_date: str
     end_date: str
-    config_json: str = "{}"
+    config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, server_default="{}"))
     status: str = "done"
 
 
@@ -424,13 +428,28 @@ class BacktestRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def create_run(self, start: str, end: str, config_json: str = "{}", status: str = "done") -> int:
+    def create_run(self, start: str, end: str, config_json: dict | None = None, status: str = "done") -> int:
         """Create a new BacktestRun and return its id."""
-        run = BacktestRun(start_date=start, end_date=end, config_json=config_json, status=status)
+        run = BacktestRun(start_date=start, end_date=end, config_json=config_json or {}, status=status)
         self._s.add(run)
         self._s.commit()
         self._s.refresh(run)
         return run.id
+
+    def get_run(self, run_id: int) -> BacktestRun | None:
+        return self._s.get(BacktestRun, run_id)
+
+    def reset_interrupted(self) -> int:
+        """On startup: flip any queued/running rows to failed (process died mid-run)."""
+        stuck = self._s.exec(
+            select(BacktestRun).where(BacktestRun.status.in_(["queued", "running"]))
+        ).all()
+        for run in stuck:
+            run.status = "failed"
+            self._s.add(run)
+        if stuck:
+            self._s.commit()
+        return len(stuck)
 
     def update_status(self, run_id: int, status: str) -> None:
         run = self._s.get(BacktestRun, run_id)
@@ -532,7 +551,7 @@ class BotSettings(SQLModel, table=True):
     balanced_max_sector_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     # unbalanced portfolio
     unbalanced_max_per_sector: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
-    unbalanced_sector_overrides: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    unbalanced_sector_overrides: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     # ATR sizing
     atr_risk_pct: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     atr_multiplier: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
@@ -553,19 +572,6 @@ class BotSettings(SQLModel, table=True):
     backtest_simulate_oco_lag: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     backtest_oco_stop_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     backtest_oco_limit_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
-
-    @field_validator("unbalanced_sector_overrides", mode="before")
-    @classmethod
-    def _validate_sector_overrides_json(cls, v):
-        if v is not None:
-            import json
-            try:
-                parsed = json.loads(v)
-            except (json.JSONDecodeError, TypeError) as exc:
-                raise ValueError(f"unbalanced_sector_overrides must be valid JSON: {exc}") from exc
-            if not isinstance(parsed, dict):
-                raise ValueError("unbalanced_sector_overrides must be a JSON object (dict)")
-        return v
 
 
 class BotSettingsRepo:
@@ -702,6 +708,22 @@ class ModelDeploymentRepo:
         row.status = "failed"
         self._s.commit()
         return True
+
+    def expire_stale(self, timeout_minutes: int = 5) -> int:
+        cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+        stale = self._s.exec(
+            select(ModelDeployment)
+            .where(ModelDeployment.status == "launching")
+            .where(ModelDeployment.promoted_at < cutoff)
+        ).all()
+        for d in stale:
+            d.status = "failed"
+            d.failed_at = datetime.utcnow()
+            d.failure_msg = f"timeout — bot did not load model within {timeout_minutes} minutes"
+            self._s.add(d)
+        if stale:
+            self._s.commit()
+        return len(stale)
 
     def latest_per_model(self) -> list[ModelDeployment]:
         """Return latest deployment row per run_name."""

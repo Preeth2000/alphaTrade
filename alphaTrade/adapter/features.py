@@ -65,6 +65,18 @@ def compute_features(df: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame
             computed["OBV"] = talib.OBV(close, volume)
         elif name in ("Open", "High", "Low", "Close", "Volume"):
             computed[name] = df[name].values.astype(float)
+        elif name == "VWAP":
+            # Cumulative session VWAP from OHLCV — matches alphaGen src/att/data/fetch.py
+            tp = (high + low + close) / 3.0
+            cum_tpv = np.cumsum(tp * volume)
+            cum_vol = np.cumsum(volume)
+            computed["VWAP"] = np.where(cum_vol == 0, np.nan, cum_tpv / cum_vol)
+        elif name == "Transactions":
+            # Trade-count passthrough; may not be available from all providers
+            if "Transactions" in df.columns:
+                computed["Transactions"] = df["Transactions"].values.astype(float)
+            else:
+                computed["Transactions"] = np.full(len(df), np.nan)
         else:
             raise ValueError(
                 f"Unknown feature: {name!r}. Add it to features.py registry."

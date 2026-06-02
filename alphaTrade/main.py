@@ -212,10 +212,15 @@ def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
     for run_dir in sorted(models_dir.iterdir()):
         if not run_dir.is_dir():
             continue
+        if run_dir.name.startswith("."):
+            continue
         manifest_path = run_dir / "manifest.json"
         model_path = run_dir / "model.onnx"
         if not manifest_path.exists() or not model_path.exists():
-            log.warning("Skipping %s: missing manifest.json or model.onnx", run_dir.name)
+            log.error(
+                "Skipping %s (in %s): missing manifest.json or model.onnx",
+                run_dir.name, models_dir,
+            )
             continue
         try:
             manifest = Manifest.load(manifest_path)
@@ -428,7 +433,7 @@ def make_tick(
         for manifest, model in interval_models:
             try:
                 t0 = time.perf_counter()
-                df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window)
+                df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window + 100)
                 from alphaTrade.data.fundamentals import merge_fundamentals_into
                 df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
                 features = compute_features(df, manifest.feature_names)
@@ -846,20 +851,6 @@ async def run(settings: Settings) -> None:
     broker.set_callback(_on_order_fill)
 
     health_state = HealthState()
-    _startup_key_map = {
-        "demo": settings.t212_demo_api_key,
-        "invest": settings.t212_invest_api_key,
-        "isa": settings.t212_isa_api_key,
-    }
-    health_state.t212_configured = bool(
-        _startup_key_map.get(settings.t212_active_account or "demo", "")
-    )
-    try:
-        await asyncio.to_thread(t212.get_total_equity)  # probe only; result discarded
-        health_state.t212_ok = True
-    except Exception as exc:
-        log.warning("T212 startup probe failed: %s", exc)
-        health_state.t212_ok = False
 
     engine = get_engine(url_from_settings(settings))
 
@@ -868,12 +859,39 @@ async def run(settings: Settings) -> None:
     _redis_client = await create_redis(settings.redis)
     _stream_bus.configure(_redis_client)
 
-    # Apply DB-persisted settings immediately so backtest scheduler and first tick use correct provider/config.
+    # Apply DB-persisted settings BEFORE the health probe so the probe uses DB credentials.
     with Session(engine) as _s0:
         _startup_db_s = BotSettingsRepo(_s0).get()
     if _startup_db_s is not None:
         apply_bot_settings(_startup_db_s, settings, t212_holder, provider_holder)
         log.info("Startup: DB settings applied (data_provider=%s)", settings.data_provider)
+        _startup_creds = _t212_credentials(_startup_db_s)
+        health_state.t212_configured = bool(_startup_creds[0])
+    else:
+        health_state.t212_configured = bool(
+            {
+                "demo": settings.t212_demo_api_key,
+                "invest": settings.t212_invest_api_key,
+                "isa": settings.t212_isa_api_key,
+            }.get(settings.t212_active_account or "demo", "")
+        )
+    try:
+        await asyncio.to_thread(t212_holder[0].get_total_equity)  # probe only; result discarded
+        health_state.t212_ok = True
+    except Exception as exc:
+        log.warning("T212 startup probe failed: %s", exc)
+        health_state.t212_ok = False
+
+    # Probe data provider on startup so trading_ready doesn't require a UI re-verify after restart.
+    try:
+        await asyncio.to_thread(provider_holder[0].fetch_ohlcv, "SPY", "1d", 5)
+        health_state.provider_ok = True
+        health_state.provider_name = settings.data_provider
+        log.info("Data provider startup probe OK (%s)", settings.data_provider)
+    except Exception as exc:
+        health_state.provider_ok = False
+        health_state.provider_name = settings.data_provider
+        log.warning("Data provider startup probe failed (%s): %s", settings.data_provider, exc)
 
     alert_manager = AlertManager(settings.alerts)
 

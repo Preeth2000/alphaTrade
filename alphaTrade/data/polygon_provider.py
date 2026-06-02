@@ -82,11 +82,12 @@ class PolygonProvider(DataProvider):
 
         rows = [
             {
-                "Open":   a.open,
-                "High":   a.high,
-                "Low":    a.low,
-                "Close":  a.close,
-                "Volume": a.volume,
+                "Open":         a.open,
+                "High":         a.high,
+                "Low":          a.low,
+                "Close":        a.close,
+                "Volume":       a.volume,
+                "Transactions": getattr(a, "transactions", None),
             }
             for a in aggs
         ]

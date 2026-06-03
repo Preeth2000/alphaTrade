@@ -12,7 +12,7 @@ runs:
           /usr/local/lib/libta*
           /usr/local/include/ta-lib
           /usr/local/bin/ta-lib-config
-        key: talib-src-0.4.0-${{ runner.os }}
+        key: talib-src-0.4.0-v3-${{ runner.os }}
 
     - name: Build and install TA-Lib from source
       if: steps.cache.outputs.cache-hit != 'true'
@@ -22,9 +22,9 @@ runs:
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib
         ./configure --prefix=/usr/local CFLAGS="-Wno-format-security"
-        # gen_code is a source code generator, not needed for runtime install.
-        # Exclude it from src/Makefile to enable safe parallel build.
-        sed -i 's/^SUBDIRS = .*/SUBDIRS = ta_common ta_abstract ta_func/' src/Makefile
+        # gen_code is a code generator, not needed for runtime install.
+        # Stub it out so parallel make has no race to lose.
+        printf 'all:\ninstall:\n' > src/tools/gen_code/Makefile
         make -j$(nproc)
         sudo make install
 

@@ -22,7 +22,10 @@ runs:
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib
         ./configure --prefix=/usr/local CFLAGS="-Wno-format-security"
-        make -j1
+        # gen_code is a source code generator, not needed for runtime install.
+        # Exclude it from src/Makefile to enable safe parallel build.
+        sed -i 's/^SUBDIRS = .*/SUBDIRS = ta_common ta_abstract ta_func/' src/Makefile
+        make -j$(nproc)
         sudo make install
 
     - name: Register TA-Lib with linker

@@ -113,8 +113,7 @@ def test_registry_skips_retired_model(engine, tmp_path):
 
     from alphaTrade.model_registry import ModelRegistry
     registry = ModelRegistry(engine=engine)
-    with patch.object(ModelRegistry, "_scan_manifests", return_value=[(manifest_a, tmp_path), (manifest_b, tmp_path)]), \
-         patch("alphaTrade.model_registry.OnnxModel", side_effect=[model_a, model_b]):
+    with patch("alphaTrade.model_registry.scan_models", return_value=[(manifest_a, model_a), (manifest_b, model_b)]):
         asyncio.run(registry.refresh(tmp_path, {}))
 
     assert "model_a" not in registry.by_run_name

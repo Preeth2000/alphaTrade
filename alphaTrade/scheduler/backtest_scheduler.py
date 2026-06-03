@@ -79,8 +79,7 @@ class BacktestScheduler:
         self._scheduler = AsyncIOScheduler()
         self._persist_lock = threading.Lock()
 
-    def start(self) -> None:
-        self._scheduler.start()
+    def _add_expire_job(self) -> None:
         self._scheduler.add_job(
             _expire_stale_deployments,
             "interval",
@@ -89,7 +88,11 @@ class BacktestScheduler:
             args=[self._engine],
             replace_existing=True,
         )
+
+    def start(self) -> None:
+        self._scheduler.start()
         if self._settings.backtest.schedule_enabled:
+            self._add_expire_job()
             self._rebuild_all_jobs()
 
     def shutdown(self) -> None:
@@ -145,6 +148,7 @@ class BacktestScheduler:
             bt.lookback_days = lookback_days
         self._remove_all_jobs()
         if bt.schedule_enabled:
+            self._add_expire_job()
             self._rebuild_all_jobs()
         self._persist_overrides()
 
@@ -236,8 +240,7 @@ class BacktestScheduler:
 
     def _remove_all_jobs(self) -> None:
         for job in list(self._scheduler.get_jobs()):
-            if job.id.startswith("backtest_"):
-                self._scheduler.remove_job(job.id)
+            self._scheduler.remove_job(job.id)
 
     def _persist_overrides(self) -> None:
         path = self._settings.overrides_path

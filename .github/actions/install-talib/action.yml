@@ -19,6 +19,6 @@ runs:
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib
         ./configure --prefix=/usr/local CFLAGS="-Wno-format-security"
-        make -j$(nproc)
+        make -j1
         sudo make install
         sudo ldconfig

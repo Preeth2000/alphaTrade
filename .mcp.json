@@ -6,10 +6,10 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/preeth/projects/alphaTrade",
-        "/home/preeth/projects/alphaFrame",
-        "/home/preeth/projects/alphaGen",
-        "/home/preeth/projects/alphaLink"
+        "/home/preeth/projects/projectAlpha/alphaTrade",
+        "/home/preeth/projects/projectAlpha/alphaFrame",
+        "/home/preeth/projects/projectAlpha/alphaGen",
+        "/home/preeth/projects/projectAlpha/alphaLink"
       ]
     }
   }

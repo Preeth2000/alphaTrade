@@ -8,7 +8,10 @@ runs:
       id: cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
-        path: /usr/local/lib/libta*
+        path: |
+          /usr/local/lib/libta*
+          /usr/local/include/ta-lib
+          /usr/local/bin/ta-lib-config
         key: talib-src-0.4.0-${{ runner.os }}
 
     - name: Build and install TA-Lib from source
@@ -21,4 +24,7 @@ runs:
         ./configure --prefix=/usr/local CFLAGS="-Wno-format-security"
         make -j1
         sudo make install
-        sudo ldconfig
+
+    - name: Register TA-Lib with linker
+      shell: bash
+      run: sudo ldconfig

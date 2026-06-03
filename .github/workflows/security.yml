@@ -1,0 +1,108 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly: Monday 07:00 UTC — catches newly disclosed CVEs
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Dependency vulnerability scan — pip-audit
+  # -----------------------------------------------------------------------
+  pip-audit:
+    name: pip-audit (dependency CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: ./.github/actions/install-talib
+
+      - name: Install pip-audit + package
+        run: |
+          pip install --upgrade pip pip-audit
+          pip install -e ".[dev]" --quiet
+
+      - name: Audit installed packages
+        run: pip-audit --desc
+
+  # -----------------------------------------------------------------------
+  # Static security analysis — bandit
+  # -----------------------------------------------------------------------
+  bandit:
+    name: bandit (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install bandit
+        run: pip install "bandit[toml,sarif]"
+
+      - name: Run bandit (SARIF output)
+        id: bandit
+        continue-on-error: true
+        run: |
+          bandit -r alphaTrade/ \
+            --severity-level medium \
+            --confidence-level medium \
+            --skip B101 \
+            --format sarif \
+            -o bandit.sarif
+
+      - name: Upload bandit SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
+        if: always()
+        with:
+          sarif_file: bandit.sarif
+
+      - name: Fail if bandit found issues
+        if: steps.bandit.outcome == 'failure'
+        run: exit 1
+
+  # -----------------------------------------------------------------------
+  # Secret scanning — gitleaks
+  # -----------------------------------------------------------------------
+  gitleaks:
+    name: gitleaks (secret detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # -----------------------------------------------------------------------
+  # Supply-chain: flag newly introduced high-severity deps
+  # -----------------------------------------------------------------------
+  dependency-review:
+    name: Dependency review (PRs only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high

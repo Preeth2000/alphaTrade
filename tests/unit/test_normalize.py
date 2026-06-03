@@ -1,10 +1,9 @@
 """Tests for normalization pipeline."""
 import numpy as np
 import pandas as pd
-import pytest
 
 from alphaTrade.adapter.normalize import normalize
-from alphaTrade.adapter.manifest import Manifest, NormStats
+from alphaTrade.adapter.manifest import Manifest
 
 BASE = {
     "manifest_version": "1.0.0", "run_name": "t", "model_arch": "mlp", "opset": 17,

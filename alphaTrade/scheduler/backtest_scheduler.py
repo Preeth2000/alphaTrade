@@ -54,7 +54,7 @@ async def _execute_backtest(
     except Exception as exc:
         log.error("backtest run_id=%d failed: %s", run_id, exc)
         with Session(engine) as session:
-            BacktestRepo(session).update_status(run_id, "failed")
+            BacktestRepo(session).update_status(run_id, "failed", error_msg=str(exc))
 
 
 async def _expire_stale_deployments(engine: Engine) -> None:

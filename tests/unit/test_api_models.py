@@ -15,7 +15,6 @@ from alphaTrade.store.repos import (
     InstrumentCache,
     ModelOverrideRecord,
     ModelOverrideRepo,
-    ModelPerformance,
     ModelPerformanceRepo,
     Signal,
 )

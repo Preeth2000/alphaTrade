@@ -1,10 +1,9 @@
 """Tests for SSE streaming endpoint and stream_bus pub/sub."""
 from __future__ import annotations
-import asyncio
 import json
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import create_engine, Session
+from sqlmodel import create_engine
 from alphaTrade.store.db import run_migrations
 from alphaTrade.health import HealthState
 
@@ -94,7 +93,6 @@ def test_stream_auth_rejects_bad_key(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_auth_no_key_configured_allows_all(tmp_path, monkeypatch):
-    from fastapi import HTTPException
     from alphaTrade.api.routers.stream import make_router
     monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
     engine = _engine(tmp_path)

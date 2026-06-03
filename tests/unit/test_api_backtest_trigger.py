@@ -1,6 +1,5 @@
 from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import create_engine
 from alphaTrade.store.db import run_migrations

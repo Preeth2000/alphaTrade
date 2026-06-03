@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/preeth/projects/alphaTrade",
+        "/home/preeth/projects/alphaFrame",
+        "/home/preeth/projects/alphaGen",
+        "/home/preeth/projects/alphaLink"
+      ]
+    }
+  }
+}

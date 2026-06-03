@@ -9,13 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from alphaTrade.api.auth import make_api_key_dep
 from alphaTrade.api.deps import make_session_dep
+from typing import Optional
 from alphaTrade.config import Settings
 from alphaTrade.health import HealthState
 
 log = logging.getLogger(__name__)
 
 
-def create_app(engine: Engine, health_state: HealthState, registry=None, backtest_scheduler=None, settings: Settings = None, t212_holder=None, provider_holder=None) -> FastAPI:
+def create_app(engine: Engine, health_state: HealthState, registry=None, backtest_scheduler=None, settings: Optional[Settings] = None, t212_holder=None, provider_holder=None) -> FastAPI:
     from alphaTrade.api.routers import positions, orders, signals, pnl, models, backtest, health, settings as settings_router, equity, trades, stream, kill_switch, verify, retirement
 
     app = FastAPI(title="alphaTrade API", version="1.0")
@@ -56,12 +57,12 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
     )
     app.include_router(backtest.make_router(session_dep, api_key_dep, backtest_scheduler), prefix="/api/v1")
     app.include_router(health.make_router(health_state, api_key_dep), prefix="/api/v1")
-    app.include_router(settings_router.make_router(session_dep, api_key_dep, settings, t212_holder, provider_holder), prefix="/api/v1")
+    app.include_router(settings_router.make_router(session_dep, api_key_dep, settings, t212_holder, provider_holder, health_state=health_state), prefix="/api/v1")
     app.include_router(equity.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(trades.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(stream.make_router(engine, api_key_dep), prefix="/api/v1")
     app.include_router(kill_switch.make_router(api_key_dep), prefix="/api/v1")
-    app.include_router(verify.make_router(api_key_dep), prefix="/api/v1")
+    app.include_router(verify.make_router(api_key_dep, health_state=health_state, settings=settings), prefix="/api/v1")
     if settings is not None:
         app.include_router(retirement.make_router(session_dep, api_key_dep, settings), prefix="/api/v1")
 
@@ -74,7 +75,7 @@ async def start_api_server(
     port: int = 8081,
     registry=None,
     backtest_scheduler=None,
-    settings: Settings = None,
+    settings: Optional[Settings] = None,
     t212_holder=None,
     provider_holder=None,
 ) -> uvicorn.Server:

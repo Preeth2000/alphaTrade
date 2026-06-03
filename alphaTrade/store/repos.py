@@ -69,17 +69,17 @@ class SignalRepo:
 
     def list(self, limit: int = 100) -> list[Signal]:
         return list(self._s.exec(
-            select(Signal).order_by(Signal.ts.desc()).limit(limit)
+            select(Signal).order_by(Signal.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
-    def since(self, since: datetime, limit: int = 500) -> list[Signal]:
+    def since(self, since: datetime, limit: int = 500) -> list[Signal]:  # type: ignore[valid-type]
         return list(self._s.exec(
-            select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)
+            select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
     def latest_for_model(self, run_name: str) -> Signal | None:
         return self._s.exec(
-            select(Signal).where(Signal.run_name == run_name).order_by(Signal.ts.desc()).limit(1)
+            select(Signal).where(Signal.run_name == run_name).order_by(Signal.ts.desc()).limit(1)  # type: ignore[attr-defined]
         ).first()
 
 
@@ -108,12 +108,12 @@ class OrderRepo:
 
     def list(self, limit: int = 100) -> list[Order]:
         return list(self._s.exec(
-            select(Order).order_by(Order.ts.desc()).limit(limit)
+            select(Order).order_by(Order.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
-    def since(self, since: datetime, limit: int = 500) -> list[Order]:
+    def since(self, since: datetime, limit: int = 500) -> list[Order]:  # type: ignore[valid-type]
         return list(self._s.exec(
-            select(Order).where(Order.ts >= since).order_by(Order.ts.desc()).limit(limit)
+            select(Order).where(Order.ts >= since).order_by(Order.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
 
@@ -155,8 +155,8 @@ class PositionRepo:
     def all_with_oco(self) -> list[Position]:
         return list(self._s.exec(
             select(Position).where(
-                Position.stop_order_id.isnot(None),
-                Position.limit_order_id.isnot(None),
+                Position.stop_order_id.isnot(None),  # type: ignore[union-attr]
+                Position.limit_order_id.isnot(None),  # type: ignore[union-attr]
             )
         ).all())
 
@@ -185,7 +185,7 @@ class EquityRepo:
 
     def since(self, since: datetime, limit: int = 500) -> list[EquityCurve]:
         return list(self._s.exec(
-            select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)
+            select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)  # type: ignore[arg-type]
         ).all())
 
 
@@ -275,6 +275,7 @@ class BacktestRun(SQLModel, table=True):
     end_date: str
     config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     status: str = "done"
+    error_msg: str = ""
 
 
 class BacktestTrade(SQLModel, table=True):
@@ -324,7 +325,7 @@ class TradeJournalRepo:
         return list(self._s.exec(
             select(TradeJournal)
             .where(TradeJournal.model_id == model_id)
-            .order_by(TradeJournal.ts.desc())
+            .order_by(TradeJournal.ts.desc())  # type: ignore[attr-defined]
             .limit(limit)
         ).all())
 
@@ -434,6 +435,7 @@ class BacktestRepo:
         self._s.add(run)
         self._s.commit()
         self._s.refresh(run)
+        assert run.id is not None
         return run.id
 
     def get_run(self, run_id: int) -> BacktestRun | None:
@@ -442,7 +444,7 @@ class BacktestRepo:
     def reset_interrupted(self) -> int:
         """On startup: flip any queued/running rows to failed (process died mid-run)."""
         stuck = self._s.exec(
-            select(BacktestRun).where(BacktestRun.status.in_(["queued", "running"]))
+            select(BacktestRun).where(BacktestRun.status.in_(["queued", "running"]))  # type: ignore[attr-defined]
         ).all()
         for run in stuck:
             run.status = "failed"
@@ -451,10 +453,12 @@ class BacktestRepo:
             self._s.commit()
         return len(stuck)
 
-    def update_status(self, run_id: int, status: str) -> None:
+    def update_status(self, run_id: int, status: str, error_msg: str = "") -> None:
         run = self._s.get(BacktestRun, run_id)
         if run:
             run.status = status
+            if error_msg:
+                run.error_msg = error_msg
             self._s.commit()
 
     def record_trade(self, run_id: int, **kwargs) -> None:
@@ -496,7 +500,7 @@ class BacktestRepo:
 
     def list_runs(self, limit: int = 50) -> list[BacktestRun]:
         return list(self._s.exec(
-            select(BacktestRun).order_by(BacktestRun.ts.desc()).limit(limit)
+            select(BacktestRun).order_by(BacktestRun.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
 
@@ -686,7 +690,7 @@ class ModelDeploymentRepo:
         row = self._s.exec(
             select(ModelDeployment)
             .where(ModelDeployment.run_name == run_name, ModelDeployment.status == "launching")
-            .order_by(ModelDeployment.promoted_at.desc())
+            .order_by(ModelDeployment.promoted_at.desc())  # type: ignore[attr-defined]
         ).first()
         if not row:
             return False
@@ -699,7 +703,7 @@ class ModelDeploymentRepo:
         row = self._s.exec(
             select(ModelDeployment)
             .where(ModelDeployment.run_name == run_name, ModelDeployment.status == "launching")
-            .order_by(ModelDeployment.promoted_at.desc())
+            .order_by(ModelDeployment.promoted_at.desc())  # type: ignore[attr-defined]
         ).first()
         if not row:
             return False
@@ -727,13 +731,9 @@ class ModelDeploymentRepo:
 
     def latest_per_model(self) -> list[ModelDeployment]:
         """Return latest deployment row per run_name."""
-        subq = (
-            select(ModelDeployment.run_name, ModelDeployment.promoted_at)
-            .group_by(ModelDeployment.run_name)
-        )
         # SQLite compatible: fetch all, deduplicate in Python
         all_rows = list(self._s.exec(
-            select(ModelDeployment).order_by(ModelDeployment.promoted_at.desc())
+            select(ModelDeployment).order_by(ModelDeployment.promoted_at.desc())  # type: ignore[attr-defined]
         ).all())
         seen: set[str] = set()
         result: list[ModelDeployment] = []

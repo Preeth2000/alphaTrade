@@ -18,6 +18,9 @@ class HealthState:
     t212_ok: bool = False
     t212_configured: bool = False
     models_loaded: bool = False
+    provider_ok: bool | None = None
+    provider_name: str | None = None
+    alphatrade_ok: bool | None = None
 
 
 def _cors_headers() -> dict:

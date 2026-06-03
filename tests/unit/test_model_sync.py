@@ -1,8 +1,7 @@
 # tests/unit/test_model_sync.py
 import json
 from pathlib import Path
-from typing import Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mlflow.exceptions import MlflowException

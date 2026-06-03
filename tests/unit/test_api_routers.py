@@ -57,7 +57,7 @@ def test_health_returns_state(tmp_path):
 
 # --- Orders ---
 
-from datetime import datetime, timedelta
+from datetime import datetime  # noqa: E402
 
 
 def test_orders_empty_defaults_24h(tmp_path):

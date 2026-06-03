@@ -1,13 +1,12 @@
 """Tests for rolling model performance tracking and retirement logic."""
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 import asyncio
 
 import pytest
 from sqlmodel import Session
 
-from alphaTrade.config import ModelRetirementConfig, ModelRetirementOverride
+from alphaTrade.config import ModelRetirementConfig
 from alphaTrade.risk.performance import record_trade, check_retirement
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import ModelPerformanceRepo
@@ -95,9 +94,15 @@ def test_check_retirement_not_triggered_when_not_enough_trades(engine):
 
 
 def test_registry_skips_retired_model(engine, tmp_path):
-    manifest_a = MagicMock(); manifest_a.run_name = "model_a"; manifest_a.interval = "1d"; manifest_a.model_hash = "hash_a"
+    manifest_a = MagicMock()
+    manifest_a.run_name = "model_a"
+    manifest_a.interval = "1d"
+    manifest_a.model_hash = "hash_a"
     model_a = MagicMock()
-    manifest_b = MagicMock(); manifest_b.run_name = "model_b"; manifest_b.interval = "1d"; manifest_b.model_hash = "hash_b"
+    manifest_b = MagicMock()
+    manifest_b.run_name = "model_b"
+    manifest_b.interval = "1d"
+    manifest_b.model_hash = "hash_b"
     model_b = MagicMock()
 
     with Session(engine) as s:

@@ -2,12 +2,11 @@
 """Tests for AsyncBroker queue management."""
 from __future__ import annotations
 import asyncio
-import itertools
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 import pytest
 
-from alphaTrade.broker.order_queue import OrderRequest, OrderResult, order_priority
+from alphaTrade.broker.order_queue import OrderRequest, OrderResult
 from alphaTrade.broker.throttle import EndpointThrottle
 from alphaTrade.broker.async_broker import AsyncBroker
 

@@ -13,14 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pandas as pd
-import pytest
 from sqlmodel import SQLModel, create_engine
 
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.config import Settings
 from alphaTrade.health import HealthState
 from alphaTrade.main import make_tick
-from alphaTrade.store.repos import EquityCurve, InstrumentCache, Order, Position, Signal
 
 INTERVAL = "1d"
 

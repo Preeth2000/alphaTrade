@@ -1,8 +1,7 @@
 """Tests for T212 client rate-limit handling (429) and HTTP retry logic."""
 from __future__ import annotations
 
-import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -201,6 +200,6 @@ class TestExponentialBackoffRetries:
         respx.get(f"{DEMO_BASE}/equity/account/summary").mock(side_effect=handler)
 
         with patch("time.sleep"):
-            result = client.get_account_summary()
+            client.get_account_summary()
 
         assert call_count == 3

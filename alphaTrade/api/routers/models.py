@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from alphaTrade.store.repos import (
     InstrumentCacheRepo,
-    ModelDeployment,
     ModelDeploymentRepo,
     ModelPerformance,
     ModelPerformanceRepo,
@@ -68,7 +67,7 @@ def _resolve_ticker(session: Session, run_name: str, broker_ticker_override: Opt
     if broker_ticker_override:
         return broker_ticker_override
     sig = session.exec(
-        select(Signal).where(Signal.run_name == run_name).order_by(Signal.ts.desc()).limit(1)
+        select(Signal).where(Signal.run_name == run_name).order_by(Signal.ts.desc()).limit(1)  # type: ignore[attr-defined]
     ).first()
     if sig:
         cached = InstrumentCacheRepo(session).get(sig.ticker)
@@ -206,7 +205,7 @@ def make_router(
                         if alias in aliases:
                             try:
                                 mv = mlflow_client.get_model_version_by_alias(rm.name, alias)
-                                run = mlflow_client.get_run(mv.run_id)
+                                run = mlflow_client.get_run(mv.run_id)  # type: ignore[arg-type]
                                 run_params = run.data.params
                             except MlflowException:
                                 pass
@@ -321,7 +320,7 @@ def make_router(
             for alias, ver_str in aliases.items():
                 try:
                     mv = client.get_model_version_by_alias(rm.name, alias)
-                    versions.append(MLflowVersionInfo(version=ver_str, stage=alias, run_id=mv.run_id))
+                    versions.append(MLflowVersionInfo(version=ver_str, stage=alias, run_id=mv.run_id))  # type: ignore[arg-type]
                 except MlflowException:
                     pass
             result.append(MLflowModelInfo(name=rm.name, versions=versions))
@@ -330,7 +329,7 @@ def make_router(
     @router.post("/models/{model_name}/promote", response_model=MLflowPromoteResponse)
     def promote_model(
         model_name: str,
-        body: MLflowPromoteRequest,
+        body: MLflowPromoteRequest = MLflowPromoteRequest(),
         session: Session = Depends(session_dep),
         _: None = Depends(api_key_dep),
     ):
@@ -355,10 +354,30 @@ def make_router(
         ModelDeploymentRepo(session).insert_launching(model_name)
         return MLflowPromoteResponse(model_name=model_name, version=version, stage="production")
 
+    @router.post("/models/{model_name}/retry-deploy")
+    def retry_deploy(
+        model_name: str,
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ) -> dict:
+        client = _get_mlflow_client()
+        try:
+            pv = client.get_model_version_by_alias(model_name, "production")
+            version = pv.version
+        except MlflowException:
+            raise HTTPException(status_code=404, detail=f"No production alias for {model_name!r} — promote first")
+        if settings is not None and settings.models_dir is not None:
+            safe_name = model_name.replace("/", "_")
+            sync_record = settings.models_dir / ".sync" / safe_name
+            if sync_record.exists():
+                sync_record.unlink()
+        ModelDeploymentRepo(session).insert_launching(model_name)
+        return {"model_name": model_name, "version": version, "status": "launching"}
+
     @router.post("/models/{model_name}/demote", response_model=MLflowPromoteResponse)
     def demote_model(
         model_name: str,
-        body: MLflowPromoteRequest,
+        body: MLflowPromoteRequest = MLflowPromoteRequest(),
         _: None = Depends(api_key_dep),
     ):
         client = _get_mlflow_client()

@@ -2,7 +2,6 @@
 """Tests for OrderRequest, OrderResult, and order_priority."""
 from __future__ import annotations
 from datetime import datetime
-import pytest
 from alphaTrade.broker.order_queue import OrderRequest, OrderResult, order_priority
 
 

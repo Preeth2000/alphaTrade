@@ -28,7 +28,8 @@ async def test_scheduler_adds_job_per_model(tmp_path):
     from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=True, cron="0 2 * * *", lookback_days=30)
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:
@@ -44,7 +45,8 @@ async def test_scheduler_skips_disabled_model(tmp_path):
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=True, cron="0 2 * * *", lookback_days=30)
     settings.model_overrides = {"AAPL_v1": ModelOverride(backtest=BacktestScheduleOverride(disabled=True))}
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:
@@ -59,7 +61,8 @@ async def test_scheduler_disabled_globally_starts_no_jobs(tmp_path):
     from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=False, cron="0 2 * * *", lookback_days=30)
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:
@@ -74,7 +77,8 @@ async def test_update_global_reschedules_jobs(tmp_path):
     from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=True, cron="0 2 * * *", lookback_days=30)
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:
@@ -91,7 +95,8 @@ async def test_update_global_disable_removes_all_jobs(tmp_path):
     from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=True, cron="0 2 * * *", lookback_days=30)
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:
@@ -106,7 +111,8 @@ async def test_update_model_disable_removes_job(tmp_path):
     from alphaTrade.scheduler.backtest_scheduler import BacktestScheduler
     engine = _engine(tmp_path)
     settings = _settings(tmp_path, schedule_enabled=True, cron="0 2 * * *", lookback_days=30)
-    manifest = MagicMock(); manifest.run_name = "AAPL_v1"
+    manifest = MagicMock()
+    manifest.run_name = "AAPL_v1"
     sched = BacktestScheduler(engine=engine, settings=settings, models=[(manifest, MagicMock())], models_dir=Path("models"))
     sched.start()
     try:

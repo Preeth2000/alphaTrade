@@ -1,14 +1,13 @@
 """Tests for order idempotency via deterministic client_order_id."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
 from alphaTrade.broker.orders import make_client_order_id, submit_order
-from alphaTrade.store.repos import Order, OrderRepo
+from alphaTrade.store.repos import OrderRepo
 
 
 @pytest.fixture
@@ -67,7 +66,7 @@ class TestSubmitOrderIdempotency:
         cid = "abcdef0123456789"
 
         # First call
-        result1 = submit_order(
+        submit_order(
             t212=t212,
             instrument_ticker="AAPL_US_EQ",
             side="BUY",

@@ -1,9 +1,6 @@
 """Unit tests for AlertManager: queue dispatch, level filtering, graceful shutdown."""
-import queue
-import threading
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
 from alphaTrade.notify.alerting import AlertManager, AlertLevel
@@ -56,7 +53,6 @@ def test_shutdown_drains_queue():
     am = AlertManager(cfg)
     # Patch dispatch so it doesn't make network calls
     dispatched = []
-    original_dispatch = am._dispatch
     def fake_dispatch(msg, level):
         dispatched.append(msg)
     am._dispatch = fake_dispatch

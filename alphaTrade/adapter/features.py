@@ -66,11 +66,16 @@ def compute_features(df: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame
         elif name in ("Open", "High", "Low", "Close", "Volume"):
             computed[name] = df[name].values.astype(float)
         elif name == "VWAP":
-            # Cumulative session VWAP from OHLCV — matches alphaGen src/att/data/fetch.py
-            tp = (high + low + close) / 3.0
-            cum_tpv = np.cumsum(tp * volume)
-            cum_vol = np.cumsum(volume)
-            computed["VWAP"] = np.where(cum_vol == 0, np.nan, cum_tpv / cum_vol)
+            # Use pre-computed column when available (e.g. from full-history df in backtest/provider).
+            # Fallback computes cumulative VWAP over the slice — only correct when df spans the
+            # same history as training; for short windows this diverges from training distribution.
+            if "VWAP" in df.columns:
+                computed["VWAP"] = df["VWAP"].values.astype(float)
+            else:
+                tp = (high + low + close) / 3.0
+                cum_tpv = np.cumsum(tp * volume)
+                cum_vol = np.cumsum(volume)
+                computed["VWAP"] = np.where(cum_vol == 0, np.nan, cum_tpv / cum_vol)
         elif name == "Transactions":
             # Trade-count passthrough; may not be available from all providers
             if "Transactions" in df.columns:

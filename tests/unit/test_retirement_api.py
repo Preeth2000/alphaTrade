@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, create_engine
 
 from alphaTrade.api.app import create_app
-from alphaTrade.config import ModelRetirementConfig, ModelRetirementOverride, ModelOverride, Settings
+from alphaTrade.config import Settings
 from alphaTrade.health import HealthState
 from alphaTrade.store.db import run_migrations
-from alphaTrade.store.repos import BotSettings, BotSettingsRepo, ModelPerformance, ModelPerformanceRepo
+from alphaTrade.store.repos import BotSettingsRepo, ModelPerformanceRepo
 
 
 def _make_engine(tmp_path):

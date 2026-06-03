@@ -7,7 +7,6 @@ import smtplib
 import threading
 from email.mime.text import MIMEText
 from enum import IntEnum
-from typing import Optional
 
 try:
     import httpx as _httpx_module
@@ -15,7 +14,7 @@ try:
 except ImportError:
     httpx = None  # type: ignore[assignment]
 
-from alphaTrade.config import AlertsConfig, AlertSlackConfig, AlertEmailConfig
+from alphaTrade.config import AlertsConfig
 
 log = logging.getLogger(__name__)
 

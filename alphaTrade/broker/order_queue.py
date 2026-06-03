@@ -1,7 +1,7 @@
 """OrderRequest, OrderResult dataclasses and priority logic for the broker queue."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 _INTERVAL_ORDER = ["1m", "5m", "15m", "1h", "4h", "1d", "1wk"]

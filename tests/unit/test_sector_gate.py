@@ -6,7 +6,7 @@ from sqlmodel import Session
 
 from alphaTrade.config import BalancedPortfolioConfig, UnbalancedPortfolioConfig, RiskConfig
 from alphaTrade.risk.sector import fetch_sector, check_sector_gate
-from alphaTrade.risk.gates import run_gates, GateResult
+from alphaTrade.risk.gates import run_gates
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import Position, PositionRepo, SectorCacheRepo, ModelPerformanceRepo
 

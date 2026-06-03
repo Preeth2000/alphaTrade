@@ -1,5 +1,4 @@
 """Test api_port setting in Settings."""
-import pytest
 
 
 def test_settings_has_api_port(monkeypatch):

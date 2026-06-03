@@ -1,7 +1,6 @@
 """Smoke tests for alphaTrade.metrics — validates metric definitions parse correctly."""
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -16,7 +15,6 @@ from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.config import Settings
 from alphaTrade.health import HealthState
 from alphaTrade.main import make_tick
-from alphaTrade.store.repos import Position
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
 

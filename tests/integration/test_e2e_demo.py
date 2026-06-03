@@ -120,8 +120,6 @@ def test_reconcile_empty_positions(mock_provider):
     from sqlmodel import SQLModel, create_engine, Session
     from alphaTrade.store.repos import PositionRepo, Position
     from alphaTrade.broker.t212_client import T212Client
-    from alphaTrade.config import Settings
-    from alphaTrade.main import reconcile_positions
 
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
@@ -135,12 +133,6 @@ def test_reconcile_empty_positions(mock_provider):
     t212 = T212Client(api_key="test-key", env="demo")
 
     # Mock returns empty positions list
-    settings = Settings(
-        t212_demo_api_key="test-key",
-        state_db_path=":memory:",
-        models_dir=Path("/tmp"),
-    )
-
     # Reconcile using the in-memory engine directly
     with Session(engine) as session:
         repo = PositionRepo(session)

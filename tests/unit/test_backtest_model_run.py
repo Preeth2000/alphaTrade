@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlmodel import create_engine, Session
 from alphaTrade.store.db import run_migrations
-from alphaTrade.store.repos import BacktestRepo, BacktestModelRun
+from alphaTrade.store.repos import BacktestRepo
 
 
 @pytest.fixture()
@@ -68,11 +68,11 @@ def test_model_runs_scoped_to_run(session):
 
 
 # Engine integration tests
-from unittest.mock import MagicMock, patch
-from pathlib import Path
-import pandas as pd
-from alphaTrade.backtest.engine import run_backtest
-from alphaTrade.config import BacktestConfig
+from unittest.mock import MagicMock, patch  # noqa: E402
+from pathlib import Path  # noqa: E402
+import pandas as pd  # noqa: E402
+from alphaTrade.backtest.engine import run_backtest  # noqa: E402
+from alphaTrade.config import BacktestConfig  # noqa: E402
 
 def _make_manifest(run_name="m1", ticker="AAPL", interval="1d", window=3):
     m = MagicMock()
@@ -198,3 +198,18 @@ def test_run_backtest_records_failed_status_on_exception(tmp_path):
         assert mr.status == "failed"
         assert "network error" in mr.error_msg
         assert mr.trade_count == 0
+
+
+def test_update_status_persists_error_msg(tmp_path):
+    """BacktestRepo.update_status propagates error_msg to the run row."""
+    db = tmp_path / "test.db"
+    run_migrations(db)
+    engine_db = create_engine(f"sqlite:///{db}")
+    with Session(engine_db) as session:
+        repo = BacktestRepo(session)
+        run_id = repo.create_run(start="2026-01-01", end="2026-01-31", status="running")
+        repo.update_status(run_id, "failed", error_msg="No models found in /fake")
+    with Session(engine_db) as session:
+        run = session.get(__import__("alphaTrade.store.repos", fromlist=["BacktestRun"]).BacktestRun, run_id)
+        assert run.status == "failed"
+        assert "No models found" in run.error_msg

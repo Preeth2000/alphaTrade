@@ -1,6 +1,5 @@
 """Tests for ATR and VIX volatility-based position sizing."""
 import pytest
-from unittest.mock import patch
 
 from alphaTrade.risk.sizing import compute_quantity
 

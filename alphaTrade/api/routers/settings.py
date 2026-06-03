@@ -1,10 +1,14 @@
 from __future__ import annotations
+import asyncio
+import logging
 from collections.abc import Callable
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlmodel import Session
 from alphaTrade.store.repos import BotSettings, BotSettingsRepo
+
+log = logging.getLogger(__name__)
 
 _SENSITIVE = frozenset({
     "t212_demo_api_key", "t212_demo_secret_key",
@@ -62,6 +66,7 @@ def make_router(
     settings=None,
     t212_holder: list | None = None,
     provider_holder: list | None = None,
+    health_state=None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -74,7 +79,8 @@ def make_router(
         return _mask(s)
 
     @router.put("/settings")
-    def update_settings(
+    @router.patch("/settings")
+    async def update_settings(
         update: BotSettingsUpdate,
         session: Session = Depends(session_dep),
         _: None = Depends(api_key_dep),
@@ -88,6 +94,19 @@ def make_router(
         if settings is not None and t212_holder is not None and provider_holder is not None:
             from alphaTrade.main import apply_bot_settings
             apply_bot_settings(saved, settings, t212_holder, provider_holder)
+            if health_state is not None:
+                from alphaTrade.main import _t212_credentials
+                key, _sec, _env = _t212_credentials(saved)
+                health_state.t212_configured = bool(key)
+                if health_state.t212_configured:
+                    try:
+                        await asyncio.to_thread(t212_holder[0].get_total_equity)
+                        health_state.t212_ok = True
+                    except Exception as exc:
+                        log.warning("T212 probe after settings save failed: %s", exc)
+                        health_state.t212_ok = False
+                else:
+                    health_state.t212_ok = False
         return _mask(saved)
 
     return router

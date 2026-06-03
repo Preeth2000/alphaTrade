@@ -8,7 +8,10 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from alphaTrade.store.repos import TradeJournal
 
 # third-party
 from sqlmodel import Session
@@ -26,7 +29,7 @@ from alphaTrade.broker.order_queue import OrderRequest, OrderResult
 from alphaTrade.broker.orders import make_client_order_id
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.broker.throttle import EndpointThrottle
-from alphaTrade.config import ModelOverride, Settings
+from alphaTrade.config import Settings
 from alphaTrade.consensus.softmax_avg import consensus_by_ticker
 from alphaTrade.data.provider import DataProvider
 from alphaTrade.notify import webhook as wh
@@ -43,7 +46,6 @@ from alphaTrade.store.repos import (
     BotSettings,
     BotSettingsRepo,
     EquityRepo,
-    InstrumentCache,
     InstrumentCacheRepo,
     ModelOverrideRecord,
     ModelOverrideRepo,
@@ -129,12 +131,12 @@ def apply_bot_settings(
         settings.risk.safe_mode = db_s.safe_mode
     if db_s.dangerously_allow_pyramid is not None:
         settings.risk.dangerously_allow_pyramid = db_s.dangerously_allow_pyramid
-    settings.alerts.slack.enabled = db_s.slack_enabled
+    settings.alerts.slack.enabled = db_s.slack_enabled  # type: ignore[union-attr]
     if db_s.slack_webhook_url:
-        settings.alerts.slack.webhook_url = db_s.slack_webhook_url
-    settings.alerts.email.enabled = db_s.email_enabled
+        settings.alerts.slack.webhook_url = db_s.slack_webhook_url  # type: ignore[union-attr]
+    settings.alerts.email.enabled = db_s.email_enabled  # type: ignore[union-attr]
     if db_s.email_to_addrs:
-        settings.alerts.email.to_addrs = [
+        settings.alerts.email.to_addrs = [  # type: ignore[union-attr]
             a.strip() for a in db_s.email_to_addrs.split(",") if a.strip()
         ]
     if db_s.retirement_enabled is not None:
@@ -202,6 +204,26 @@ def apply_bot_settings(
 def _build_data_provider(settings: Settings) -> DataProvider:
     from alphaTrade.data.factory import build_data_provider
     return build_data_provider(settings)
+
+
+def _precompute_passthrough_features(df, feature_names: list[str]):
+    """Pre-compute cumulative VWAP over the full df before any window slicing.
+
+    VWAP is a cumulative feature in training (alphaGen computes cumsum over the entire
+    fetch). Restarting the cumsum inside each window slice produces different values.
+    Pre-computing here preserves the correct distribution when window slices are taken later.
+    """
+    import numpy as np
+    df = df.copy()
+    if "VWAP" in feature_names and "VWAP" not in df.columns:
+        tp = (df["High"].values + df["Low"].values + df["Close"].values) / 3.0
+        vol = df["Volume"].values.astype(float)
+        cum_tpv = np.cumsum(tp * vol)
+        cum_vol = np.cumsum(vol)
+        df["VWAP"] = np.where(cum_vol == 0, np.nan, cum_tpv / cum_vol)
+    if "Transactions" in feature_names and "Transactions" not in df.columns:
+        df["Transactions"] = np.nan
+    return df
 
 
 def scan_models(models_dir: Path) -> list[tuple[Manifest, OnnxModel]]:
@@ -433,9 +455,13 @@ def make_tick(
         for manifest, model in interval_models:
             try:
                 t0 = time.perf_counter()
-                df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, manifest.window + 100)
+                # Request enough bars for VWAP history to approximate training distribution.
+                # Providers cap at their lookback limit so large values just return max available.
+                vwap_bars = 3000 if "VWAP" in manifest.feature_names else manifest.window + 100
+                df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, vwap_bars)
                 from alphaTrade.data.fundamentals import merge_fundamentals_into
                 df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
+                df = _precompute_passthrough_features(df, manifest.feature_names)
                 features = compute_features(df, manifest.feature_names)
                 features = features.dropna()
                 # Save raw ATR before normalization (ATR sizing uses price units)
@@ -523,10 +549,7 @@ def make_tick(
                     (db_ov.take_profit_pct if db_ov and db_ov.take_profit_pct else None)
                     or settings.defaults.take_profit_pct
                 )
-                eff_cooldown_bars = (
-                    (db_ov.cooldown_bars if db_ov and db_ov.cooldown_bars else None)
-                    or settings.defaults.cooldown_bars
-                )
+
                 broker_ticker_ov = (
                     (db_ov.broker_ticker if db_ov and db_ov.broker_ticker else None)
                     or (yaml_ov.t212_ticker if yaml_ov and yaml_ov.t212_ticker else None)
@@ -545,7 +568,7 @@ def make_tick(
                     ticker=yf_ticker,
                     signal=signal,
                     model_count=len(ticker_logits[yf_ticker]),
-                    raw_json=[l.tolist() for l in ticker_logits[yf_ticker]],
+                    raw_json=[v.tolist() for v in ticker_logits[yf_ticker]],
                 )
                 signal_repo.save(sig_rec)
                 signals_total.labels(ticker=yf_ticker, signal=signal).inc()
@@ -556,8 +579,6 @@ def make_tick(
                 if kill_switch_active:
                     log.info("Kill switch: order skipped for %s %s", signal, yf_ticker)
                     continue
-
-                pos = pos_repo.get(t212_ticker)
 
                 eff_safe_mode = next(
                     (v for v in [
@@ -731,7 +752,6 @@ async def run(settings: Settings) -> None:
         from alphaTrade.store.repos import (
             OrderRepo, PositionRepo, TradeJournalRepo, Position,
         )
-        from alphaTrade.risk.performance import _effective_config, check_retirement, record_trade
         from alphaTrade.notify.alerting import AlertLevel
         from alphaTrade.config import ModelOverride
         from alphaTrade.metrics import open_positions as metric_open_positions
@@ -759,7 +779,7 @@ async def run(settings: Settings) -> None:
 
             saved = order_repo.find_by_client_order_id(req.client_order_id)
             if saved:
-                order_repo.update_fill(saved.id, "filled", fill_price, result.t212_order_id)
+                order_repo.update_fill(saved.id, "filled", fill_price, result.t212_order_id)  # type: ignore[arg-type]
 
             cooldown_secs = _INTERVAL_SECONDS.get(req.interval, 86400) * settings.defaults.cooldown_bars
             cooldown_td = timedelta(seconds=cooldown_secs)

@@ -1,11 +1,7 @@
 """Tests for operator kill switch: alphaTrade_HALT env var + ./HALT sentinel file."""
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from alphaTrade.kill_switch import is_halted, SENTINEL_FILE, ENV_VAR
 
@@ -58,8 +54,8 @@ class TestIsHalted:
 # CLI halt / resume commands
 # ---------------------------------------------------------------------------
 
-from typer.testing import CliRunner
-from alphaTrade.cli import app
+from typer.testing import CliRunner  # noqa: E402
+from alphaTrade.cli import app  # noqa: E402
 
 
 class TestCLIHaltResume:

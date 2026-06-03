@@ -7,8 +7,7 @@ from sqlmodel import Session, select
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import (
     TradeJournal, PnlSnapshot, ModelPerformance,
-    SectorCache, BacktestRun, BacktestTrade,
-    TradeJournalRepo, PnlSnapshotRepo, ModelPerformanceRepo,
+    SectorCache, BacktestRun, TradeJournalRepo, PnlSnapshotRepo, ModelPerformanceRepo,
     SectorCacheRepo, BacktestRepo,
 )
 

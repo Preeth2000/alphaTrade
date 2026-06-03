@@ -4,9 +4,7 @@ from __future__ import annotations
 import io
 import json
 import logging
-import os
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 import pytest
 

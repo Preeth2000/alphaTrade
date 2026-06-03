@@ -1,7 +1,5 @@
 """E2E: two models for same stock → consensus path exercised."""
 import numpy as np
-import pytest
-from unittest.mock import MagicMock, patch
 
 from alphaTrade.consensus.softmax_avg import consensus_by_ticker
 

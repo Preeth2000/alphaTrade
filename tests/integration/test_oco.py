@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 
 import httpx
-import pytest
 import respx
 
 from alphaTrade.broker.t212_client import T212Client
@@ -84,7 +83,7 @@ def test_cancel_order_after_stop_submitted() -> None:
         return_value=httpx.Response(200, json={"id": "stop-orphan", "status": "PENDING"})
     )
     respx.delete(
-        url__regex=rf"^https://demo\.trading212\.com/api/v0/equity/orders/[^/?]+$"
+        url__regex=r"^https://demo\.trading212\.com/api/v0/equity/orders/[^/?]+$"
     ).mock(return_value=httpx.Response(204))
 
     client = T212Client(api_key="test-key", env="demo")

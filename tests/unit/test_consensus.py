@@ -1,6 +1,5 @@
 """Tests for softmax-averaged consensus."""
 import numpy as np
-import pytest
 
 from alphaTrade.consensus.softmax_avg import consensus, consensus_by_ticker
 

@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.store.repos import (
-    EquityCurve, InstrumentCache, InstrumentCacheRepo, Order, Position, Signal,
+    InstrumentCacheRepo,
 )
 
 

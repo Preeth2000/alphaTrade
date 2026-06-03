@@ -2,9 +2,8 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-import pytest
 
-from alphaTrade.risk.gates import run_gates, GateResult
+from alphaTrade.risk.gates import run_gates
 from alphaTrade.store.repos import Position
 
 

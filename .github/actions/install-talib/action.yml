@@ -1,0 +1,19 @@
+name: Install TA-Lib
+description: Install TA-Lib C library via apt and register it for the Python wrapper.
+
+runs:
+  using: composite
+  steps:
+    - name: Cache apt TA-Lib
+      id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: /usr/lib/x86_64-linux-gnu/libta*
+        key: talib-apt-${{ runner.os }}
+
+    - name: Install TA-Lib
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y libta-lib-dev

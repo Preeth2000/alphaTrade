@@ -32,7 +32,6 @@ def verify(
     ticker_override: str = typer.Option("", "--ticker", help="Override manifest ticker for data fetch"),
 ):
     """Hash-check, smoke-test, and dry-run inference on a model artifact."""
-    import numpy as np
     from alphaTrade.adapter.manifest import Manifest
     from alphaTrade.adapter.inference import OnnxModel
     from alphaTrade.adapter.features import compute_features
@@ -51,7 +50,7 @@ def verify(
         console.print(f"[red]model.onnx not found in {model_dir}[/red]")
         raise typer.Exit(1)
 
-    console.print(f"[bold]Loading manifest...[/bold]")
+    console.print("[bold]Loading manifest...[/bold]")
     manifest = Manifest.load(manifest_path)
     console.print(f"  run_name : {manifest.run_name}")
     console.print(f"  arch     : {manifest.model_arch}")
@@ -60,11 +59,11 @@ def verify(
     console.print(f"  features : {manifest.n_features}")
     console.print(f"  window   : {manifest.window}")
 
-    console.print(f"\n[bold]Hash check...[/bold]")
+    console.print("\n[bold]Hash check...[/bold]")
     manifest.verify_model_hash(model_path)
     console.print("  [green]OK[/green]")
 
-    console.print(f"\n[bold]Loading ONNX model + smoke test...[/bold]")
+    console.print("\n[bold]Loading ONNX model + smoke test...[/bold]")
     model = OnnxModel(manifest, model_path)
     console.print("  [green]OK[/green]")
 
@@ -79,7 +78,7 @@ def verify(
     features = normalize(features, manifest)
     x = build_input(features, manifest)
 
-    console.print(f"\n[bold]Running inference...[/bold]")
+    console.print("\n[bold]Running inference...[/bold]")
     logits = model.run(x)
     probs = _softmax(logits)
     signal = CLASS_NAMES[int(logits.argmax())]
@@ -191,7 +190,6 @@ def report(
 ):
     """Print P&L report: daily snapshots and closed trade summary since DATE."""
     import csv
-    import sys
     from datetime import date, timedelta
     from alphaTrade.config import Settings
     from alphaTrade.store.db import get_session, url_from_settings
@@ -249,7 +247,7 @@ def report(
             t = Table("date", "equity", "day P&L", "day %", "trades")
             for s in snap_dicts:
                 t.add_row(
-                    s["date"],
+                    str(s["date"]),
                     f"{s['total_equity']:.2f}",
                     f"{s['day_pnl']:+.2f}",
                     f"{s['day_pnl_pct']:+.2f}%",
@@ -260,7 +258,7 @@ def report(
         else:
             console.print(f"No snapshots since {since_date}.")
 
-        total_realized = sum(tr["realized_pnl"] for tr in trade_dicts)
+        total_realized = sum(tr["realized_pnl"] for tr in trade_dicts)  # type: ignore[misc, arg-type]
         console.print(f"\n[bold]Total realized P&L since {since_date}:[/bold] {total_realized:+.2f}")
         console.print(f"[bold]Closed trades:[/bold] {len(trade_dicts)}")
 

@@ -1,7 +1,7 @@
 """Unit tests for OCO monitor. Uses in-memory SQLite and mocked T212Client."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest

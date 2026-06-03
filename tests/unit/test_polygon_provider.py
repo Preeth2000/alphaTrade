@@ -11,11 +11,11 @@ _COLS = ["Open", "High", "Low", "Close", "Volume"]
 _N = 10
 
 
-def _make_agg(o=100.0, h=105.0, l=99.0, c=102.0, v=1000.0) -> MagicMock:
+def _make_agg(o=100.0, h=105.0, lo=99.0, c=102.0, v=1000.0) -> MagicMock:
     a = MagicMock()
     a.open = o
     a.high = h
-    a.low = l
+    a.low = lo
     a.close = c
     a.volume = v
     return a
@@ -34,7 +34,7 @@ def _run(aggs, ticker: str = "AAPL", interval: str = "1d", bars: int = 5) -> pd.
 class TestValidateOhlcvCalled:
     def test_raises_on_corrupt_data(self):
         """validate_ohlcv should catch negative prices before returning."""
-        bad_aggs = [_make_agg(o=-1.0, h=-1.0, l=-1.0, c=-1.0) for _ in range(_N)]
+        bad_aggs = [_make_agg(o=-1.0, h=-1.0, lo=-1.0, c=-1.0) for _ in range(_N)]
         with pytest.raises(ValueError, match="non-positive price"):
             _run(bad_aggs)
 

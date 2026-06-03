@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from mlflow.exceptions import MlflowException
@@ -309,8 +308,7 @@ def test_list_models_no_duplicate_when_model_already_in_db(tmp_path):
 
 def test_promote_inserts_launching_deployment(tmp_path):
     """POST promote creates a model_deployments row with status=launching."""
-    from sqlmodel import Session, create_engine, select
-    from alphaTrade.store.db import run_migrations
+    from sqlmodel import Session, select
     from alphaTrade.store.repos import ModelDeployment
 
     app, engine = _make_models_app(tmp_path)
@@ -336,8 +334,7 @@ def test_promote_inserts_launching_deployment(tmp_path):
 
 def test_deployments_endpoint_returns_latest_per_model(tmp_path):
     """GET /models/deployments returns latest deployment row per model."""
-    from sqlmodel import Session, create_engine
-    from alphaTrade.store.db import run_migrations
+    from sqlmodel import Session
     from alphaTrade.store.repos import ModelDeploymentRepo
 
     app, engine = _make_models_app(tmp_path)
@@ -347,7 +344,7 @@ def test_deployments_endpoint_returns_latest_per_model(tmp_path):
     with Session(engine) as session:
         repo = ModelDeploymentRepo(session)
         repo.insert_launching("AAPL_v2")
-        row = repo.insert_launching("AAPL_v2")
+        repo.insert_launching("AAPL_v2")
         repo.mark_active("AAPL_v2")  # marks the latest launching row active
         repo.insert_launching("TSLA_v1")
 

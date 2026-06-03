@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from sqlmodel import Session
 
@@ -16,7 +18,6 @@ from alphaTrade.adapter.normalize import normalize
 from alphaTrade.adapter.window import build_input
 from alphaTrade.config import BacktestConfig
 from alphaTrade.consensus.softmax_avg import CLASS_NAMES
-from alphaTrade.consensus.softmax_avg import consensus as softmax_vote
 from alphaTrade.data.fundamentals import merge_fundamentals_into
 from alphaTrade.data.provider import DataProvider
 from alphaTrade.data.yfinance_provider import YFinanceProvider
@@ -186,6 +187,28 @@ def run_backtest(
     return {"run_id": run_id, "trades": all_trades}
 
 
+def _precompute_passthrough_features(df: "pd.DataFrame", feature_names: list[str]) -> "pd.DataFrame":
+    """Pre-compute history-dependent features on the full df before bar-by-bar windowing.
+
+    VWAP must be cumulative from the start of the fetched data to match training behaviour
+    (alphaGen computes it over the entire dataset fetch, not over each window slice).
+    Pre-computing here ensures window slices in _infer receive the correct values as a
+    passthrough column rather than restarting the cumsum each time.
+    """
+    import numpy as np
+
+    df = df.copy()
+    if "VWAP" in feature_names and "VWAP" not in df.columns:
+        tp = (df["High"].values + df["Low"].values + df["Close"].values) / 3.0
+        vol = df["Volume"].values.astype(float)
+        cum_tpv = np.cumsum(tp * vol)
+        cum_vol = np.cumsum(vol)
+        df["VWAP"] = np.where(cum_vol == 0, np.nan, cum_tpv / cum_vol)
+    if "Transactions" in feature_names and "Transactions" not in df.columns:
+        df["Transactions"] = np.nan
+    return df
+
+
 def _run_single_model(
     manifest: Manifest,
     model: OnnxModel,
@@ -202,6 +225,7 @@ def _run_single_model(
         log.warning("backtest: not enough data for %s", manifest.run_name)
         return [], "no_data"
     df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
+    df = _precompute_passthrough_features(df, manifest.feature_names)
 
     trades: list[dict] = []
     state: BacktestState | None = None
@@ -411,18 +435,14 @@ def _run_single_model_with_lag(
 
 def _infer(manifest: Manifest, model: OnnxModel, df) -> str:
     """Run production inference pipeline on a window slice. Returns signal string."""
-    try:
-        features = compute_features(df, manifest.feature_names)
-        features = features.dropna()
-        if len(features) < manifest.window:
-            return "HOLD"
-        features = normalize(features, manifest)
-        x = build_input(features, manifest)
-        logits = model.run(x)
-        return CLASS_NAMES[int(logits.argmax())]
-    except Exception as exc:
-        log.warning("backtest infer error: %s", exc)
+    features = compute_features(df, manifest.feature_names)
+    features = features.dropna()
+    if len(features) < manifest.window:
         return "HOLD"
+    features = normalize(features, manifest)
+    x = build_input(features, manifest)
+    logits = model.run(x)
+    return CLASS_NAMES[int(logits.argmax())]
 
 
 def _build_trade(

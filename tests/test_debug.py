@@ -1,7 +1,6 @@
 import sys
 sys.path.insert(0, '/home/preeth/projects/alphaTrade')
 
-import pytest
 import respx
 import httpx
 from alphaTrade.notify import webhook

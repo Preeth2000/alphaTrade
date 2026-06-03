@@ -19,7 +19,7 @@ def consensus(model_logits: list[np.ndarray]) -> str:
     """Return BUY | SELL | HOLD signal from one or more logit vectors (shape (3,))."""
     if not model_logits:
         return "HOLD"
-    probs = np.mean([_softmax(l) for l in model_logits], axis=0)
+    probs = np.mean([_softmax(v) for v in model_logits], axis=0)
     return CLASS_NAMES[int(np.argmax(probs))]
 
 

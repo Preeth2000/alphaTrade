@@ -1,6 +1,5 @@
 """Tests for Manifest loading, validation, and hash check."""
 import hashlib
-import json
 import tempfile
 from pathlib import Path
 

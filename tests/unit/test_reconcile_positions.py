@@ -1,19 +1,17 @@
 """Verify reconcile_positions() is async and runs get_positions() off event loop."""
 from __future__ import annotations
 
-import asyncio
 import inspect
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import Session
 
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.config import Settings
 from alphaTrade.main import reconcile_positions
 from alphaTrade.store.repos import (
-    EquityCurve, InstrumentCache, Order, Position, PositionRepo, Signal,
+    Position, PositionRepo,
 )
 
 

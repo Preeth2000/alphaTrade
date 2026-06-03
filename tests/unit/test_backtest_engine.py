@@ -1,10 +1,9 @@
 """Unit tests for backtest engine core logic and reporter."""
-import math
 import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alphaTrade.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState
+from alphaTrade.backtest.engine import _simulate_fill, _check_sl_tp, BacktestState, _infer
 
 
 def test_simulate_fill_buy_adds_slippage():
@@ -68,7 +67,7 @@ def test_backtest_state_pnl_short():
 
 
 # Reporter tests
-from alphaTrade.backtest.reporter import compute_summary, format_text
+from alphaTrade.backtest.reporter import compute_summary, format_text  # noqa: E402
 
 
 def test_compute_summary_empty():
@@ -108,3 +107,64 @@ def test_format_text_contains_summary():
     text = format_text(s)
     assert "Total trades" in text
     assert "Win rate" in text
+
+
+# _infer guardrail tests
+
+def _make_manifest_for_infer():
+    from alphaTrade.adapter.manifest import Manifest
+    return Manifest(
+        manifest_version="1.0",
+        run_name="test",
+        model_arch="mlp",
+        opset=17,
+        git_sha="abc",
+        model_hash="unknown",
+        output_format="logits",
+        input_shape=[20],
+        classes=["BUY", "SELL", "HOLD"],
+        class_indices={"BUY": 0, "SELL": 1, "HOLD": 2},
+        feature_names=["RSI", "ATR"],
+        n_features=2,
+        window=10,
+        normalize="none",
+        norm_stats={},
+        ticker="AAPL",
+        interval="1d",
+    )
+
+
+def test_infer_returns_hold_when_insufficient_data():
+    manifest = _make_manifest_for_infer()
+    mock_model = MagicMock()
+    df = pd.DataFrame({"Open": [1]*5, "High": [2]*5, "Low": [0.5]*5, "Close": [1.5]*5, "Volume": [1000]*5})
+    with patch("alphaTrade.backtest.engine.compute_features", return_value=df[["Open", "High"]]):
+        result = _infer(manifest, mock_model, df)
+    assert result == "HOLD"
+    mock_model.run.assert_not_called()
+
+
+def test_infer_propagates_exception_from_compute_features():
+    """Broken feature pipeline must propagate — not silently return HOLD."""
+    manifest = _make_manifest_for_infer()
+    mock_model = MagicMock()
+    df = pd.DataFrame({"Close": [1.0] * 20})
+    with patch("alphaTrade.backtest.engine.compute_features", side_effect=RuntimeError("talib broken")):
+        with pytest.raises(RuntimeError, match="talib broken"):
+            _infer(manifest, mock_model, df)
+
+
+def test_infer_propagates_exception_from_model_run():
+    """Broken ONNX model must propagate — not silently return HOLD."""
+    manifest = _make_manifest_for_infer()
+    df = pd.DataFrame(
+        {"RSI": [50.0] * 20, "ATR": [1.0] * 20},
+        index=pd.date_range("2024-01-01", periods=20),
+    )
+    mock_model = MagicMock()
+    mock_model.run.side_effect = ValueError("shape mismatch")
+    with patch("alphaTrade.backtest.engine.compute_features", return_value=df):
+        with patch("alphaTrade.backtest.engine.normalize", return_value=df):
+            with patch("alphaTrade.backtest.engine.build_input", return_value=None):
+                with pytest.raises(ValueError, match="shape mismatch"):
+                    _infer(manifest, mock_model, df)

@@ -80,6 +80,5 @@ jobs:
         env:
           T212_API_KEY: ${{ secrets.T212_API_KEY || 'ci-placeholder' }}
         run: |
-          pytest tests/ -m slow -v --timeout=600; code=$?
-          [ $code -eq 5 ] && echo "No slow tests found — skipping" && exit 0
-          exit $code
+          pytest tests/ -m slow -v --timeout=600 \
+            || { code=$?; [ $code -eq 5 ] && echo "No slow tests — skipping" && exit 0 || exit $code; }

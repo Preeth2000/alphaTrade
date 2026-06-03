@@ -18,6 +18,7 @@ def _settings(tmp_path: Path, webhook_url: str = "https://discord.com/api/webhoo
         overrides_path=tmp_path / "overrides.yaml",
         webhook_url=webhook_url,
         model_sync=ModelSyncConfig(enabled=False),
+        log_file=None,
     )
 
 

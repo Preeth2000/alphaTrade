@@ -215,7 +215,7 @@ class Settings(BaseSettings):
     overrides_path: Path = Path("./overrides.yaml")
     webhook_url: str = ""
     webhook_level: str = "WARNING"
-    log_file: Path = Path("./alphaTrade.log")
+    log_file: Optional[Path] = Path("./alphaTrade.log")
     api_port: int = 8081
     redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()

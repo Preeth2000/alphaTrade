@@ -63,6 +63,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+timeout = 120
 markers = [
     "integration: tests that hit real external APIs",
     "slow: long-running sweeps and full Hypothesis runs",

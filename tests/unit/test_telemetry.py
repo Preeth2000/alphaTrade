@@ -1,5 +1,25 @@
 from __future__ import annotations
 
+import pytest
+from unittest.mock import MagicMock, patch
+
+
+@pytest.fixture(autouse=True)
+def _patch_otlp_exporters():
+    """Replace gRPC OTLP exporters with no-op mocks so tests don't open connections."""
+    mock_span_exporter = MagicMock()
+    mock_span_exporter.export.return_value = 0  # SUCCESS
+    mock_metric_exporter = MagicMock()
+    mock_metric_exporter.export.return_value = 0
+    mock_metric_exporter._preferred_temporality = {}
+    mock_metric_exporter._preferred_aggregation = {}
+
+    with (
+        patch("alphaTrade.telemetry.OTLPSpanExporter", return_value=mock_span_exporter),
+        patch("alphaTrade.telemetry.OTLPMetricExporter", return_value=mock_metric_exporter),
+    ):
+        yield
+
 
 def test_setup_telemetry_returns_tracer_provider_with_correct_resource():
     from opentelemetry.sdk.trace import TracerProvider

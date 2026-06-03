@@ -6,6 +6,7 @@ on:
   schedule:
     # Weekly: Monday 07:00 UTC — catches newly disclosed CVEs
     - cron: "0 7 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read

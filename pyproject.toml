@@ -57,6 +57,7 @@ dev = [
     "mutmut>=2.4",
     "bandit[toml,sarif]>=1.7",
     "pip-audit>=2.7",
+    "pyarrow>=15.0",
 ]
 
 [tool.pytest.ini_options]

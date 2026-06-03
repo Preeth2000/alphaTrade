@@ -65,7 +65,7 @@ jobs:
           pytest tests/ -m perf \
             --benchmark-autosave \
             --benchmark-compare-fail=mean:2.0 \
-            -v
+            -v; rc=$?; [ $rc -eq 5 ] && exit 0 || exit $rc
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

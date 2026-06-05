@@ -2,7 +2,7 @@
 from datetime import datetime
 
 import pytest
-from sqlmodel import Session, select
+from sqlmodel import Session, select, create_engine
 
 from alphaTrade.store.db import get_engine
 from alphaTrade.store.repos import (
@@ -160,3 +160,33 @@ def test_backtest_repo_create_run_and_record_trade(engine):
         trades = repo.trades_for_run(run_id)
     assert len(trades) == 1
     assert trades[0].exit_reason == "OCO_TP"
+
+
+class TestModelAdoptionRepoDeleteAllForModel:
+    def test_deletes_all_adoptions_for_model(self, tmp_path):
+        from alphaTrade.store.repos import ModelAdoptionRepo
+        db = tmp_path / "test.db"
+        from alphaTrade.store.db import run_migrations
+        engine = create_engine(f"sqlite:///{db}")
+        run_migrations(db)
+        with Session(engine) as s:
+            repo = ModelAdoptionRepo(s)
+            repo.adopt("user-1", "my_model")
+            repo.adopt("user-2", "my_model")
+            repo.adopt("user-1", "other_model")  # should NOT be deleted
+            count = repo.delete_all_for_model("my_model")
+            assert count == 2
+        with Session(engine) as s:
+            repo = ModelAdoptionRepo(s)
+            assert repo.adopted_models("user-1") == ["other_model"]
+            assert repo.adopted_models("user-2") == []
+
+    def test_returns_zero_when_no_adoptions(self, tmp_path):
+        from alphaTrade.store.repos import ModelAdoptionRepo
+        db = tmp_path / "test.db"
+        from alphaTrade.store.db import run_migrations
+        engine = create_engine(f"sqlite:///{db}")
+        run_migrations(db)
+        with Session(engine) as s:
+            count = ModelAdoptionRepo(s).delete_all_for_model("nonexistent")
+            assert count == 0

@@ -16,6 +16,7 @@ class Signal(SQLModel, table=True):
     signal: str          # BUY | SELL | HOLD
     model_count: int = 1
     raw_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class Order(SQLModel, table=True):
@@ -30,6 +31,7 @@ class Order(SQLModel, table=True):
     fill_price: Optional[float] = None
     error_msg: str = ""
     client_order_id: str = Field(default="", index=True)
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class Position(SQLModel, table=True):
@@ -42,12 +44,14 @@ class Position(SQLModel, table=True):
     cooldown_until_ts: Optional[datetime] = None
     stop_order_id: Optional[str] = None
     limit_order_id: Optional[str] = None
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class EquityCurve(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     ts: datetime = Field(default_factory=datetime.utcnow)
     equity: float
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class InstrumentCache(SQLModel, table=True):
@@ -72,10 +76,11 @@ class SignalRepo:
             select(Signal).order_by(Signal.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
-    def since(self, since: datetime, limit: int = 500) -> list[Signal]:  # type: ignore[valid-type]
-        return list(self._s.exec(
-            select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)  # type: ignore[attr-defined]
-        ).all())
+    def since(self, since: datetime, limit: int = 500, user_id: Optional[str] = None) -> list[Signal]:  # type: ignore[valid-type]
+        stmt = select(Signal).where(Signal.ts >= since).order_by(Signal.ts.desc()).limit(limit)  # type: ignore[attr-defined]
+        if user_id:
+            stmt = stmt.where(Signal.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
     def latest_for_model(self, run_name: str) -> Signal | None:
         return self._s.exec(
@@ -111,10 +116,11 @@ class OrderRepo:
             select(Order).order_by(Order.ts.desc()).limit(limit)  # type: ignore[attr-defined]
         ).all())
 
-    def since(self, since: datetime, limit: int = 500) -> list[Order]:  # type: ignore[valid-type]
-        return list(self._s.exec(
-            select(Order).where(Order.ts >= since).order_by(Order.ts.desc()).limit(limit)  # type: ignore[attr-defined]
-        ).all())
+    def since(self, since: datetime, limit: int = 500, user_id: Optional[str] = None) -> list[Order]:  # type: ignore[valid-type]
+        stmt = select(Order).where(Order.ts >= since).order_by(Order.ts.desc()).limit(limit)  # type: ignore[attr-defined]
+        if user_id:
+            stmt = stmt.where(Order.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 class PositionRepo:
@@ -126,8 +132,11 @@ class PositionRepo:
             select(Position).where(Position.t212_ticker == t212_ticker)
         ).first()
 
-    def all(self) -> list[Position]:
-        return list(self._s.exec(select(Position)).all())
+    def all(self, user_id: Optional[str] = None) -> list[Position]:
+        stmt = select(Position)
+        if user_id:
+            stmt = stmt.where(Position.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
     def upsert(self, pos: Position) -> None:
         existing = self.get(pos.t212_ticker)
@@ -171,8 +180,8 @@ class EquityRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def record(self, equity: float) -> None:
-        self._s.add(EquityCurve(equity=equity))
+    def record(self, equity: float, user_id: Optional[str] = None) -> None:
+        self._s.add(EquityCurve(equity=equity, user_id=user_id))
         self._s.commit()
 
     def today_open(self) -> float | None:
@@ -183,10 +192,11 @@ class EquityRepo:
                 return row.equity
         return None
 
-    def since(self, since: datetime, limit: int = 500) -> list[EquityCurve]:
-        return list(self._s.exec(
-            select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)  # type: ignore[arg-type]
-        ).all())
+    def since(self, since: datetime, limit: int = 500, user_id: Optional[str] = None) -> list[EquityCurve]:
+        stmt = select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)  # type: ignore[arg-type]
+        if user_id:
+            stmt = stmt.where(EquityCurve.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 class InstrumentCacheRepo:
@@ -233,11 +243,13 @@ class TradeJournal(SQLModel, table=True):
     tp_price: Optional[float] = None
     realized_pnl: float
     pnl_pct: float
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class PnlSnapshot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     date: str = Field(unique=True, index=True)  # YYYY-MM-DD
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
     total_equity: float
     day_pnl: float
     day_pnl_pct: float
@@ -276,6 +288,7 @@ class BacktestRun(SQLModel, table=True):
     config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     status: str = "done"
     error_msg: str = ""
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
 class BacktestTrade(SQLModel, table=True):
@@ -321,26 +334,31 @@ class TradeJournalRepo:
         self._s.refresh(entry)
         return entry
 
-    def by_model(self, model_id: str, limit: int = 100) -> list[TradeJournal]:
-        return list(self._s.exec(
+    def by_model(self, model_id: str, limit: int = 100, user_id: Optional[str] = None) -> list[TradeJournal]:
+        stmt = (
             select(TradeJournal)
             .where(TradeJournal.model_id == model_id)
             .order_by(TradeJournal.ts.desc())  # type: ignore[attr-defined]
             .limit(limit)
-        ).all())
+        )
+        if user_id:
+            stmt = stmt.where(TradeJournal.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
-    def today(self) -> list[TradeJournal]:
+    def today(self, user_id: Optional[str] = None) -> list[TradeJournal]:
         today = datetime.utcnow().date()
-        return list(self._s.exec(
-            select(TradeJournal).where(TradeJournal.ts >= datetime(today.year, today.month, today.day))
-        ).all())
+        stmt = select(TradeJournal).where(TradeJournal.ts >= datetime(today.year, today.month, today.day))
+        if user_id:
+            stmt = stmt.where(TradeJournal.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
-    def since(self, since: datetime | str) -> list[TradeJournal]:
+    def since(self, since: datetime | str, user_id: Optional[str] = None) -> list[TradeJournal]:
         if isinstance(since, str):
             since = datetime.fromisoformat(since)
-        return list(self._s.exec(
-            select(TradeJournal).where(TradeJournal.ts >= since)
-        ).all())
+        stmt = select(TradeJournal).where(TradeJournal.ts >= since)
+        if user_id:
+            stmt = stmt.where(TradeJournal.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 class PnlSnapshotRepo:
@@ -364,10 +382,11 @@ class PnlSnapshotRepo:
             self._s.add(snap)
         self._s.commit()
 
-    def since(self, since: str) -> list[PnlSnapshot]:
-        return list(self._s.exec(
-            select(PnlSnapshot).where(PnlSnapshot.date >= since).order_by(PnlSnapshot.date)
-        ).all())
+    def since(self, since: str, user_id: Optional[str] = None) -> list[PnlSnapshot]:
+        stmt = select(PnlSnapshot).where(PnlSnapshot.date >= since).order_by(PnlSnapshot.date)
+        if user_id:
+            stmt = stmt.where(PnlSnapshot.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 class ModelPerformanceRepo:
@@ -402,8 +421,11 @@ class ModelPerformanceRepo:
         ).first()
         return row.retired if row else False
 
-    def all(self) -> list[ModelPerformance]:
-        return list(self._s.exec(select(ModelPerformance)).all())
+    def all(self, user_id: Optional[str] = None) -> list[ModelPerformance]:
+        stmt = select(ModelPerformance)
+        if user_id:
+            stmt = stmt.where(ModelPerformance.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 class SectorCacheRepo:
@@ -429,9 +451,9 @@ class BacktestRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def create_run(self, start: str, end: str, config_json: dict | None = None, status: str = "done") -> int:
+    def create_run(self, start: str, end: str, config_json: dict | None = None, status: str = "done", user_id: Optional[str] = None) -> int:
         """Create a new BacktestRun and return its id."""
-        run = BacktestRun(start_date=start, end_date=end, config_json=config_json or {}, status=status)
+        run = BacktestRun(start_date=start, end_date=end, config_json=config_json or {}, status=status, user_id=user_id)
         self._s.add(run)
         self._s.commit()
         self._s.refresh(run)
@@ -498,10 +520,11 @@ class BacktestRepo:
             select(BacktestModelRun).where(BacktestModelRun.run_id == run_id)
         ).all())
 
-    def list_runs(self, limit: int = 50) -> list[BacktestRun]:
-        return list(self._s.exec(
-            select(BacktestRun).order_by(BacktestRun.ts.desc()).limit(limit)  # type: ignore[attr-defined]
-        ).all())
+    def list_runs(self, limit: int = 50, user_id: Optional[str] = None) -> list[BacktestRun]:
+        stmt = select(BacktestRun).order_by(BacktestRun.ts.desc()).limit(limit)  # type: ignore[attr-defined]
+        if user_id:
+            stmt = stmt.where(BacktestRun.user_id == user_id)
+        return list(self._s.exec(stmt).all())
 
 
 # ---------------------------------------------------------------------------
@@ -510,6 +533,9 @@ class BacktestRepo:
 
 class BotSettings(SQLModel, table=True):
     id: int = Field(default=1, primary_key=True)
+    # Per-user identity (migration 0018). Sentinel '00000000-0000-0000-0000-000000000001'
+    # identifies the legacy single-tenant row. New users get their own row.
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
     t212_active_account: str = Field(default="demo")
     t212_demo_api_key: str = Field(default="")
     t212_demo_secret_key: str = Field(default="")
@@ -537,7 +563,6 @@ class BotSettings(SQLModel, table=True):
     extended_hours: bool = Field(default=False)
     max_positions: int = Field(default=5)
     daily_loss_halt_pct: float = Field(default=0.05)
-    alphaTrade_api_key: str = Field(default="")
     retirement_enabled: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     retirement_lookback_trades: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
     retirement_min_win_rate: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
@@ -578,20 +603,53 @@ class BotSettings(SQLModel, table=True):
     backtest_oco_limit_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
 
 
+_SENTINEL_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
 class BotSettingsRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
     def get(self) -> BotSettings | None:
+        """Return the legacy singleton row (id=1). Kept for backwards compat."""
         return self._s.get(BotSettings, 1)
 
+    def get_for_user(self, user_id: str) -> BotSettings | None:
+        """Return BotSettings for a specific user_id.
+
+        Falls back to the sentinel row for the bootstrap developer / legacy deployments.
+        """
+        row = self._s.exec(
+            select(BotSettings).where(BotSettings.user_id == user_id)
+        ).first()
+        if row is not None:
+            return row
+        # Fallback: sentinel row (legacy single-tenant) is valid for the bootstrap user
+        if user_id == _SENTINEL_USER_ID:
+            return self._s.get(BotSettings, 1)
+        return None
+
     def upsert(self, settings: BotSettings) -> None:
+        """Upsert the singleton row (id=1). Kept for backwards compat and legacy API."""
         settings.id = 1
         existing = self._s.get(BotSettings, 1)
         if existing:
             for key, val in settings.model_dump(exclude={"id"}).items():
                 setattr(existing, key, val)
         else:
+            self._s.add(settings)
+        self._s.commit()
+
+    def upsert_for_user(self, user_id: str, settings: BotSettings) -> None:
+        """Upsert BotSettings for a specific user_id."""
+        existing = self._s.exec(
+            select(BotSettings).where(BotSettings.user_id == user_id)
+        ).first()
+        if existing:
+            for key, val in settings.model_dump(exclude={"id", "user_id"}).items():
+                setattr(existing, key, val)
+        else:
+            settings.user_id = user_id
             self._s.add(settings)
         self._s.commit()
 
@@ -623,6 +681,9 @@ class ModelOverrideRecord(SQLModel, table=True):
     backtest_disabled: Optional[bool] = None
     backtest_cron: Optional[str] = None
     backtest_lookback_days: Optional[int] = None
+    # Controls appearance in Global Public Library.
+    # "public" + at least one active deployment → visible to all users.
+    visibility: str = Field(default="private")
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -668,6 +729,7 @@ class ModelDeployment(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     run_name: str = Field(index=True)
+    user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
     promoted_at: datetime = Field(default_factory=datetime.utcnow)
     activated_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
@@ -679,8 +741,17 @@ class ModelDeploymentRepo:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def insert_launching(self, run_name: str) -> ModelDeployment:
-        row = ModelDeployment(run_name=run_name, promoted_at=datetime.utcnow(), status="launching")
+    def insert_active(self, run_name: str, user_id: Optional[str] = None) -> ModelDeployment:
+        """Directly insert an active deployment record (used for adopted models on sync)."""
+        now = datetime.utcnow()
+        row = ModelDeployment(run_name=run_name, user_id=user_id, promoted_at=now, activated_at=now, status="active")
+        self._s.add(row)
+        self._s.commit()
+        self._s.refresh(row)
+        return row
+
+    def insert_launching(self, run_name: str, user_id: Optional[str] = None) -> ModelDeployment:
+        row = ModelDeployment(run_name=run_name, user_id=user_id, promoted_at=datetime.utcnow(), status="launching")
         self._s.add(row)
         self._s.commit()
         self._s.refresh(row)
@@ -729,12 +800,23 @@ class ModelDeploymentRepo:
             self._s.commit()
         return len(stale)
 
-    def latest_per_model(self) -> list[ModelDeployment]:
-        """Return latest deployment row per run_name."""
-        # SQLite compatible: fetch all, deduplicate in Python
-        all_rows = list(self._s.exec(
-            select(ModelDeployment).order_by(ModelDeployment.promoted_at.desc())  # type: ignore[attr-defined]
-        ).all())
+    def latest_per_model(self, user_id: Optional[str] = None, adopted_names: Optional[list[str]] = None) -> list[ModelDeployment]:
+        """Return latest deployment row per run_name, optionally scoped to a user.
+
+        adopted_names: model names adopted by the user — their records are included even
+        if owned by someone else, so adopters see accurate deployment status.
+        """
+        stmt = select(ModelDeployment).order_by(ModelDeployment.promoted_at.desc())  # type: ignore[attr-defined]
+        if user_id:
+            from sqlalchemy import or_
+            conditions = [
+                ModelDeployment.user_id == user_id,
+                ModelDeployment.user_id == None,  # noqa: E711
+            ]
+            if adopted_names:
+                conditions.append(ModelDeployment.run_name.in_(adopted_names))  # type: ignore[attr-defined]
+            stmt = stmt.where(or_(*conditions))
+        all_rows = list(self._s.exec(stmt).all())
         seen: set[str] = set()
         result: list[ModelDeployment] = []
         for row in all_rows:
@@ -742,3 +824,63 @@ class ModelDeploymentRepo:
                 seen.add(row.run_name)
                 result.append(row)
         return result
+
+
+# ---------------------------------------------------------------------------
+# ModelAdoption (migration 0022) — user adopts a public model from another user
+# ---------------------------------------------------------------------------
+
+class ModelAdoption(SQLModel, table=True):
+    __tablename__ = "model_adoptions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True)
+    model_name: str = Field(index=True)
+    source_user_id: Optional[str] = None     # original owner's user_id
+    artifact_prefix: Optional[str] = None   # MinIO path for file sync
+    adopted_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ModelAdoptionRepo:
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def adopt(self, user_id: str, model_name: str, source_user_id: Optional[str] = None, artifact_prefix: Optional[str] = None) -> ModelAdoption:
+        existing = self._s.exec(
+            select(ModelAdoption).where(ModelAdoption.user_id == user_id, ModelAdoption.model_name == model_name)
+        ).first()
+        if existing:
+            return existing
+        row = ModelAdoption(user_id=user_id, model_name=model_name, source_user_id=source_user_id, artifact_prefix=artifact_prefix)
+        self._s.add(row)
+        self._s.commit()
+        self._s.refresh(row)
+        return row
+
+    def unadopt(self, user_id: str, model_name: str) -> bool:
+        row = self._s.exec(
+            select(ModelAdoption).where(ModelAdoption.user_id == user_id, ModelAdoption.model_name == model_name)
+        ).first()
+        if not row:
+            return False
+        self._s.delete(row)
+        self._s.commit()
+        return True
+
+    def delete_all_for_model(self, model_name: str) -> int:
+        rows = self._s.exec(
+            select(ModelAdoption).where(ModelAdoption.model_name == model_name)
+        ).all()
+        for row in rows:
+            self._s.delete(row)
+        self._s.commit()
+        return len(rows)
+
+    def adopted_models(self, user_id: str) -> list[str]:
+        rows = self._s.exec(select(ModelAdoption).where(ModelAdoption.user_id == user_id)).all()
+        return [r.model_name for r in rows]
+
+    def is_adopted(self, user_id: str, model_name: str) -> bool:
+        return self._s.exec(
+            select(ModelAdoption).where(ModelAdoption.user_id == user_id, ModelAdoption.model_name == model_name)
+        ).first() is not None

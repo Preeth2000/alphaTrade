@@ -388,11 +388,17 @@ def make_router(
         return MlflowClient(tracking_uri=uri)
 
     async def _delete_model(run_name: str, session: Session, mlflow_client) -> None:
-        """Delete all platform traces of run_name. Best-effort for external services."""
-        # DB: override record
+        """Delete all platform traces of run_name. Best-effort for external services.
+
+        Marked async for asyncio.gather compatibility in future bulk deletion.
+        MLflow/MinIO/shutil calls are synchronous — gather provides concurrency
+        across independent models, not within a single model's cleanup steps.
+
+        ModelPerformance and ModelDeployment rows are intentionally preserved
+        as regulatory/audit trail (MiFID II / FCA trade records requirement).
+        """
+        # DB: override record and adoption rows (must-succeed, no try/except)
         ModelOverrideRepo(session).delete(run_name)
-        # DB: all adoption rows
-        from alphaTrade.store.repos import ModelAdoptionRepo
         ModelAdoptionRepo(session).delete_all_for_model(run_name)
 
         # MLflow: delete registered model (all versions, aliases, tags)

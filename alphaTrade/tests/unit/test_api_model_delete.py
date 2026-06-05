@@ -101,6 +101,13 @@ class TestDeleteModelOwnership:
             resp = client.delete("/api/v1/models/legacy_model")
         assert resp.status_code == 200
 
+    def test_admin_can_delete_user_owned_model(self):
+        """Admin (user_id=None from _req_user) must bypass ownership check entirely."""
+        client = _make_router(user_id="admin-id", role="admin")
+        with patch("alphaTrade.api.routers.models.MlflowClient", return_value=_mock_mlflow_client("other-user")):
+            resp = client.delete("/api/v1/models/someone_elses_model")
+        assert resp.status_code == 200
+
 
 class TestDeleteModelDbCleanup:
     def test_deletes_override_record(self, tmp_path):

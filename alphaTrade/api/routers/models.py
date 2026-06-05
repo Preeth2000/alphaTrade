@@ -369,7 +369,8 @@ def make_router(
             if entry:
                 model_owner = entry[0].user_id or None
 
-        if not _owns_model(model_owner or "", user_id):
+        # user_id is None for admin — admin can delete any model
+        if user_id is not None and not _owns_model(model_owner or "", user_id):
             raise HTTPException(status_code=403, detail="Not authorised to delete this model")
 
         await _delete_model(run_name, session, mlflow_client)

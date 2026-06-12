@@ -499,6 +499,9 @@ def make_tick(
         ticker_manifest: dict[str, Manifest] = {}
         ticker_atr: dict[str, float] = {}
 
+        _any_fetch_ok = False
+        _last_fetch_error: str | None = None
+
         for manifest, model in interval_models:
             try:
                 t0 = time.perf_counter()
@@ -506,6 +509,7 @@ def make_tick(
                 # Providers cap at their lookback limit so large values just return max available.
                 vwap_bars = 3000 if "VWAP" in manifest.feature_names else manifest.window + 100
                 df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, vwap_bars)
+                _any_fetch_ok = True  # fetch succeeded; mark before inference steps
                 from alphaTrade.data.fundamentals import merge_fundamentals_into
                 df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
                 df = _precompute_passthrough_features(df, manifest.feature_names)
@@ -525,6 +529,17 @@ def make_tick(
             except Exception as exc:
                 inference_errors_total.labels(run_name=manifest.run_name).inc()
                 log.error("Inference error for %s: %s", manifest.run_name, exc)
+                if not _any_fetch_ok:  # track last data error only if no success yet
+                    _last_fetch_error = str(exc)
+
+        # Self-heal provider_data_ok from real inference fetches — no extra API calls.
+        if _any_fetch_ok:
+            health_state.provider_data_ok = True
+            health_state.provider_data_error = None
+        elif _last_fetch_error is not None:
+            health_state.provider_data_ok = False
+            health_state.provider_data_error = _last_fetch_error
+        # If neither: no fetches attempted this tick (no models) — leave existing value.
 
         signals = consensus_by_ticker(ticker_logits)
         kill_switch_active = is_halted()

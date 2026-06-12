@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os as _os
 import signal
 import time
 from collections import defaultdict
@@ -71,6 +72,8 @@ from alphaTrade.metrics import (
 
 log = logging.getLogger(__name__)
 
+_SECRETS_SOURCE = _os.environ.get("SECRETS_SOURCE", "db")
+
 _INTERVAL_SECONDS: dict[str, int] = {
     "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400, "1wk": 604800,
 }
@@ -80,6 +83,12 @@ def _t212_credentials(db_s) -> tuple[str, str, str]:
     """Return (api_key, secret_key, env) for the active T212 account."""
     account = db_s.t212_active_account or "demo"
     env = "demo" if account == "demo" else "live"
+    if _SECRETS_SOURCE == "alphakey":
+        from alphaTrade.broker.alphakey_client import get_secret
+        user_id = _os.environ["ALPHAKEY_USER_ID"]
+        api_key = get_secret(user_id, "t212", account, "api_key")
+        secret_key = get_secret(user_id, "t212", account, "secret_key")
+        return api_key, secret_key, env
     if account == "demo":
         return db_s.t212_demo_api_key or "", db_s.t212_demo_secret_key or "", env
     if account == "invest":
@@ -104,7 +113,18 @@ def apply_bot_settings(
     if new_key and (current_key != new_key or current_base != new_base):
         t212_holder[0] = T212Client(api_key=new_key, secret_key=new_secret, env=new_env)
         log.info("Hot-reload: T212Client reinitialised (account=%s, env=%s)", db_s.t212_active_account, new_env)
-    _key_changed = bool(db_s.polygon_api_key) and db_s.polygon_api_key != settings.polygon_api_key
+    if _SECRETS_SOURCE == "alphakey":
+        from alphaTrade.broker.alphakey_client import get_secret
+        user_id = _os.environ["ALPHAKEY_USER_ID"]
+        vault_polygon_key = get_secret(user_id, "polygon", "default", "api_key")
+        if vault_polygon_key and vault_polygon_key != settings.polygon_api_key:
+            settings.polygon_api_key = vault_polygon_key
+            provider_holder[0] = _build_data_provider(settings)
+    _key_changed = (
+        _SECRETS_SOURCE == "db"
+        and bool(db_s.polygon_api_key)
+        and db_s.polygon_api_key != settings.polygon_api_key
+    )
     _prov_changed = bool(db_s.data_provider) and db_s.data_provider != settings.data_provider
     if _key_changed:
         settings.polygon_api_key = db_s.polygon_api_key

@@ -13,6 +13,8 @@ def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
             health_state.t212_ok
             and health_state.t212_configured
             and health_state.models_loaded
+            # provider_data_ok=None means the startup probe has not run yet.
+            # Optimistic default: do not block trading until a confirmed failure.
             and health_state.provider_data_ok is not False
         )
         body: dict = {
@@ -33,7 +35,7 @@ def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
             body["provider_name"] = health_state.provider_name
         if health_state.provider_data_ok is not None:
             body["provider_data_ok"] = health_state.provider_data_ok
-        if health_state.provider_data_error is not None:
+        if health_state.provider_data_ok is False and health_state.provider_data_error is not None:
             body["provider_data_error"] = health_state.provider_data_error
         return body
 

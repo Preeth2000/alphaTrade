@@ -94,13 +94,32 @@ def test_trading_ready_true_when_provider_data_ok_true(tmp_path):
     assert body["provider_data_ok"] is True
 
 
-def test_health_emits_provider_data_error_only_when_set(tmp_path):
+def test_trading_ready_false_no_error_message(tmp_path):
     state = _ready_state()
-    state.provider_data_ok = True
+    state.provider_data_ok = False
     state.provider_data_error = None
     resp = _client(_engine(tmp_path), state).get("/api/v1/health")
     body = resp.json()
+    assert body["trading_ready"] is False
+    assert body["provider_data_ok"] is False
     assert "provider_data_error" not in body
+
+
+def test_health_emits_provider_data_error_only_when_set(tmp_path):
+    # provider_data_error should only be emitted when provider_data_ok is False
+    state = _ready_state()
+    state.provider_data_ok = True
+    state.provider_data_error = "some error"
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert "provider_data_error" not in body
+
+    # When provider_data_ok is False and error is set, it should be emitted
+    state.provider_data_ok = False
+    state.provider_data_error = "data fetch failed"
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert body["provider_data_error"] == "data fetch failed"
 
 
 def test_trading_ready_still_requires_t212_ok(tmp_path):

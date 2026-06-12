@@ -4,7 +4,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 
 from alphaTrade.data.provider_verify import (
     _verify_polygon_key,
@@ -51,7 +50,7 @@ class TestVerifyProviderCredentialsDispatch:
         assert ok is False
         assert result["valid"] is False
         assert "unknown_provider" in result["error"]
-        assert result["provider"] == "unknown_provider"
+        assert "provider" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +63,14 @@ class TestVerifyPolygonKey:
         resp.status_code = status_code
         resp.reason_phrase = reason_phrase
         return resp
+
+    def test_empty_key_returns_false_without_network_call(self):
+        with patch("httpx.get") as mock_get:
+            ok, result = _verify_polygon_key("")
+        mock_get.assert_not_called()
+        assert ok is False
+        assert result["valid"] is False
+        assert result["error"] == "polygon_api_key is not configured"
 
     def test_returns_true_on_200(self):
         with patch("httpx.get", return_value=self._mock_response(200)):

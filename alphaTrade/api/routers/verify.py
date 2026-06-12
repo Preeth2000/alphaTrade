@@ -7,11 +7,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from alphaTrade.health import HealthState
-from alphaTrade.data.provider_verify import (
-    verify_provider_credentials,
-    _POLYGON_PROBE_URL,
-    _TIMEOUT,
-)
+from alphaTrade.data.provider_verify import verify_provider_credentials
+
+_POLYGON_EXCHANGES_URL = "https://api.polygon.io/v1/meta/exchanges"
+_TIMEOUT = 10.0
 
 _T212_BASE = {
     "demo": "https://demo.trading212.com/api/v0",
@@ -72,7 +71,7 @@ def make_router(api_key_dep: Callable, health_state: HealthState | None = None, 
     ) -> dict[str, Any]:
         try:
             r = httpx.get(
-                _POLYGON_PROBE_URL,
+                _POLYGON_EXCHANGES_URL,
                 headers={"Authorization": f"Bearer {body.api_key}"},
                 timeout=_TIMEOUT,
             )

@@ -31,10 +31,12 @@ def verify_provider_credentials(settings: "Settings") -> tuple[bool, dict[str, A
     elif provider == "yfinance":
         return _verify_yfinance()
     else:
-        return False, {"valid": False, "provider": provider, "error": f"unknown provider {provider!r}"}
+        return False, {"valid": False, "error": f"unknown provider {provider!r}"}
 
 
 def _verify_polygon_key(api_key: str) -> tuple[bool, dict[str, Any]]:
+    if not api_key:
+        return False, {"valid": False, "error": "polygon_api_key is not configured"}
     try:
         r = httpx.get(
             _POLYGON_PROBE_URL,

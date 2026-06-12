@@ -9,8 +9,6 @@ from pydantic import BaseModel
 from alphaTrade.health import HealthState
 from alphaTrade.data.provider_verify import (
     verify_provider_credentials,
-    _verify_polygon_key,
-    _verify_yfinance,
     _POLYGON_PROBE_URL,
     _TIMEOUT,
 )

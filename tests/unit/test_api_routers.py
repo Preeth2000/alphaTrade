@@ -55,6 +55,63 @@ def test_health_returns_state(tmp_path):
     assert body["last_tick_at"] is None
 
 
+def _ready_state() -> HealthState:
+    """Return a HealthState that would be trading_ready if provider_data_ok allows."""
+    state = HealthState()
+    state.t212_ok = True
+    state.t212_configured = True
+    state.models_loaded = True
+    return state
+
+
+def test_trading_ready_false_when_provider_data_ok_false(tmp_path):
+    state = _ready_state()
+    state.provider_data_ok = False
+    state.provider_data_error = "no OHLCV bars returned"
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert body["trading_ready"] is False
+    assert body["provider_data_ok"] is False
+    assert body["provider_data_error"] == "no OHLCV bars returned"
+
+
+def test_trading_ready_true_when_provider_data_ok_none(tmp_path):
+    # provider_data_ok=None means unknown — should not block trading
+    state = _ready_state()
+    state.provider_data_ok = None
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert body["trading_ready"] is True
+    assert "provider_data_ok" not in body
+
+
+def test_trading_ready_true_when_provider_data_ok_true(tmp_path):
+    state = _ready_state()
+    state.provider_data_ok = True
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert body["trading_ready"] is True
+    assert body["provider_data_ok"] is True
+
+
+def test_health_emits_provider_data_error_only_when_set(tmp_path):
+    state = _ready_state()
+    state.provider_data_ok = True
+    state.provider_data_error = None
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    body = resp.json()
+    assert "provider_data_error" not in body
+
+
+def test_trading_ready_still_requires_t212_ok(tmp_path):
+    # provider_data_ok=True but t212_ok=False → not ready
+    state = _ready_state()
+    state.t212_ok = False
+    state.provider_data_ok = True
+    resp = _client(_engine(tmp_path), state).get("/api/v1/health")
+    assert resp.json()["trading_ready"] is False
+
+
 # --- Orders ---
 
 from datetime import datetime  # noqa: E402

@@ -13,7 +13,7 @@ def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
             health_state.t212_ok
             and health_state.t212_configured
             and health_state.models_loaded
-            and health_state.provider_ok is not False
+            and health_state.provider_data_ok is not False
         )
         body: dict = {
             "last_tick_at": (
@@ -31,6 +31,10 @@ def make_router(health_state: HealthState, api_key_dep: Callable) -> APIRouter:
         if health_state.provider_ok is not None:
             body["provider_ok"] = health_state.provider_ok
             body["provider_name"] = health_state.provider_name
+        if health_state.provider_data_ok is not None:
+            body["provider_data_ok"] = health_state.provider_data_ok
+        if health_state.provider_data_error is not None:
+            body["provider_data_error"] = health_state.provider_data_error
         return body
 
     return router

@@ -7,6 +7,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from alphaTrade.health import HealthState
+from alphaTrade.data.provider_verify import (
+    verify_provider_credentials,
+    _verify_polygon_key,
+    _verify_yfinance,
+    _POLYGON_PROBE_URL,
+    _TIMEOUT,
+)
 
 _T212_BASE = {
     "demo": "https://demo.trading212.com/api/v0",
@@ -17,8 +24,6 @@ _T212_ENV_MAP = {
     "invest": "live",
     "isa": "live",
 }
-_POLYGON_EXCHANGES_URL = "https://api.polygon.io/v1/meta/exchanges"
-_TIMEOUT = 10.0
 
 
 class T212VerifyRequest(BaseModel):
@@ -69,7 +74,7 @@ def make_router(api_key_dep: Callable, health_state: HealthState | None = None, 
     ) -> dict[str, Any]:
         try:
             r = httpx.get(
-                _POLYGON_EXCHANGES_URL,
+                _POLYGON_PROBE_URL,
                 headers={"Authorization": f"Bearer {body.api_key}"},
                 timeout=_TIMEOUT,
             )
@@ -107,15 +112,7 @@ def make_router(api_key_dep: Callable, health_state: HealthState | None = None, 
             return {"valid": False, "error": "settings not available"}
 
         provider = settings.data_provider
-
-        if provider == "polygon":
-            ok, result = _verify_polygon_key(settings.polygon_api_key)
-        elif provider == "yfinance":
-            ok, result = _verify_yfinance()
-        else:
-            ok = False
-            result = {"valid": False, "provider": provider, "error": f"unknown provider {provider!r}"}
-
+        ok, result = verify_provider_credentials(settings)
         result["provider"] = provider
 
         if health_state is not None:
@@ -125,28 +122,3 @@ def make_router(api_key_dep: Callable, health_state: HealthState | None = None, 
         return result
 
     return router
-
-
-def _verify_polygon_key(api_key: str) -> tuple[bool, dict[str, Any]]:
-    try:
-        r = httpx.get(
-            _POLYGON_EXCHANGES_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=_TIMEOUT,
-        )
-        if r.status_code == 200:
-            return True, {"valid": True}
-        return False, {"valid": False, "error": f"{r.status_code} {r.reason_phrase}"}
-    except httpx.HTTPError as exc:
-        return False, {"valid": False, "error": str(exc)}
-
-
-def _verify_yfinance() -> tuple[bool, dict[str, Any]]:
-    try:
-        import yfinance as yf
-        df = yf.download("AAPL", period="5d", interval="1d", progress=False, auto_adjust=True)
-        if df.empty:
-            return False, {"valid": False, "error": "no data returned"}
-        return True, {"valid": True}
-    except Exception as exc:
-        return False, {"valid": False, "error": str(exc)}

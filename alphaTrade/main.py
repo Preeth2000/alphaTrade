@@ -451,15 +451,26 @@ def make_tick(
         if _db_s is not None:
             _provider_rebuilt = apply_bot_settings(_db_s, settings, t212_holder, provider_holder)
             if _provider_rebuilt:
+                # Credential check — updates the connection badge.
+                _cred_ok, _cred_result = await asyncio.to_thread(verify_provider_credentials, settings)
+                health_state.provider_ok = _cred_ok
+                health_state.provider_name = settings.data_provider
+                if _cred_ok:
+                    log.info("Provider credential re-check OK after key/provider change (%s)", settings.data_provider)
+                else:
+                    log.warning("Provider credential re-check failed after key/provider change (%s): %s",
+                                settings.data_provider, _cred_result.get("error", "unknown"))
+                # Data availability probe — updates the trading gate.
                 try:
-                    await asyncio.to_thread(provider_holder[0].fetch_ohlcv, "SPY", "1d", 5)
-                    health_state.provider_ok = True
-                    health_state.provider_name = settings.data_provider
-                    log.info("Provider re-probe OK after key/provider change (%s)", settings.data_provider)
+                    await asyncio.to_thread(provider_holder[0].health_probe)
+                    health_state.provider_data_ok = True
+                    health_state.provider_data_error = None
+                    log.info("Provider data re-probe OK after key/provider change (%s)", settings.data_provider)
                 except Exception as _probe_exc:
-                    health_state.provider_ok = False
-                    health_state.provider_name = settings.data_provider
-                    log.warning("Provider re-probe failed after key/provider change (%s): %s", settings.data_provider, _probe_exc)
+                    health_state.provider_data_ok = False
+                    health_state.provider_data_error = str(_probe_exc)
+                    log.warning("Provider data re-probe failed after key/provider change (%s): %s",
+                                settings.data_provider, _probe_exc)
             _tick_creds = _t212_credentials(_db_s)
             health_state.t212_configured = bool(_tick_creds[0])
             if not health_state.t212_configured:

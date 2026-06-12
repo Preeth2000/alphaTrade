@@ -920,6 +920,7 @@ async def run(settings: Settings) -> None:
         _startup_db_s = BotSettingsRepo(_s0).get()
     if _startup_db_s is not None:
         apply_bot_settings(_startup_db_s, settings, t212_holder, provider_holder)
+        # return value intentionally ignored — startup probes below cover provider re-check
         log.info("Startup: DB settings applied (data_provider=%s)", settings.data_provider)
         _startup_creds = _t212_credentials(_startup_db_s)
         health_state.t212_configured = bool(_startup_creds[0])
@@ -939,19 +940,19 @@ async def run(settings: Settings) -> None:
         health_state.t212_ok = False
 
     # Credential check — same lightweight call as the account-page 'Connected' badge.
-    ok, _result = verify_provider_credentials(settings)
+    ok, _cred_result = await asyncio.to_thread(verify_provider_credentials, settings)
     health_state.provider_ok = ok
     health_state.provider_name = settings.data_provider
     if ok:
         log.info("Data provider credentials OK (%s)", settings.data_provider)
     else:
         log.warning("Data provider credentials check failed (%s): %s",
-                    settings.data_provider, _result.get("error", "unknown"))
+                    settings.data_provider, _cred_result.get("error", "unknown"))
 
-    # Data availability probe — uses real fetch but short lookback.
+    # Data availability probe — cheap narrow-window call via health_probe().
     # Failures are non-fatal (don't prevent startup); self-heals on first tick.
     try:
-        await asyncio.to_thread(provider_holder[0].fetch_ohlcv, "SPY", "1d", 5)
+        await asyncio.to_thread(provider_holder[0].health_probe)
         health_state.provider_data_ok = True
         health_state.provider_data_error = None
         log.info("Data provider fetch probe OK (%s)", settings.data_provider)

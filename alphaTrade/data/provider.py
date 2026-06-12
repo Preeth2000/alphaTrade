@@ -30,6 +30,12 @@ class DataProvider(ABC):
         Returns None on failure or insufficient data.
         """
 
+    @abstractmethod
+    def health_probe(self) -> None:
+        """Fetch a small recent slice of data to verify the feed is working.
+        Raises on any failure. Should be cheap (short date range, few bars)."""
+        ...
+
     def max_lookback_days(self, interval: str) -> int:
         """Max calendar days of history available for interval. Override per provider."""
         return 36500

@@ -25,6 +25,12 @@ class YFinanceProvider(DataProvider):
     def max_lookback_days(self, interval: str) -> int:
         return _MAX_LOOKBACK.get(interval, 36500)
 
+    def health_probe(self) -> None:
+        import yfinance as yf
+        df = yf.download("SPY", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if df is None or df.empty:
+            raise RuntimeError("yfinance health probe returned no data")
+
     def fetch_ohlcv(self, ticker: str, interval: str, bars: int) -> pd.DataFrame:
         import yfinance as yf
 

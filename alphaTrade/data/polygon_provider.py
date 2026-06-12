@@ -53,6 +53,23 @@ class PolygonProvider(DataProvider):
     def max_lookback_days(self, interval: str) -> int:
         return _MAX_LOOKBACK.get(interval, 36500)
 
+    def health_probe(self) -> None:
+        from polygon import RESTClient
+        to_date = date.today()
+        from_date = to_date - timedelta(days=7)
+        client = RESTClient(api_key=self._api_key)
+        aggs = client.get_aggs(
+            ticker="SPY",
+            multiplier=1,
+            timespan="day",
+            from_=from_date.isoformat(),
+            to=to_date.isoformat(),
+            limit=10,
+        )
+        # Weekend/holiday gaps are fine — just need a non-error response
+        if aggs is None:
+            raise RuntimeError("Polygon health probe returned None")
+
     def fetch_ohlcv(self, ticker: str, interval: str, bars: int) -> pd.DataFrame:
         from polygon import RESTClient
 

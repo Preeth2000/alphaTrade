@@ -62,8 +62,7 @@ def _make_settings(auth_mode: str = "jwt", redis_enabled: bool = False) -> Magic
 def _make_app(auth_mode: str = "jwt", redis_enabled: bool = False) -> tuple[FastAPI, MagicMock]:
     """Build a minimal FastAPI app with make_jwt_dep wired."""
     settings = _make_settings(auth_mode=auth_mode, redis_enabled=redis_enabled)
-    engine = MagicMock()  # not used in jwt mode
-    auth_dep = make_jwt_dep(engine, settings)
+    auth_dep = make_jwt_dep(settings)
 
     app = FastAPI()
 

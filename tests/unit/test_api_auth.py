@@ -10,7 +10,7 @@ def _make_app(tmp_path, api_key_env: str = ""):
     engine = create_engine(f"sqlite:///{db}")
     from alphaTrade.api.auth import make_api_key_dep
     app = FastAPI()
-    dep = make_api_key_dep(engine)
+    dep = make_api_key_dep()
 
     @app.get("/test")
     def _route(_: None = __import__("fastapi").Depends(dep)):

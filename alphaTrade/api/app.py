@@ -42,7 +42,7 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
         allow_headers=["*"],
     )
     session_dep = make_session_dep(engine)
-    api_key_dep = make_api_key_dep(engine)
+    api_key_dep = make_api_key_dep()
 
     app.include_router(positions.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(orders.make_router(session_dep, api_key_dep), prefix="/api/v1")

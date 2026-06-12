@@ -20,6 +20,8 @@ class HealthState:
     models_loaded: bool = False
     provider_ok: bool | None = None
     provider_name: str | None = None
+    provider_data_ok: bool | None = None
+    provider_data_error: str | None = None
     alphatrade_ok: bool | None = None
 
 

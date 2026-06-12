@@ -60,6 +60,7 @@ from alphaTrade.store.repos import (
     SignalRepo,
 )
 from alphaTrade.health import HealthState, start_health_server
+from alphaTrade.data.provider_verify import verify_provider_credentials
 from alphaTrade.metrics import (
     daily_pnl_pct as metric_daily_pnl_pct,
     equity_total as metric_equity_total,
@@ -103,7 +104,8 @@ def apply_bot_settings(
     settings: Settings,
     t212_holder: list,
     provider_holder: list,
-) -> None:
+) -> bool:
+    """Returns True if the data provider was rebuilt (caller should re-probe health)."""
     from alphaTrade.broker.t212_client import T212Client, _BASE_URLS
     new_key, new_secret, new_env = _t212_credentials(db_s)
     current_auth = getattr(t212_holder[0], "_auth", None)
@@ -113,6 +115,7 @@ def apply_bot_settings(
     if new_key and (current_key != new_key or current_base != new_base):
         t212_holder[0] = T212Client(api_key=new_key, secret_key=new_secret, env=new_env)
         log.info("Hot-reload: T212Client reinitialised (account=%s, env=%s)", db_s.t212_active_account, new_env)
+    _provider_rebuilt = False
     if _SECRETS_SOURCE == "alphakey":
         from alphaTrade.broker.alphakey_client import get_secret
         user_id = _os.environ["ALPHAKEY_USER_ID"]
@@ -120,6 +123,7 @@ def apply_bot_settings(
         if vault_polygon_key and vault_polygon_key != settings.polygon_api_key:
             settings.polygon_api_key = vault_polygon_key
             provider_holder[0] = _build_data_provider(settings)
+            _provider_rebuilt = True
     _key_changed = (
         _SECRETS_SOURCE == "db"
         and bool(db_s.polygon_api_key)
@@ -132,6 +136,7 @@ def apply_bot_settings(
         settings.data_provider = db_s.data_provider
     if _key_changed or _prov_changed:
         provider_holder[0] = _build_data_provider(settings)
+        _provider_rebuilt = True
         if _prov_changed:
             log.info("Hot-reload: data provider switched to %s", db_s.data_provider)
     if db_s.size_pct:
@@ -219,6 +224,7 @@ def apply_bot_settings(
         settings.backtest.oco_stop_gap_secs = db_s.backtest_oco_stop_gap_secs
     if db_s.backtest_oco_limit_gap_secs is not None:
         settings.backtest.oco_limit_gap_secs = db_s.backtest_oco_limit_gap_secs
+    return _provider_rebuilt
 
 
 def _build_data_provider(settings: Settings) -> DataProvider:
@@ -443,7 +449,17 @@ def make_tick(
         with Session(engine) as _hs:
             _db_s = BotSettingsRepo(_hs).get()
         if _db_s is not None:
-            apply_bot_settings(_db_s, settings, t212_holder, provider_holder)
+            _provider_rebuilt = apply_bot_settings(_db_s, settings, t212_holder, provider_holder)
+            if _provider_rebuilt:
+                try:
+                    await asyncio.to_thread(provider_holder[0].fetch_ohlcv, "SPY", "1d", 5)
+                    health_state.provider_ok = True
+                    health_state.provider_name = settings.data_provider
+                    log.info("Provider re-probe OK after key/provider change (%s)", settings.data_provider)
+                except Exception as _probe_exc:
+                    health_state.provider_ok = False
+                    health_state.provider_name = settings.data_provider
+                    log.warning("Provider re-probe failed after key/provider change (%s): %s", settings.data_provider, _probe_exc)
             _tick_creds = _t212_credentials(_db_s)
             health_state.t212_configured = bool(_tick_creds[0])
             if not health_state.t212_configured:
@@ -922,16 +938,27 @@ async def run(settings: Settings) -> None:
         log.warning("T212 startup probe failed: %s", exc)
         health_state.t212_ok = False
 
-    # Probe data provider on startup so trading_ready doesn't require a UI re-verify after restart.
+    # Credential check — same lightweight call as the account-page 'Connected' badge.
+    ok, _result = verify_provider_credentials(settings)
+    health_state.provider_ok = ok
+    health_state.provider_name = settings.data_provider
+    if ok:
+        log.info("Data provider credentials OK (%s)", settings.data_provider)
+    else:
+        log.warning("Data provider credentials check failed (%s): %s",
+                    settings.data_provider, _result.get("error", "unknown"))
+
+    # Data availability probe — uses real fetch but short lookback.
+    # Failures are non-fatal (don't prevent startup); self-heals on first tick.
     try:
         await asyncio.to_thread(provider_holder[0].fetch_ohlcv, "SPY", "1d", 5)
-        health_state.provider_ok = True
-        health_state.provider_name = settings.data_provider
-        log.info("Data provider startup probe OK (%s)", settings.data_provider)
+        health_state.provider_data_ok = True
+        health_state.provider_data_error = None
+        log.info("Data provider fetch probe OK (%s)", settings.data_provider)
     except Exception as exc:
-        health_state.provider_ok = False
-        health_state.provider_name = settings.data_provider
-        log.warning("Data provider startup probe failed (%s): %s", settings.data_provider, exc)
+        health_state.provider_data_ok = False
+        health_state.provider_data_error = str(exc)
+        log.warning("Data provider fetch probe failed (%s): %s", settings.data_provider, exc)
 
     alert_manager = AlertManager(settings.alerts)
 

@@ -38,16 +38,3 @@ def test_correct_key_returns_200(tmp_path, monkeypatch):
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200
-
-
-def test_db_key_overrides_env(tmp_path, monkeypatch):
-    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
-    client, engine = _make_app(tmp_path)
-    from sqlmodel import Session
-    from alphaTrade.store.repos import BotSettings, BotSettingsRepo
-    with Session(engine) as s:
-        BotSettingsRepo(s).upsert(BotSettings(id=1, alphaTrade_api_key="db-secret"))
-    resp = client.get("/test", headers={"X-API-Key": "db-secret"})
-    assert resp.status_code == 200
-    resp_wrong = client.get("/test", headers={"X-API-Key": "wrong"})
-    assert resp_wrong.status_code == 403

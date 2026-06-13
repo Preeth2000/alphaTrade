@@ -33,7 +33,7 @@ class PolygonVerifyRequest(BaseModel):
     api_key: str
 
 
-def make_router(api_key_dep: Callable, health_state: HealthState | None = None, settings=None) -> APIRouter:
+def make_router(api_key_dep: Callable, health_state: HealthState | None = None, settings=None, provider_holder: list | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.post("/verify/t212")
@@ -115,6 +115,18 @@ def make_router(api_key_dep: Callable, health_state: HealthState | None = None, 
         if health_state is not None:
             health_state.provider_ok = ok
             health_state.provider_name = provider
+            # Also probe data so Re-check clears the trading gate immediately.
+            if ok and provider_holder is not None:
+                try:
+                    provider_holder[0].health_probe()
+                    health_state.provider_data_ok = True
+                    health_state.provider_data_error = None
+                except Exception as exc:
+                    health_state.provider_data_ok = False
+                    health_state.provider_data_error = str(exc)
+            elif not ok:
+                health_state.provider_data_ok = False
+                health_state.provider_data_error = "credential check failed"
 
         return result
 

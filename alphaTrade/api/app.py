@@ -62,7 +62,7 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
     app.include_router(trades.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(stream.make_router(engine, api_key_dep), prefix="/api/v1")
     app.include_router(kill_switch.make_router(api_key_dep), prefix="/api/v1")
-    app.include_router(verify.make_router(api_key_dep, health_state=health_state, settings=settings), prefix="/api/v1")
+    app.include_router(verify.make_router(api_key_dep, health_state=health_state, settings=settings, provider_holder=provider_holder), prefix="/api/v1")
     if settings is not None:
         app.include_router(retirement.make_router(session_dep, api_key_dep, settings), prefix="/api/v1")
 

@@ -66,9 +66,8 @@ class PolygonProvider(DataProvider):
             to=to_date.isoformat(),
             limit=10,
         )
-        # Weekend/holiday gaps are fine — just need a non-error response
-        if aggs is None:
-            raise RuntimeError("Polygon health probe returned None")
+        if not aggs:
+            raise RuntimeError("Polygon health probe returned no bars for SPY in the last 7 days")
 
     def fetch_ohlcv(self, ticker: str, interval: str, bars: int) -> pd.DataFrame:
         from polygon import RESTClient

@@ -31,6 +31,30 @@ def _run(aggs, ticker: str = "AAPL", interval: str = "1d", bars: int = 5) -> pd.
         return PolygonProvider(api_key="fake").fetch_ohlcv(ticker, interval, bars)
 
 
+class TestHealthProbe:
+    def _run_probe(self, aggs):
+        with patch("polygon.RESTClient") as MockClient:
+            MockClient.return_value.get_aggs.return_value = aggs
+            PolygonProvider(api_key="fake").health_probe()
+
+    def test_raises_on_empty_list(self):
+        with pytest.raises(RuntimeError, match="no bars for SPY"):
+            self._run_probe([])
+
+    def test_raises_on_none(self):
+        with pytest.raises(RuntimeError, match="no bars for SPY"):
+            self._run_probe(None)
+
+    def test_succeeds_on_non_empty_list(self):
+        self._run_probe(_good_aggs(n=3))  # should not raise
+
+    def test_propagates_sdk_exception(self):
+        with patch("polygon.RESTClient") as MockClient:
+            MockClient.return_value.get_aggs.side_effect = RuntimeError("auth failure")
+            with pytest.raises(RuntimeError, match="auth failure"):
+                PolygonProvider(api_key="fake").health_probe()
+
+
 class TestValidateOhlcvCalled:
     def test_raises_on_corrupt_data(self):
         """validate_ohlcv should catch negative prices before returning."""

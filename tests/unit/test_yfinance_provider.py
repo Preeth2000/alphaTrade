@@ -37,6 +37,18 @@ def _run(raw: pd.DataFrame, bars: int = 5) -> pd.DataFrame:
         return YFinanceProvider().fetch_ohlcv("AAPL", "1d", bars)
 
 
+class TestHealthProbe:
+    def test_raises_on_empty_dataframe(self):
+        with patch("yfinance.download", return_value=pd.DataFrame()):
+            with pytest.raises(RuntimeError, match="no data"):
+                YFinanceProvider().health_probe()
+
+    def test_succeeds_when_data_returned(self):
+        df = _flat_df()
+        with patch("yfinance.download", return_value=df):
+            YFinanceProvider().health_probe()  # should not raise
+
+
 class TestFlatInput:
     def test_columns_preserved(self):
         result = _run(_flat_df())

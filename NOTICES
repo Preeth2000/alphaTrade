@@ -1,0 +1,33 @@
+# Third-Party Notices
+
+## TA-Lib
+This software uses TA-Lib (Technical Analysis Library).
+TA-Lib is licensed under the GNU Lesser General Public License v2 (LGPL-2.0).
+See: https://ta-lib.org/
+License text: https://www.gnu.org/licenses/old-licenses/lgpl-2.0.html
+
+The LGPL-2.0 license requires that:
+1. The library is dynamically linked (which pip installations provide as .so/.dll files)
+2. This notice is included with your software
+3. You provide access to the source code and license text of TA-Lib
+4. Any modifications to TA-Lib source must be released under LGPL-2.0
+
+## Sharp/libvips (alphaLink only)
+The alphaLink service depends on the "sharp" npm package, which in turn depends on
+native libvips bindings distributed as @img/sharp-libvips-*.
+These bindings are licensed under LGPL-3.0-or-later.
+See: https://github.com/lovell/sharp-libvips
+
+For more information on Sharp's licensing:
+https://github.com/lovell/sharp#legal-issues
+
+## Compliance Notes
+- yfinance is included in this project. Yahoo's Terms of Service §6 restrict commercial use.
+  See: https://finance.yahoo.com/about/terms.html
+  Consider using polygon-api-client (MIT) as a replacement for production environments.
+
+- polygon-api-client (MIT) is available as an alternative for market data.
+  See: https://polygon.io/
+
+- T212 Broker API usage requires compliance with T212's developer terms.
+  See: https://t212developer.com/

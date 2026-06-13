@@ -45,6 +45,10 @@ class Manifest(BaseModel):
     interval: str
     train_data_range: dict[str, str] = {}
 
+    # Added in multi-user migration — absent in older manifest files
+    user_id: str = ""
+    visibility: str = "private"
+
     @model_validator(mode="after")
     def _validate(self) -> "Manifest":
         if not self.manifest_version.startswith(f"{SUPPORTED_MANIFEST_MAJOR}."):

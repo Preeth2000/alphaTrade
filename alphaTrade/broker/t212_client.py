@@ -34,6 +34,8 @@ class T212Client:
     def __init__(self, api_key: str, secret_key: str = "", env: str = "demo") -> None:
         if env not in _BASE_URLS:
             raise ValueError(f"T212_ENV must be 'demo' or 'live', got {env!r}")
+        self._api_key = api_key
+        self._env = env
         self._base = _BASE_URLS[env]
         _auth = httpx.BasicAuth(api_key, secret_key) if secret_key else None
         _headers = {} if secret_key else {"Authorization": api_key}

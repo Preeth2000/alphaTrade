@@ -108,8 +108,7 @@ def apply_bot_settings(
     """Returns True if the data provider was rebuilt (caller should re-probe health)."""
     from alphaTrade.broker.t212_client import T212Client, _BASE_URLS
     new_key, new_secret, new_env = _t212_credentials(db_s)
-    current_auth = getattr(t212_holder[0], "_auth", None)
-    current_key = getattr(current_auth, "username", None) if current_auth else getattr(t212_holder[0], "_headers", {}).get("Authorization")
+    current_key = getattr(t212_holder[0], "_api_key", None)
     current_base = getattr(t212_holder[0], "_base", None)
     new_base = _BASE_URLS.get(new_env)
     if new_key and (current_key != new_key or current_base != new_base):

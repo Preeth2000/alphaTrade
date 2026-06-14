@@ -28,7 +28,7 @@ def test_hot_reload_updates_t212_client(engine):
     apply_bot_settings(db_s, settings, t212_holder, provider_holder)
 
     assert t212_holder[0] is not original
-    assert t212_holder[0]._headers == {"Authorization": "new-key"}
+    assert t212_holder[0]._api_key == "new-key"
 
 
 def test_hot_reload_no_change_keeps_client(engine):
@@ -58,7 +58,7 @@ def test_hot_reload_overlays_risk_settings(engine):
 
     settings = MagicMock()
     t212_holder = [MagicMock()]
-    t212_holder[0]._headers = {}
+    t212_holder[0]._api_key = ""
     provider_holder = [MagicMock()]
 
     apply_bot_settings(db_s, settings, t212_holder, provider_holder)

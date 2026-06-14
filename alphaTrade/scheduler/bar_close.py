@@ -64,8 +64,11 @@ def _next_daily_bar_close(now: datetime) -> datetime:
             if close_utc + margin > now:
                 return close_utc + margin
 
-    except Exception:
-        pass
+    except Exception as exc:
+        log.error(
+            "exchange_calendars daily scheduling failed — falling back to UTC-midnight arithmetic "
+            "(daily/weekly bars will fire at wrong time). Error: %s", exc,
+        )
 
     # Fallback: simple daily arithmetic if exchange_calendars unavailable
     return _next_intraday_bar_close("1d", now)
@@ -92,8 +95,11 @@ def _next_weekly_bar_close(now: datetime) -> datetime:
             if close_utc + margin > now:
                 return close_utc + margin
 
-    except Exception:
-        pass
+    except Exception as exc:
+        log.error(
+            "exchange_calendars weekly scheduling failed — falling back to UTC-midnight arithmetic "
+            "(weekly bars will fire at wrong time). Error: %s", exc,
+        )
 
     return _next_intraday_bar_close("1wk", now)
 

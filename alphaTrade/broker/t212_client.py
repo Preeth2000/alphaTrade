@@ -35,8 +35,22 @@ class T212Client:
         if env not in _BASE_URLS:
             raise ValueError(f"T212_ENV must be 'demo' or 'live', got {env!r}")
         self._base = _BASE_URLS[env]
-        self._auth = httpx.BasicAuth(api_key, secret_key) if secret_key else None
-        self._headers = {} if secret_key else {"Authorization": api_key}
+        _auth = httpx.BasicAuth(api_key, secret_key) if secret_key else None
+        _headers = {} if secret_key else {"Authorization": api_key}
+        self._http = httpx.Client(
+            auth=_auth,
+            headers=_headers,
+            timeout=30,
+        )
+
+    def close(self) -> None:
+        self._http.close()
+
+    def __enter__(self) -> "T212Client":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     def _get(self, path: str, *, route: str | None = None, **params: Any) -> Any:
         url = f"{self._base}{path}"
@@ -44,7 +58,7 @@ class T212Client:
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
-                r = httpx.get(url, headers=self._headers, params=params, auth=self._auth, timeout=30)
+                r = self._http.get(url, params=params)
                 if r.status_code == 429:
                     t212_requests_total.labels(endpoint=_route, status="429").inc()
                     t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
@@ -73,7 +87,7 @@ class T212Client:
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
-                r = httpx.post(url, headers=self._headers, json=body, auth=self._auth, timeout=30)
+                r = self._http.post(url, json=body)
                 if r.status_code == 429:
                     t212_requests_total.labels(endpoint=_route, status="429").inc()
                     t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
@@ -102,7 +116,7 @@ class T212Client:
         for attempt in range(1, _MAX_RETRIES + 1):
             _t0 = time.perf_counter()
             try:
-                r = httpx.delete(url, headers=self._headers, auth=self._auth, timeout=30)
+                r = self._http.delete(url)
                 if r.status_code == 429:
                     t212_requests_total.labels(endpoint=_route, status="429").inc()
                     t212_request_latency_seconds.labels(endpoint=_route).observe(time.perf_counter() - _t0)
@@ -130,9 +144,17 @@ class T212Client:
         return self._get("/equity/account/summary")
 
     def get_total_equity(self) -> float:
-        """Return total portfolio value (cash + positions)."""
+        """Return total portfolio value (cash + positions).
+
+        Raises ValueError if totalValue is absent — caller must skip the tick rather
+        than trade on cash-only equity which excludes open position value.
+        """
         summary = self.get_account_summary()
-        return float(summary.get("totalValue", summary.get("cash", {}).get("availableToTrade", 0)))
+        if "totalValue" not in summary:
+            raise ValueError(
+                f"T212 account summary missing 'totalValue' — response keys: {list(summary.keys())}"
+            )
+        return float(summary["totalValue"])
 
     def get_positions(self) -> list[dict[str, Any]]:
         """Returns list of open positions."""

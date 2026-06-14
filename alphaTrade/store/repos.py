@@ -6,11 +6,13 @@ from typing import Optional
 
 from sqlalchemy import Boolean, Column, Float, Integer, JSON, String
 from sqlmodel import Field, SQLModel, Session, select
+from alphaTrade.security.db_secrets import EncryptedString
+from alphaTrade.utils import utcnow
 
 
 class Signal(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=utcnow)
     run_name: str
     ticker: str
     signal: str          # BUY | SELL | HOLD
@@ -21,7 +23,7 @@ class Signal(SQLModel, table=True):
 
 class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=utcnow)
     signal_id: Optional[int] = None
     t212_ticker: str
     side: str            # BUY | SELL
@@ -39,7 +41,7 @@ class Position(SQLModel, table=True):
     t212_ticker: str = Field(index=True, unique=True)
     quantity: float
     avg_entry: float
-    opened_at: datetime = Field(default_factory=datetime.utcnow)
+    opened_at: datetime = Field(default_factory=utcnow)
     last_signal_ts: Optional[datetime] = None
     cooldown_until_ts: Optional[datetime] = None
     stop_order_id: Optional[str] = None
@@ -54,7 +56,7 @@ class Position(SQLModel, table=True):
 
 class EquityCurve(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=utcnow)
     equity: float
     user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
@@ -63,7 +65,7 @@ class InstrumentCache(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     yf_ticker: str = Field(index=True, unique=True)
     t212_ticker: str
-    resolved_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_at: datetime = Field(default_factory=utcnow)
 
 
 class SignalRepo:
@@ -190,7 +192,7 @@ class EquityRepo:
         self._s.commit()
 
     def today_open(self) -> float | None:
-        midnight = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         stmt = (
             select(EquityCurve)
             .where(EquityCurve.ts >= midnight)
@@ -225,7 +227,7 @@ class InstrumentCacheRepo:
         existing = self.get(yf_ticker)
         if existing:
             existing.t212_ticker = t212_ticker
-            existing.resolved_at = datetime.utcnow()
+            existing.resolved_at = utcnow()
         else:
             self._s.add(InstrumentCache(yf_ticker=yf_ticker, t212_ticker=t212_ticker))
         self._s.commit()
@@ -237,7 +239,7 @@ class InstrumentCacheRepo:
 
 class TradeJournal(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=utcnow)
     model_id: str = Field(index=True)
     ticker: str = Field(index=True)
     entry_price: float
@@ -278,19 +280,19 @@ class ModelPerformance(SQLModel, table=True):
     retired: bool = False
     retired_at: Optional[datetime] = None
     first_trade_at: Optional[datetime] = None
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utcnow)
 
 
 class SectorCache(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     yf_ticker: str = Field(unique=True, index=True)
     sector: str
-    resolved_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_at: datetime = Field(default_factory=utcnow)
 
 
 class BacktestRun(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=utcnow)
     start_date: str
     end_date: str
     config_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
@@ -354,7 +356,7 @@ class TradeJournalRepo:
         return list(self._s.exec(stmt).all())
 
     def today(self, user_id: Optional[str] = None) -> list[TradeJournal]:
-        today = datetime.utcnow().date()
+        today = utcnow().date()
         stmt = select(TradeJournal).where(TradeJournal.ts >= datetime(today.year, today.month, today.day))
         if user_id:
             stmt = stmt.where(TradeJournal.user_id == user_id)
@@ -412,14 +414,14 @@ class ModelPerformanceRepo:
         ).first()
         if existing:
             return existing
-        new = ModelPerformance(model_id=model_id, last_updated=datetime.utcnow())
+        new = ModelPerformance(model_id=model_id, last_updated=utcnow())
         self._s.add(new)
         self._s.commit()
         self._s.refresh(new)
         return new
 
     def update(self, perf: ModelPerformance) -> None:
-        perf.last_updated = datetime.utcnow()
+        perf.last_updated = utcnow()
         self._s.add(perf)
         self._s.commit()
 
@@ -449,7 +451,7 @@ class SectorCacheRepo:
         existing = self.get(yf_ticker)
         if existing:
             existing.sector = sector
-            existing.resolved_at = datetime.utcnow()
+            existing.resolved_at = utcnow()
         else:
             self._s.add(SectorCache(yf_ticker=yf_ticker, sector=sector))
         self._s.commit()
@@ -545,22 +547,22 @@ class BotSettings(SQLModel, table=True):
     # identifies the legacy single-tenant row. New users get their own row.
     user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
     t212_active_account: str = Field(default="demo")
-    t212_demo_api_key: str = Field(default="")
-    t212_demo_secret_key: str = Field(default="")
-    t212_invest_api_key: str = Field(default="")
-    t212_invest_secret_key: str = Field(default="")
-    t212_isa_api_key: str = Field(default="")
-    t212_isa_secret_key: str = Field(default="")
+    t212_demo_api_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
+    t212_demo_secret_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
+    t212_invest_api_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
+    t212_invest_secret_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
+    t212_isa_api_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
+    t212_isa_secret_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
     data_provider: str = Field(default="yfinance")
-    polygon_api_key: str = Field(default="")
+    polygon_api_key: str = Field(default="", sa_column=Column(EncryptedString, default=""))
     slack_enabled: bool = Field(default=False)
-    slack_webhook_url: str = Field(default="")
+    slack_webhook_url: str = Field(default="", sa_column=Column(EncryptedString, default=""))
     slack_min_level: str = Field(default="WARNING")
     email_enabled: bool = Field(default=False)
     email_smtp_host: str = Field(default="")
     email_smtp_port: int = Field(default=587)
     email_smtp_user: str = Field(default="")
-    email_smtp_password: str = Field(default="")
+    email_smtp_password: str = Field(default="", sa_column=Column(EncryptedString, default=""))
     email_from_addr: str = Field(default="")
     email_to_addrs: str = Field(default="")
     email_min_level: str = Field(default="WARNING")
@@ -609,6 +611,9 @@ class BotSettings(SQLModel, table=True):
     backtest_simulate_oco_lag: Optional[bool] = Field(default=None, sa_column=Column(Boolean, nullable=True))
     backtest_oco_stop_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     backtest_oco_limit_gap_secs: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    # consensus confidence gates
+    consensus_min_confidence: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    consensus_min_margin: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
 
 
 _SENTINEL_USER_ID = "00000000-0000-0000-0000-000000000001"
@@ -692,7 +697,7 @@ class ModelOverrideRecord(SQLModel, table=True):
     # Controls appearance in Global Public Library.
     # "public" + at least one active deployment → visible to all users.
     visibility: str = Field(default="private")
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class ModelOverrideRepo:
@@ -706,7 +711,7 @@ class ModelOverrideRepo:
         return list(self._s.exec(select(ModelOverrideRecord)).all())
 
     def upsert(self, record: ModelOverrideRecord) -> ModelOverrideRecord:
-        record.updated_at = datetime.utcnow()
+        record.updated_at = utcnow()
         existing = self.get(record.run_name)
         if existing:
             for field, val in record.model_dump(exclude={"run_name"}).items():
@@ -738,7 +743,7 @@ class ModelDeployment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     run_name: str = Field(index=True)
     user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
-    promoted_at: datetime = Field(default_factory=datetime.utcnow)
+    promoted_at: datetime = Field(default_factory=utcnow)
     activated_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
     failure_msg: Optional[str] = None
@@ -751,7 +756,7 @@ class ModelDeploymentRepo:
 
     def insert_active(self, run_name: str, user_id: Optional[str] = None) -> ModelDeployment:
         """Directly insert an active deployment record (used for adopted models on sync)."""
-        now = datetime.utcnow()
+        now = utcnow()
         row = ModelDeployment(run_name=run_name, user_id=user_id, promoted_at=now, activated_at=now, status="active")
         self._s.add(row)
         self._s.commit()
@@ -759,7 +764,7 @@ class ModelDeploymentRepo:
         return row
 
     def insert_launching(self, run_name: str, user_id: Optional[str] = None) -> ModelDeployment:
-        row = ModelDeployment(run_name=run_name, user_id=user_id, promoted_at=datetime.utcnow(), status="launching")
+        row = ModelDeployment(run_name=run_name, user_id=user_id, promoted_at=utcnow(), status="launching")
         self._s.add(row)
         self._s.commit()
         self._s.refresh(row)
@@ -773,7 +778,7 @@ class ModelDeploymentRepo:
         ).first()
         if not row:
             return False
-        row.activated_at = datetime.utcnow()
+        row.activated_at = utcnow()
         row.status = "active"
         self._s.commit()
         return True
@@ -786,14 +791,14 @@ class ModelDeploymentRepo:
         ).first()
         if not row:
             return False
-        row.failed_at = datetime.utcnow()
+        row.failed_at = utcnow()
         row.failure_msg = failure_msg
         row.status = "failed"
         self._s.commit()
         return True
 
     def expire_stale(self, timeout_minutes: int = 5) -> int:
-        cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+        cutoff = utcnow() - timedelta(minutes=timeout_minutes)
         stale = self._s.exec(
             select(ModelDeployment)
             .where(ModelDeployment.status == "launching")
@@ -801,7 +806,7 @@ class ModelDeploymentRepo:
         ).all()
         for d in stale:
             d.status = "failed"
-            d.failed_at = datetime.utcnow()
+            d.failed_at = utcnow()
             d.failure_msg = f"timeout — bot did not load model within {timeout_minutes} minutes"
             self._s.add(d)
         if stale:
@@ -846,7 +851,7 @@ class ModelAdoption(SQLModel, table=True):
     model_name: str = Field(index=True)
     source_user_id: Optional[str] = None     # original owner's user_id
     artifact_prefix: Optional[str] = None   # MinIO path for file sync
-    adopted_at: datetime = Field(default_factory=datetime.utcnow)
+    adopted_at: datetime = Field(default_factory=utcnow)
 
 
 class ModelAdoptionRepo:

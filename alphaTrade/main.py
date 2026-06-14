@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os as _os
 import signal
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from alphaTrade.utils import utcnow
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -155,6 +157,10 @@ def apply_bot_settings(
         settings.risk.safe_mode = db_s.safe_mode
     if db_s.dangerously_allow_pyramid is not None:
         settings.risk.dangerously_allow_pyramid = db_s.dangerously_allow_pyramid
+    if db_s.consensus_min_confidence is not None:
+        settings.risk.consensus_min_confidence = db_s.consensus_min_confidence
+    if db_s.consensus_min_margin is not None:
+        settings.risk.consensus_min_margin = db_s.consensus_min_margin
     settings.alerts.slack.enabled = db_s.slack_enabled  # type: ignore[union-attr]
     if db_s.slack_webhook_url:
         settings.alerts.slack.webhook_url = db_s.slack_webhook_url  # type: ignore[union-attr]
@@ -297,7 +303,7 @@ def build_sell_journal_entry(
         exit_price=exit_price,
         quantity=quantity,
         entry_time=position.opened_at,
-        exit_time=datetime.utcnow(),
+        exit_time=utcnow(),
         exit_reason="SIGNAL_SELL",
         realized_pnl=realized_pnl,
         pnl_pct=pnl_pct,
@@ -342,7 +348,7 @@ async def reconcile_positions(t212: T212Client, settings: Settings) -> None:
             qty = float(p.get("quantity", 0))
             avg = float(p.get("averagePricePaid", 0))
             existing = repo.get(ticker)
-            if not existing or existing.quantity != qty:
+            if not existing or not math.isclose(existing.quantity, qty, rel_tol=1e-4):
                 log.info("Reconcile: syncing position %s qty=%s avg=%s", ticker, qty, avg)
                 repo.upsert(Position(
                     t212_ticker=ticker,
@@ -443,7 +449,12 @@ def make_tick(
     _prev_halt: bool = False
     _prev_halt_warn: bool = False
     _prev_kill_switch: bool = False
+    # Throttle registry disk scans and DB override reads to at most once per 60s.
+    _registry_refresh_interval = 60.0
+    _last_registry_refresh: float = 0.0
+    _last_db_overrides: dict = {}
     async def tick() -> None:
+        nonlocal _last_registry_refresh, _last_db_overrides
         nonlocal _prev_halt, _prev_halt_warn, _prev_kill_switch
         with Session(engine) as _hs:
             _db_s = BotSettingsRepo(_hs).get()
@@ -478,12 +489,16 @@ def make_tick(
                 health_state.last_tick_at = datetime.now(timezone.utc)
                 return
         t212 = t212_holder[0]
-        bar_close_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        with Session(engine) as _ov_s:
-            db_overrides: dict[str, ModelOverrideRecord] = {
-                r.run_name: r for r in ModelOverrideRepo(_ov_s).all()
-            }
-        await registry.refresh(settings.models_dir, _merge_overrides(settings.model_overrides, db_overrides))
+        bar_close_iso = utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        _now_ts = time.monotonic()
+        if _now_ts - _last_registry_refresh >= _registry_refresh_interval:
+            with Session(engine) as _ov_s:
+                _last_db_overrides = {
+                    r.run_name: r for r in ModelOverrideRepo(_ov_s).all()
+                }
+            await registry.refresh(settings.models_dir, _merge_overrides(settings.model_overrides, _last_db_overrides))
+            _last_registry_refresh = _now_ts
+        db_overrides = _last_db_overrides
         snap = registry.snapshot_by_interval()
         interval_models = snap.get(interval, [])
         health_state.models_loaded = bool(registry.by_run_name)
@@ -497,6 +512,7 @@ def make_tick(
         ticker_logits: dict[str, list] = defaultdict(list)
         ticker_manifests: dict[str, list[Manifest]] = defaultdict(list)
         ticker_atr: dict[str, float] = {}
+        ticker_last_close: dict[str, float] = {}  # reuse bar close to avoid second fetch
 
         _any_fetch_ok = False
         _last_fetch_error: str | None = None
@@ -509,6 +525,8 @@ def make_tick(
                 vwap_bars = 3000 if "VWAP" in manifest.feature_names else manifest.window + 100
                 df = provider_holder[0].fetch_ohlcv(manifest.ticker, manifest.interval, vwap_bars)
                 _any_fetch_ok = True  # fetch succeeded; mark before inference steps
+                if not df.empty and "Close" in df.columns:
+                    ticker_last_close[manifest.ticker] = float(df["Close"].iloc[-1])
                 from alphaTrade.data.fundamentals import merge_fundamentals_into
                 df = merge_fundamentals_into(df, manifest.ticker, manifest.feature_names)
                 df = _precompute_passthrough_features(df, manifest.feature_names)
@@ -540,7 +558,11 @@ def make_tick(
             health_state.provider_data_error = _last_fetch_error
         # If neither: no fetches attempted this tick (no models) — leave existing value.
 
-        signals = consensus_by_ticker(ticker_logits)
+        signals = consensus_by_ticker(
+            ticker_logits,
+            min_confidence=settings.risk.consensus_min_confidence,
+            min_margin=settings.risk.consensus_min_margin,
+        )
         kill_switch_active = is_halted()
         if kill_switch_active:
             log.warning("Kill switch active — signals will be logged but orders skipped")
@@ -708,11 +730,9 @@ def make_tick(
 
                 size_pct = eff_size_pct
 
-                try:
-                    df2 = provider_holder[0].fetch_ohlcv(yf_ticker, manifest.interval, 1)
-                    current_price = float(df2["Close"].iloc[-1])
-                except Exception as exc:
-                    log.error("Cannot get current price for %s: %s", yf_ticker, exc)
+                current_price = ticker_last_close.get(yf_ticker)
+                if current_price is None:
+                    log.error("No last close available for %s — skipping order", yf_ticker)
                     continue
 
                 if signal == "SELL":
@@ -762,7 +782,7 @@ def make_tick(
                         quantity=qty,
                         client_order_id=cid,
                         interval=manifest.interval,
-                        signal_ts=datetime.utcnow(),
+                        signal_ts=utcnow(),
                         yf_ticker=yf_ticker,
                         stop_loss_pct=eff_stop_loss_pct,
                         take_profit_pct=eff_take_profit_pct,
@@ -897,7 +917,7 @@ async def run(settings: Settings) -> None:
                         quantity=total_qty,
                         avg_entry=new_avg,
                         opened_at=existing_pos.opened_at,
-                        last_signal_ts=datetime.utcnow(),
+                        last_signal_ts=utcnow(),
                         sl_price=sl_price,
                         tp_price=tp_price,
                         model_id=req.run_name,
@@ -909,7 +929,7 @@ async def run(settings: Settings) -> None:
                         t212_ticker=req.t212_ticker,
                         quantity=req.quantity,
                         avg_entry=fill_price,
-                        last_signal_ts=datetime.utcnow(),
+                        last_signal_ts=utcnow(),
                         sl_price=sl_price,
                         tp_price=tp_price,
                         model_id=req.run_name,
@@ -938,7 +958,7 @@ async def run(settings: Settings) -> None:
                         tp_price=tp_price,
                         quantity=req.quantity,
                         model_id=req.run_name,
-                        entry_time=result.submitted_at or datetime.utcnow(),
+                        entry_time=result.submitted_at or utcnow(),
                         retirement_cfg=_ret_cfg,
                     ))
                     _oco_tasks.add(_task)
@@ -978,7 +998,7 @@ async def run(settings: Settings) -> None:
                     t212_ticker=req.t212_ticker,
                     quantity=0,
                     avg_entry=0,
-                    cooldown_until_ts=datetime.utcnow() + cooldown_td,
+                    cooldown_until_ts=utcnow() + cooldown_td,
                 ))
                 metric_open_positions.set(len(pos_repo.all()))
 

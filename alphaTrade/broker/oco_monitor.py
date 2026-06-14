@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from alphaTrade.utils import utcnow
 from typing import Optional
 
 from sqlalchemy.engine import Engine
@@ -115,7 +116,7 @@ def _close_position(
     entry_time: Optional[datetime] = None,
     retirement_cfg: Optional[ModelRetirementConfig] = None,
 ) -> None:
-    now = datetime.utcnow()
+    now = utcnow()
     realized_pnl = (exit_price - entry_price) * quantity
     pnl_pct = (exit_price - entry_price) / entry_price if entry_price else 0.0
 

@@ -158,6 +158,8 @@ class RiskConfig(BaseSettings):
     dangerously_allow_pyramid: bool = False  # global fallback for short-interval pyramid override
     order_stale_window_multiplier: float = 0.5
     order_queue_max_depth: int = 50
+    consensus_min_confidence: float = 0.0  # 0 = disabled; e.g. 0.5 to require ≥50% probability
+    consensus_min_margin: float = 0.0      # 0 = disabled; e.g. 0.1 to require 10pp lead over runner-up
     model_retirement: ModelRetirementConfig = ModelRetirementConfig()
     balanced: BalancedPortfolioConfig = BalancedPortfolioConfig()
     unbalanced: UnbalancedPortfolioConfig = UnbalancedPortfolioConfig()

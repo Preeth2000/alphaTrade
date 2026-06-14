@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 
+from alphaTrade.utils import utcnow
+
 log = logging.getLogger(__name__)
 
 _vix_cache: dict[str, float] = {}  # date-string → VIX value
@@ -10,8 +12,7 @@ _vix_cache: dict[str, float] = {}  # date-string → VIX value
 
 def _get_vix() -> float:
     """Fetch VIX from yfinance, cached by calendar date. Returns 20.0 on failure."""
-    from datetime import datetime
-    today = datetime.utcnow().date().isoformat()
+    today = utcnow().date().isoformat()
     if today in _vix_cache:
         return _vix_cache[today]
     try:

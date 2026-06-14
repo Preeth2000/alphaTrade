@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 import os
 import shutil
@@ -375,6 +376,44 @@ def make_router(
 
         await _delete_model(run_name, session, mlflow_client)
         return {"deleted": True, "run_name": run_name}
+
+    class BulkDeleteRequest(BaseModel):
+        run_names: list[str]
+
+    @router.delete("/models")
+    async def bulk_delete_models(
+        body: BulkDeleteRequest,
+        request: Request,
+        session: Session = Depends(session_dep),
+        _: None = Depends(api_key_dep),
+    ):
+        """Delete multiple models in parallel. Each model is ownership-checked individually."""
+        if not body.run_names:
+            return {"deleted": [], "failed": []}
+
+        user_id = _req_user(request)
+        mlflow_client = _try_mlflow_client()
+
+        deleted, failed = [], []
+        for run_name in body.run_names:
+            model_owner: Optional[str] = None
+            if mlflow_client:
+                model_owner = _mlflow_model_user(mlflow_client, run_name)
+            if model_owner is None and registry is not None:
+                entry = registry.by_run_name.get(run_name)
+                if entry:
+                    model_owner = entry[0].user_id or None
+            if user_id is not None and not _owns_model(model_owner or "", user_id):
+                failed.append({"run_name": run_name, "error": "not authorised"})
+                continue
+            deleted.append(run_name)
+
+        if deleted:
+            await asyncio.gather(*[
+                _delete_model(rn, session, mlflow_client) for rn in deleted
+            ])
+
+        return {"deleted": deleted, "failed": failed}
 
     def _get_mlflow_client() -> MlflowClient:
         uri = mlflow_tracking_uri or os.environ.get("MLFLOW_TRACKING_URI")

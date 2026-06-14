@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from alphaTrade.utils import utcnow
 from typing import Optional
 
 from alphaTrade.store.repos import PositionRepo
@@ -37,7 +38,7 @@ def run_gates(
     dangerously_allow_pyramid: bool = False,
 ) -> GateResult:
     if now is None:
-        now = datetime.utcnow()
+        now = utcnow()
 
     if daily_loss_halted and signal != "HOLD":
         return GateResult(False, "daily_loss_halt active")

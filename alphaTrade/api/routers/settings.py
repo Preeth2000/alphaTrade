@@ -50,6 +50,8 @@ class BotSettingsUpdate(BaseModel):
     alphaTrade_api_key: Optional[str] = None
     safe_mode: Optional[bool] = None
     dangerously_allow_pyramid: Optional[bool] = None
+    consensus_min_confidence: Optional[float] = None
+    consensus_min_margin: Optional[float] = None
 
 
 def _mask(s: BotSettings) -> dict:

@@ -6,6 +6,7 @@ import heapq
 import itertools
 import logging
 from datetime import datetime
+from alphaTrade.utils import utcnow
 from typing import Awaitable, Callable
 
 from alphaTrade.broker.order_queue import OrderRequest, OrderResult, order_priority
@@ -21,6 +22,10 @@ from alphaTrade.metrics import (
 log = logging.getLogger(__name__)
 
 PostFillCallback = Callable[[OrderResult], Awaitable[None]]
+
+_TERMINAL_STATUSES = frozenset({"FILLED", "PARTIALLY_FILLED", "REJECTED", "CANCELLED"})
+_FILL_POLL_INTERVAL = 1.0   # seconds between get_order polls
+_FILL_POLL_TIMEOUT = 30.0   # give up after this long
 
 _INTERVAL_SECONDS: dict[str, int] = {
     "1m": 60, "5m": 300, "15m": 900, "1h": 3600,
@@ -220,11 +225,50 @@ class AsyncBroker:
             if self._stopping and self._queue.empty():
                 return
 
+    async def _poll_fill_price(
+        self,
+        order_id: str,
+        initial_resp: dict,
+        fallback_price: float,
+    ) -> float:
+        """Poll get_order until a terminal status is reached; return the fill price.
+
+        T212 market orders often return without fillPrice in the initial response.
+        Polls up to _FILL_POLL_TIMEOUT seconds, then falls back to the pre-submit price.
+        """
+        if initial_resp.get("fillPrice"):
+            return float(initial_resp["fillPrice"])
+
+        if not order_id:
+            log.warning("No order_id returned — using signal-time price as fill price")
+            return fallback_price
+
+        deadline = utcnow().timestamp() + _FILL_POLL_TIMEOUT
+        while utcnow().timestamp() < deadline:
+            await asyncio.sleep(_FILL_POLL_INTERVAL)
+            try:
+                status_resp = await asyncio.to_thread(self._live_t212.get_order, order_id)
+            except Exception as exc:
+                log.warning("get_order poll failed for %s: %s", order_id, exc)
+                break
+            status = str(status_resp.get("status", "")).upper()
+            if status in _TERMINAL_STATUSES:
+                price = status_resp.get("fillPrice")
+                if price:
+                    return float(price)
+                break
+
+        log.warning(
+            "Fill price unavailable for order %s after %.0fs — using signal-time price",
+            order_id, _FILL_POLL_TIMEOUT,
+        )
+        return fallback_price
+
     async def _process_one(self, request: OrderRequest) -> OrderResult:
         """Stale check → submit market order → (BUY) submit stop + limit."""
         # Stale check
         interval_secs = _INTERVAL_SECONDS.get(request.interval, 86400)
-        age = (datetime.utcnow() - request.signal_ts).total_seconds()
+        age = (utcnow() - request.signal_ts).total_seconds()
         if age > interval_secs * self._stale_multiplier:
             orders_stale_dropped_total.labels(
                 interval=request.interval, ticker=request.t212_ticker
@@ -238,7 +282,7 @@ class AsyncBroker:
         # Market order
         wait = await self._throttle.acquire("orders_market")
         order_throttle_wait_seconds.labels(endpoint="orders_market").observe(wait)
-        submitted_at = datetime.utcnow()
+        submitted_at = utcnow()
 
         try:
             resp = await asyncio.to_thread(
@@ -250,8 +294,8 @@ class AsyncBroker:
             log.error("Market order failed for %s %s: %s", request.side, request.t212_ticker, exc)
             return OrderResult(request=request, status="failed", error=str(exc), submitted_at=submitted_at)
 
-        fill_price = float(resp.get("fillPrice") or request.entry_price)
         t212_order_id = str(resp.get("id", ""))
+        fill_price = await self._poll_fill_price(t212_order_id, resp, request.entry_price)
 
         age_at_submit = (submitted_at - request.signal_ts).total_seconds()
         order_submission_age_seconds.labels(

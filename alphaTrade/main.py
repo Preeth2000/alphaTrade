@@ -686,20 +686,24 @@ def make_tick(
                     log.error("Cannot get current price for %s: %s", yf_ticker, exc)
                     continue
 
-                raw_atr = ticker_atr.get(manifest.ticker, 0.0)
-                qty = compute_quantity(
-                    equity=equity,
-                    current_price=current_price,
-                    size_pct=size_pct,
-                    mode=settings.risk.sizing_mode,
-                    atr=raw_atr,
-                    atr_risk_pct=settings.risk.atr.risk_pct,
-                    atr_multiplier=settings.risk.atr.atr_multiplier,
-                    current_vix=current_vix,
-                    vix_base_size_pct=settings.risk.vix.base_size_pct,
-                    vix_scalar=settings.risk.vix.vix_scalar,
-                    vix_max_size_pct=settings.risk.vix.max_size_pct,
-                )
+                if signal == "SELL":
+                    _held = pos_repo.get(t212_ticker)
+                    qty = float(_held.quantity) if _held else 0.0
+                else:
+                    raw_atr = ticker_atr.get(manifest.ticker, 0.0)
+                    qty = compute_quantity(
+                        equity=equity,
+                        current_price=current_price,
+                        size_pct=size_pct,
+                        mode=settings.risk.sizing_mode,
+                        atr=raw_atr,
+                        atr_risk_pct=settings.risk.atr.risk_pct,
+                        atr_multiplier=settings.risk.atr.atr_multiplier,
+                        current_vix=current_vix,
+                        vix_base_size_pct=settings.risk.vix.base_size_pct,
+                        vix_scalar=settings.risk.vix.vix_scalar,
+                        vix_max_size_pct=settings.risk.vix.max_size_pct,
+                    )
                 if qty <= 0:
                     log.warning("Computed quantity 0 for %s, skipping", t212_ticker)
                     continue
@@ -764,6 +768,7 @@ async def run(settings: Settings) -> None:
     log.info("Trading halted on startup — call POST /resume to begin trading")
 
     _oco_tasks: set[asyncio.Task] = set()
+    _oco_task_by_ticker: dict[str, asyncio.Task] = {}
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -882,7 +887,11 @@ async def run(settings: Settings) -> None:
                         retirement_cfg=_ret_cfg,
                     ))
                     _oco_tasks.add(_task)
-                    _task.add_done_callback(_oco_tasks.discard)
+                    _oco_task_by_ticker[req.t212_ticker] = _task
+                    def _on_oco_done(t, ticker=req.t212_ticker):
+                        _oco_tasks.discard(t)
+                        _oco_task_by_ticker.pop(ticker, None)
+                    _task.add_done_callback(_on_oco_done)
 
                 if alert_manager is not None:
                     alert_manager.notify(
@@ -892,6 +901,23 @@ async def run(settings: Settings) -> None:
 
             elif req.side == "SELL":
                 pos = pos_repo.get(req.t212_ticker)
+
+                # Cancel any active OCO monitor task and broker legs for this ticker
+                _oco_task = _oco_task_by_ticker.pop(req.t212_ticker, None)
+                if _oco_task is not None:
+                    _oco_task.cancel()
+                    _oco_tasks.discard(_oco_task)
+                if pos and pos.stop_order_id:
+                    try:
+                        await asyncio.to_thread(t212_holder[0].cancel_order, pos.stop_order_id)
+                    except Exception as _ce:
+                        log.warning("Could not cancel stop leg %s on SELL: %s", pos.stop_order_id, _ce)
+                if pos and pos.limit_order_id:
+                    try:
+                        await asyncio.to_thread(t212_holder[0].cancel_order, pos.limit_order_id)
+                    except Exception as _ce:
+                        log.warning("Could not cancel limit leg %s on SELL: %s", pos.limit_order_id, _ce)
+
                 pos_repo.remove(req.t212_ticker)
                 pos_repo.upsert(Position(
                     t212_ticker=req.t212_ticker,

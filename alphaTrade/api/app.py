@@ -7,7 +7,7 @@ from sqlalchemy.engine import Engine
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from alphaTrade.api.auth import make_api_key_dep
+from alphaTrade.api.auth import make_jwt_dep
 from alphaTrade.api.deps import make_session_dep
 from typing import Optional
 from alphaTrade.config import Settings
@@ -42,7 +42,7 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
         allow_headers=["*"],
     )
     session_dep = make_session_dep(engine)
-    api_key_dep = make_api_key_dep()
+    api_key_dep = make_jwt_dep(settings)
 
     app.include_router(positions.make_router(session_dep, api_key_dep), prefix="/api/v1")
     app.include_router(orders.make_router(session_dep, api_key_dep), prefix="/api/v1")

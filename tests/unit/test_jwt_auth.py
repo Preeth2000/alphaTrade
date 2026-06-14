@@ -153,32 +153,35 @@ def test_redis_unreachable_fail_closed_returns_503():
     assert resp.status_code == 503
 
 
-def test_missing_auth_returns_401():
+def test_missing_auth_returns_401(monkeypatch):
+    monkeypatch.delenv("ALPHATRADE_INSECURE_NO_AUTH", raising=False)
     app, _ = _make_app()
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.get("/protected")
     assert resp.status_code == 401
 
 
-def test_dual_auth_xapikey_accepted_in_jwt_mode():
-    """JWT mode but X-Api-Key header provided and no active key → allowed (migration window)."""
+def test_dual_auth_xapikey_rejected_when_no_key_configured(monkeypatch):
+    """JWT mode, X-Api-Key presented but no key configured → 403 (fail-closed)."""
+    monkeypatch.delenv("ALPHATRADE_INSECURE_NO_AUTH", raising=False)
     app, _ = _make_app(auth_mode="jwt", redis_enabled=False)
 
-    # BotSettingsRepo.get() → None → active_key="" → legacy allows all requests
     with patch("alphaTrade.store.repos.BotSettingsRepo.get", return_value=None):
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/protected", headers={"X-Api-Key": "anykey"})
-    assert resp.status_code == 200
+    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
 # Tests: legacy mode unchanged
 # ---------------------------------------------------------------------------
 
-def test_legacy_mode_no_key_allows():
+def test_legacy_mode_no_key_blocks_unless_insecure_flag(monkeypatch):
+    """Legacy mode with no key configured → 401 fail-closed (unless ALPHATRADE_INSECURE_NO_AUTH=true)."""
+    monkeypatch.delenv("ALPHATRADE_INSECURE_NO_AUTH", raising=False)
     app, _ = _make_app(auth_mode="legacy")
 
     with patch("alphaTrade.store.repos.BotSettingsRepo.get", return_value=None):
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/protected")
-    assert resp.status_code == 200
+    assert resp.status_code == 401

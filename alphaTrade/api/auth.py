@@ -9,6 +9,8 @@ def make_api_key_dep():
     def require_api_key(x_api_key: str = Header(default="")) -> None:
         active_key = os.environ.get("alphaTrade_API_KEY", "")
         if not active_key:
+            if os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() != "true":
+                raise HTTPException(status_code=401, detail="Authentication required")
             return
         if x_api_key != active_key:
             raise HTTPException(status_code=403, detail="Invalid API key")
@@ -18,11 +20,11 @@ def make_api_key_dep():
 def _api_key_allows(x_api_key: str) -> bool:
     """Return True if the request should be allowed under API-key rules.
 
-    Allows unconditionally when no key is configured (migration window).
+    Fails closed when no key is configured unless ALPHATRADE_INSECURE_NO_AUTH=true (local dev only).
     """
     active_key = os.environ.get("alphaTrade_API_KEY", "")
     if not active_key:
-        return True
+        return os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() == "true"
     return x_api_key == active_key
 
 
@@ -45,7 +47,12 @@ def make_jwt_dep(settings):
         x_api_key: str = Header(default=""),
     ) -> None:
         if getattr(settings, "auth_mode", "legacy") == "legacy":
-            if not _api_key_allows(x_api_key):
+            active_key = os.environ.get("alphaTrade_API_KEY", "")
+            if not active_key:
+                if os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() != "true":
+                    raise HTTPException(status_code=401, detail="Authentication required")
+                return
+            if x_api_key != active_key:
                 raise HTTPException(status_code=403, detail="Invalid API key")
             return
 
@@ -69,7 +76,7 @@ def make_jwt_dep(settings):
             request.state.role = claims.role
             return
 
-        # X-Api-Key migration window fallback
+        # X-Api-Key migration window fallback — only if a key is actually presented
         if x_api_key:
             if not _api_key_allows(x_api_key):
                 raise HTTPException(status_code=403, detail="Invalid API key")

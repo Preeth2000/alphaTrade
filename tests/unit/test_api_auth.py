@@ -19,8 +19,17 @@ def _make_app(tmp_path, api_key_env: str = ""):
     return TestClient(app), engine
 
 
-def test_no_key_configured_allows_all(tmp_path, monkeypatch):
+def test_no_key_configured_blocks_by_default(tmp_path, monkeypatch):
     monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHATRADE_INSECURE_NO_AUTH", raising=False)
+    client, _ = _make_app(tmp_path)
+    resp = client.get("/test")
+    assert resp.status_code == 401
+
+
+def test_no_key_configured_allows_with_insecure_flag(tmp_path, monkeypatch):
+    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.setenv("ALPHATRADE_INSECURE_NO_AUTH", "true")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test")
     assert resp.status_code == 200

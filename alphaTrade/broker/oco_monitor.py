@@ -39,8 +39,8 @@ async def monitor_oco(
     while True:
         await asyncio.sleep(poll_interval_s)
         try:
-            stop_order = t212.get_order(stop_order_id)
-            limit_order = t212.get_order(limit_order_id)
+            stop_order = await asyncio.to_thread(t212.get_order, stop_order_id)
+            limit_order = await asyncio.to_thread(t212.get_order, limit_order_id)
             stop_status = stop_order.get("status", "")
             limit_status = limit_order.get("status", "")
         except Exception as exc:
@@ -57,7 +57,7 @@ async def monitor_oco(
                 entry_time=entry_time,
                 retirement_cfg=retirement_cfg,
             )
-            _cancel_leg(t212, limit_order_id, t212_ticker)
+            await _cancel_leg(t212, limit_order_id, t212_ticker)
             break
 
         if limit_status == "FILLED":
@@ -70,7 +70,7 @@ async def monitor_oco(
                 entry_time=entry_time,
                 retirement_cfg=retirement_cfg,
             )
-            _cancel_leg(t212, stop_order_id, t212_ticker)
+            await _cancel_leg(t212, stop_order_id, t212_ticker)
             break
 
         if stop_status in _TERMINAL and stop_status != "FILLED":
@@ -78,7 +78,7 @@ async def monitor_oco(
                 "Stop leg %s for %s reached %s without fill — cancelling limit leg",
                 stop_order_id, t212_ticker, stop_status,
             )
-            _cancel_leg(t212, limit_order_id, t212_ticker)
+            await _cancel_leg(t212, limit_order_id, t212_ticker)
             wh.notify("WARNING", f"OCO stop leg cancelled/rejected for {t212_ticker} — limit leg cancelled",
                       category="oco")
             break
@@ -88,15 +88,15 @@ async def monitor_oco(
                 "Limit leg %s for %s reached %s without fill — cancelling stop leg",
                 limit_order_id, t212_ticker, limit_status,
             )
-            _cancel_leg(t212, stop_order_id, t212_ticker)
+            await _cancel_leg(t212, stop_order_id, t212_ticker)
             wh.notify("WARNING", f"OCO limit leg cancelled/rejected for {t212_ticker} — stop leg cancelled",
                       category="oco")
             break
 
 
-def _cancel_leg(t212: T212Client, order_id: str, t212_ticker: str) -> None:
+async def _cancel_leg(t212: T212Client, order_id: str, t212_ticker: str) -> None:
     try:
-        t212.cancel_order(order_id)
+        await asyncio.to_thread(t212.cancel_order, order_id)
     except Exception as exc:
         log.warning("Failed to cancel OCO leg %s for %s: %s", order_id, t212_ticker, exc)
 

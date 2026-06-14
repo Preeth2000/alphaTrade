@@ -8,3 +8,4 @@ def _mock_env(monkeypatch):
     monkeypatch.setenv("T212_API_KEY", "test-key")
     monkeypatch.setenv("T212_ENV", "demo")
     monkeypatch.setenv("DATA_PROVIDER", "yfinance")
+    monkeypatch.setenv("ALPHATRADE_INSECURE_NO_AUTH", "true")

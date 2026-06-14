@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
 from collections import defaultdict
@@ -12,7 +13,7 @@ import mlflow
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 
-from alphaTrade.config import ModelSyncConfig
+from alphaTrade.config import MinioConfig, ModelSyncConfig
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class ModelSyncDaemon:
         session_factory: Optional[Callable] = None,
         redis_client=None,
         on_promote: Optional[Callable] = None,
+        minio_cfg: Optional[MinioConfig] = None,
     ) -> None:
         self._cfg = sync_cfg
         self._models_dir = models_dir
@@ -39,6 +41,7 @@ class ModelSyncDaemon:
         self._session_factory = session_factory
         self._redis_client = redis_client
         self._on_promote = on_promote
+        self._minio_cfg = minio_cfg
         self._download_fail_counts: dict[str, int] = defaultdict(int)  # key: "{name}:v{version}"
 
     # ---------- version record helpers ----------
@@ -240,19 +243,145 @@ class ModelSyncDaemon:
 
         return await asyncio.to_thread(_run)
 
-    async def run(self, stop_event: asyncio.Event) -> None:
-        log.info("model_sync: daemon started (poll_interval=%ds)", self._cfg.poll_interval)
-        while not stop_event.is_set():
+    # ---------- model.ready Redis consumer ----------
+
+    def _sync_from_minio(self, run_name: str, version: str, artifact_prefix: str) -> None:
+        """Download artifacts from MinIO artifact_prefix and promote."""
+        if self._minio_cfg is None:
+            log.warning("model_ready: artifact_prefix=%s but no MinIO config — skipping", artifact_prefix)
+            return
+        import boto3
+        endpoint = self._minio_cfg.endpoint
+        if not endpoint.startswith("http"):
+            endpoint = f"http://{endpoint}"
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=self._minio_cfg.access_key,
+            aws_secret_access_key=self._minio_cfg.secret_key,
+        )
+        bucket = self._minio_cfg.bucket
+        prefix = artifact_prefix.rstrip("/") + "/"
+        tmp_dir = self._models_dir / ".tmp" / run_name.replace("/", "_")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+            found_any = False
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    rel = key[len(prefix):]
+                    if not rel:
+                        continue
+                    dest = tmp_dir / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    s3.download_file(bucket, key, str(dest))
+                    found_any = True
+            if not found_any:
+                log.error("model_ready: no artifacts found at %s/%s", bucket, prefix)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                return
+            if not (tmp_dir / "manifest.json").exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                self._permanently_fail(run_name, version, "manifest.json missing from MinIO artifact_prefix")
+                return
+            if not (tmp_dir / "model.onnx").exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                self._permanently_fail(run_name, version, "model.onnx missing from MinIO artifact_prefix")
+                return
+            self._promote(tmp_dir, run_name, version)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            if self._session_factory is not None:
+                try:
+                    from alphaTrade.store.repos import ModelDeploymentRepo
+                    session = self._session_factory()
+                    try:
+                        ModelDeploymentRepo(session).mark_active(run_name)
+                    finally:
+                        session.close()
+                except Exception as exc:
+                    log.error("model_ready: mark_active failed for %s: %s", run_name, exc)
+        except Exception as exc:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            log.error("model_ready: MinIO download failed for %s v%s: %s", run_name, version, exc)
+
+    async def _handle_model_ready_event(self, raw: bytes | str) -> None:
+        """Parse and act on a model.ready Redis message with the new payload schema."""
+        try:
+            data = raw if isinstance(raw, str) else raw.decode()
+            payload = json.loads(data)
+        except Exception as exc:
+            log.warning("model_ready: malformed payload: %s", exc)
+            return
+        run_name = payload.get("run_name")
+        version = payload.get("version")
+        artifact_prefix = payload.get("artifact_prefix")  # optional — present only for explicit publish
+        if not run_name or not version:
+            log.warning("model_ready: missing run_name/version in payload")
+            return
+        log.info("model_ready: %s v%s artifact_prefix=%s", run_name, version, artifact_prefix)
+        if artifact_prefix:
+            # Explicit POST /runs/{id}/publish — download directly from MinIO
+            promoted = await asyncio.to_thread(self._sync_from_minio, run_name, version, artifact_prefix)
+            local = self._read_sync_record(run_name)
+            if local == version and self._on_promote is not None:
+                await self._on_promote([run_name])
+        else:
+            # Celery auto-promote — model registered in MLflow; trigger immediate poll
             try:
                 promoted = await self._sync_once()
                 if promoted:
-                    log.info("model_sync: promoted %d model(s): %s", len(promoted), promoted)
+                    log.info("model_ready: triggered sync promoted %s", promoted)
                     if self._on_promote is not None:
                         await self._on_promote(promoted)
             except Exception as exc:
-                log.error("model_sync: poll error: %s", exc)
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=self._cfg.poll_interval)
-            except asyncio.TimeoutError:
-                pass
+                log.error("model_ready: triggered sync failed: %s", exc)
+
+    async def _listen_model_ready(self, stop_event: asyncio.Event) -> None:
+        """Subscribe to model.ready Redis channel and process events."""
+        if self._redis_client is None:
+            return
+        pubsub = self._redis_client.pubsub()
+        await pubsub.subscribe("model.ready")
+        log.info("model_sync: subscribed to model.ready Redis channel")
+        try:
+            while not stop_event.is_set():
+                try:
+                    message = await asyncio.wait_for(
+                        pubsub.get_message(ignore_subscribe_messages=True), timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                if message and message["type"] == "message":
+                    await self._handle_model_ready_event(message["data"])
+        finally:
+            await pubsub.unsubscribe("model.ready")
+            await pubsub.aclose()
+
+    async def run(self, stop_event: asyncio.Event) -> None:
+        log.info("model_sync: daemon started (poll_interval=%ds)", self._cfg.poll_interval)
+        listener_task: Optional[asyncio.Task] = None
+        if self._redis_client is not None:
+            listener_task = asyncio.create_task(self._listen_model_ready(stop_event))
+        try:
+            while not stop_event.is_set():
+                try:
+                    promoted = await self._sync_once()
+                    if promoted:
+                        log.info("model_sync: promoted %d model(s): %s", len(promoted), promoted)
+                        if self._on_promote is not None:
+                            await self._on_promote(promoted)
+                except Exception as exc:
+                    log.error("model_sync: poll error: %s", exc)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=self._cfg.poll_interval)
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            if listener_task is not None:
+                listener_task.cancel()
+                try:
+                    await listener_task
+                except asyncio.CancelledError:
+                    pass
         log.info("model_sync: daemon stopped")

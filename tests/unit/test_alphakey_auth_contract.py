@@ -44,6 +44,8 @@ def _make_token(
     role: str = "standard",
     tv: int = 0,
     ttl: int = 600,
+    iss: str = "alphakey",
+    aud: str = "alphakey",
 ) -> tuple[str, str]:
     """Issue a test JWT with the same claim shape as alphaKey."""
     now = int(time.time())
@@ -54,6 +56,8 @@ def _make_token(
         "jti": jti,
         "tv": tv,
         "kid": kid,
+        "iss": iss,
+        "aud": aud,
         "iat": now,
         "exp": now + ttl,
     }
@@ -176,10 +180,29 @@ def test_unknown_kid_after_refresh_raises(ec_keypair):
             verify_token(token)
 
 
+def test_wrong_issuer_raises_auth_error(ec_keypair, kid):
+    private_key, public_key = ec_keypair
+    token, _ = _make_token(private_key, kid, iss="rogue-issuer")
+    mock_cache = _mock_jwks(public_key, kid)
+    with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
+        with pytest.raises(AuthError):
+            verify_token(token)
+
+
+def test_wrong_audience_raises_auth_error(ec_keypair, kid):
+    private_key, public_key = ec_keypair
+    token, _ = _make_token(private_key, kid, aud="other-service")
+    mock_cache = _mock_jwks(public_key, kid)
+    with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
+        with pytest.raises(AuthError):
+            verify_token(token)
+
+
 def test_missing_sub_raises_auth_error(ec_keypair, kid):
     private_key, public_key = ec_keypair
     now = int(time.time())
-    payload = {"role": "standard", "jti": str(uuid.uuid4()), "tv": 0, "iat": now, "exp": now + 600}
+    payload = {"role": "standard", "jti": str(uuid.uuid4()), "tv": 0,
+               "iss": "alphakey", "aud": "alphakey", "iat": now, "exp": now + 600}
     token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": kid})
     mock_cache = _mock_jwks(public_key, kid)
     with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):

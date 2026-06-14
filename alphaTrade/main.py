@@ -1335,6 +1335,7 @@ async def run(settings: Settings) -> None:
             session_factory=_sync_session_factory,
             redis_client=_redis_client,
             on_promote=_on_promote,
+            minio_cfg=settings.minio,
         )
         tasks.append(asyncio.create_task(model_sync_daemon.run(stop_event=stop_event)))
         log.info("model_sync: daemon enabled, polling MLflow every %ds", settings.model_sync.poll_interval)

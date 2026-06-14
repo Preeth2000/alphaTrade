@@ -139,12 +139,17 @@ def verify_token(token: str) -> Claims:
 
     public_key = _get_public_key(kid)
 
+    expected_issuer = os.environ.get("JWT_ISSUER", "alphakey")
+    expected_audience = os.environ.get("JWT_AUDIENCE", "alphakey")
+
     try:
         payload = _jwt.decode(
             token,
             public_key,
             algorithms=["ES256"],
             options={"verify_exp": True},
+            issuer=expected_issuer,
+            audience=expected_audience,
         )
     except _jwt.ExpiredSignatureError as exc:
         raise AuthError("Token has expired") from exc

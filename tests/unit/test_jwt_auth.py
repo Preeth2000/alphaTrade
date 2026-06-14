@@ -32,11 +32,12 @@ def _make_ec_keypair():
 
 
 def _make_token(private_key, kid: str, sub: str = "user-123", role: str = "standard",
-                tv: int = 0, ttl: int = 600) -> tuple[str, str]:
+                tv: int = 0, ttl: int = 600, iss: str = "alphakey",
+                aud: str = "alphakey") -> tuple[str, str]:
     now = int(time.time())
     jti = str(uuid.uuid4())
     payload = {"sub": sub, "role": role, "jti": jti, "tv": tv, "kid": kid,
-               "iat": now, "exp": now + ttl}
+               "iss": iss, "aud": aud, "iat": now, "exp": now + ttl}
     token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": kid})
     return token, jti
 

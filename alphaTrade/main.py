@@ -440,12 +440,12 @@ def make_tick(
     stays responsive to health checks and OCO monitor tasks during latency spikes.
     """
     from alphaTrade.api import stream_bus as _sb
-    # Tracks halt state for edge-triggered alerting across ticks.
-    # Survives UTC day boundaries; relies on today_open reset producing
-    # a non-halted tick before any re-halt for next-day re-entry alert.
+    # Edge-triggered alert state — survives across ticks within the closure.
     _prev_halt: bool = False
+    _prev_halt_warn: bool = False
+    _prev_kill_switch: bool = False
     async def tick() -> None:
-        nonlocal _prev_halt
+        nonlocal _prev_halt, _prev_halt_warn, _prev_kill_switch
         with Session(engine) as _hs:
             _db_s = BotSettingsRepo(_hs).get()
         if _db_s is not None:
@@ -545,8 +545,9 @@ def make_tick(
         kill_switch_active = is_halted()
         if kill_switch_active:
             log.warning("Kill switch active — signals will be logged but orders skipped")
-            if alert_manager is not None:
+            if alert_manager is not None and not _prev_kill_switch:
                 alert_manager.notify("Kill switch engaged — orders halted", AlertLevel.CRITICAL)
+        _prev_kill_switch = kill_switch_active
 
         # Fresh session per tick — no long-lived session across bar closes
         with Session(engine) as session:
@@ -574,19 +575,31 @@ def make_tick(
             daily_loss_pct = (equity - today_open) / (today_open or 1)
             metric_daily_pnl_pct.set(daily_loss_pct)
             daily_loss_halted = daily_loss_pct <= -settings.risk.daily_loss_halt_pct
+            daily_loss_warn = (
+                not daily_loss_halted
+                and daily_loss_pct <= -settings.risk.daily_loss_halt_pct * 0.8
+            )
             if daily_loss_halted and not _prev_halt:
-                log.warning("Daily loss halt active (%.2f%%). No new orders.", daily_loss_pct * 100)
+                log.warning("Daily loss halt triggered (%.2f%%). No new orders.", daily_loss_pct * 100)
                 wh.notify(
                     "WARNING",
-                    f"Daily loss halt active ({daily_loss_pct:.2%}). No new orders.",
+                    f"Daily loss halt triggered ({daily_loss_pct:.2%}). No new orders.",
                     category="daily-loss-halt",
                 )
                 if alert_manager is not None:
                     alert_manager.notify(
-                        f"Daily loss at 80% of limit: {abs(daily_loss_pct * today_open):.2f} / {settings.risk.daily_loss_halt_pct * today_open:.2f}",
+                        f"Daily loss halt triggered: {abs(daily_loss_pct * today_open):.2f} / {settings.risk.daily_loss_halt_pct * today_open:.2f}",
+                        AlertLevel.WARNING,
+                    )
+            if daily_loss_warn and not _prev_halt_warn:
+                log.warning("Daily loss at 80%% of halt threshold (%.2f%%).", daily_loss_pct * 100)
+                if alert_manager is not None:
+                    alert_manager.notify(
+                        f"Daily loss at 80% of halt threshold: {abs(daily_loss_pct * today_open):.2f} / {settings.risk.daily_loss_halt_pct * today_open:.2f}",
                         AlertLevel.WARNING,
                     )
             _prev_halt = daily_loss_halted
+            _prev_halt_warn = daily_loss_warn
 
             current_vix: float | None = None
             if settings.risk.sizing_mode == "vix":
@@ -872,17 +885,38 @@ async def run(settings: Settings) -> None:
                 sl_price = fill_price * (1 - req.stop_loss_pct)
                 tp_price = fill_price * (1 + req.take_profit_pct)
 
-                pos_repo.upsert(Position(
-                    t212_ticker=req.t212_ticker,
-                    quantity=req.quantity,
-                    avg_entry=fill_price,
-                    last_signal_ts=datetime.utcnow(),
-                    sl_price=sl_price,
-                    tp_price=tp_price,
-                    model_id=req.run_name,
-                    interval=req.interval,
-                    cooldown_secs=int(cooldown_secs),
-                ))
+                existing_pos = pos_repo.get(req.t212_ticker)
+                if existing_pos and existing_pos.quantity > 0:
+                    # Accumulate: volume-weighted avg_entry for pyramid fills
+                    total_qty = existing_pos.quantity + req.quantity
+                    new_avg = (
+                        (existing_pos.avg_entry * existing_pos.quantity + fill_price * req.quantity)
+                        / total_qty
+                    )
+                    pos_repo.upsert(Position(
+                        t212_ticker=req.t212_ticker,
+                        quantity=total_qty,
+                        avg_entry=new_avg,
+                        opened_at=existing_pos.opened_at,
+                        last_signal_ts=datetime.utcnow(),
+                        sl_price=sl_price,
+                        tp_price=tp_price,
+                        model_id=req.run_name,
+                        interval=req.interval,
+                        cooldown_secs=int(cooldown_secs),
+                    ))
+                else:
+                    pos_repo.upsert(Position(
+                        t212_ticker=req.t212_ticker,
+                        quantity=req.quantity,
+                        avg_entry=fill_price,
+                        last_signal_ts=datetime.utcnow(),
+                        sl_price=sl_price,
+                        tp_price=tp_price,
+                        model_id=req.run_name,
+                        interval=req.interval,
+                        cooldown_secs=int(cooldown_secs),
+                    ))
                 metric_open_positions.set(len(pos_repo.all()))
 
                 if result.stop_order_id and result.limit_order_id:
@@ -1217,19 +1251,21 @@ async def run(settings: Settings) -> None:
                 # Compute unrealized P&L from live closing prices for open positions
                 unrealized_pnl = 0.0
                 inst_repo = InstrumentCacheRepo(session)
-                try:
-                    import yfinance as yf
-                    for _op in open_positions:
-                        if _op.quantity <= 0:
-                            continue
-                        _cache = inst_repo.get_by_t212(_op.t212_ticker)
-                        if _cache:
-                            _hist = yf.download(_cache.yf_ticker, period="2d", interval="1d", progress=False, auto_adjust=True)
-                            if not _hist.empty:
-                                _last_close = float(_hist["Close"].iloc[-1])
+                _provider = provider_holder[0]
+                for _op in open_positions:
+                    if _op.quantity <= 0:
+                        continue
+                    _cache = inst_repo.get_by_t212(_op.t212_ticker)
+                    if _cache:
+                        try:
+                            _df = await asyncio.to_thread(
+                                _provider.fetch_ohlcv, _cache.yf_ticker, "1d", 2
+                            )
+                            if not _df.empty:
+                                _last_close = float(_df["Close"].iloc[-1])
                                 unrealized_pnl += (_last_close - _op.avg_entry) * _op.quantity
-                except Exception as _exc:
-                    log.warning("Unrealized P&L fetch failed: %s — using 0.0", _exc)
+                        except Exception as _exc:
+                            log.warning("Unrealized P&L fetch failed for %s: %s", _op.t212_ticker, _exc)
 
                 total_equity = today_open + realized_pnl + unrealized_pnl
                 day_pnl_pct = ((realized_pnl + unrealized_pnl) / today_open * 100) if today_open > 0 else 0.0

@@ -38,7 +38,7 @@ def test_buy_approved():
 
 
 def test_buy_blocked_max_positions():
-    positions = [MagicMock() for _ in range(5)]
+    positions = [MagicMock(quantity=1.0) for _ in range(5)]
     repo = _mock_repo(positions=positions, ticker_pos=None)
     r = run_gates("BUY", "AAPL_US_EQ", repo, max_positions=5, daily_loss_halted=False, now=NOW)
     assert not r.approved

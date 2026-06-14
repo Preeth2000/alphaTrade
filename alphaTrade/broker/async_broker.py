@@ -293,4 +293,18 @@ class AsyncBroker:
                 except Exception as exc:
                     log.error("Limit order failed for %s: %s", request.t212_ticker, exc)
 
+            # Cancel the surviving leg when only one side was placed — partial OCO is unmonitored
+            if bool(result.stop_order_id) != bool(result.limit_order_id):
+                survivor_id = result.stop_order_id or result.limit_order_id
+                log.warning(
+                    "Partial OCO for %s — cancelling survivor %s to avoid unmonitored bracket leg",
+                    request.t212_ticker, survivor_id,
+                )
+                try:
+                    await asyncio.to_thread(self._live_t212.cancel_order, survivor_id)
+                except Exception as exc:
+                    log.error("Failed to cancel partial OCO survivor %s: %s", survivor_id, exc)
+                result.stop_order_id = None
+                result.limit_order_id = None
+
         return result

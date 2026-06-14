@@ -73,7 +73,7 @@ def run_gates(
             return GateResult(False, rejection)
 
     all_positions = position_repo.all()
-    open_count = len(all_positions)
+    open_count = len([p for p in all_positions if p.quantity > 0])
 
     if signal == "BUY":
         if pos and pos.quantity > 0:

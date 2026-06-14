@@ -496,7 +496,7 @@ def make_tick(
             return
 
         ticker_logits: dict[str, list] = defaultdict(list)
-        ticker_manifest: dict[str, Manifest] = {}
+        ticker_manifests: dict[str, list[Manifest]] = defaultdict(list)
         ticker_atr: dict[str, float] = {}
 
         _any_fetch_ok = False
@@ -525,7 +525,7 @@ def make_tick(
                     time.perf_counter() - t0
                 )
                 ticker_logits[manifest.ticker].append(logits)
-                ticker_manifest[manifest.ticker] = manifest
+                ticker_manifests[manifest.ticker].append(manifest)
             except Exception as exc:
                 inference_errors_total.labels(run_name=manifest.run_name).inc()
                 log.error("Inference error for %s: %s", manifest.run_name, exc)
@@ -595,22 +595,39 @@ def make_tick(
                     log.warning("VIX fetch failed; compute_quantity will use internal fallback")
 
             for yf_ticker, signal in signals.items():
-                manifest = ticker_manifest[yf_ticker]
+                manifests_for_ticker = ticker_manifests[yf_ticker]
+                # Sort by run_name for deterministic primary selection
+                manifests_for_ticker = sorted(manifests_for_ticker, key=lambda m: m.run_name)
+                manifest = manifests_for_ticker[0]
+                multi_model = len(manifests_for_ticker) > 1
+                if multi_model:
+                    log.info(
+                        "Multi-model consensus for %s (%d models): attributing to primary %s",
+                        yf_ticker, len(manifests_for_ticker), manifest.run_name,
+                    )
+
                 yaml_ov = settings.model_overrides.get(manifest.run_name)
                 db_ov = db_overrides.get(manifest.run_name)
-                eff_size_pct = (
-                    (db_ov.size_pct if db_ov and db_ov.size_pct else None)
-                    or (yaml_ov.size_pct if yaml_ov and yaml_ov.size_pct else None)
-                    or settings.defaults.size_pct
-                )
-                eff_stop_loss_pct = (
-                    (db_ov.stop_loss_pct if db_ov and db_ov.stop_loss_pct else None)
-                    or settings.defaults.stop_loss_pct
-                )
-                eff_take_profit_pct = (
-                    (db_ov.take_profit_pct if db_ov and db_ov.take_profit_pct else None)
-                    or settings.defaults.take_profit_pct
-                )
+                # Per-model overrides only apply when a single model owns the ticker;
+                # multi-model consensus falls back to global defaults to avoid ambiguity.
+                if multi_model:
+                    eff_size_pct = settings.defaults.size_pct
+                    eff_stop_loss_pct = settings.defaults.stop_loss_pct
+                    eff_take_profit_pct = settings.defaults.take_profit_pct
+                else:
+                    eff_size_pct = (
+                        (db_ov.size_pct if db_ov and db_ov.size_pct else None)
+                        or (yaml_ov.size_pct if yaml_ov and yaml_ov.size_pct else None)
+                        or settings.defaults.size_pct
+                    )
+                    eff_stop_loss_pct = (
+                        (db_ov.stop_loss_pct if db_ov and db_ov.stop_loss_pct else None)
+                        or settings.defaults.stop_loss_pct
+                    )
+                    eff_take_profit_pct = (
+                        (db_ov.take_profit_pct if db_ov and db_ov.take_profit_pct else None)
+                        or settings.defaults.take_profit_pct
+                    )
 
                 broker_ticker_ov = (
                     (db_ov.broker_ticker if db_ov and db_ov.broker_ticker else None)
@@ -852,19 +869,24 @@ async def run(settings: Settings) -> None:
             cooldown_td = timedelta(seconds=cooldown_secs)
 
             if req.side == "BUY":
+                sl_price = fill_price * (1 - req.stop_loss_pct)
+                tp_price = fill_price * (1 + req.take_profit_pct)
+
                 pos_repo.upsert(Position(
                     t212_ticker=req.t212_ticker,
                     quantity=req.quantity,
                     avg_entry=fill_price,
                     last_signal_ts=datetime.utcnow(),
+                    sl_price=sl_price,
+                    tp_price=tp_price,
+                    model_id=req.run_name,
+                    interval=req.interval,
+                    cooldown_secs=int(cooldown_secs),
                 ))
                 metric_open_positions.set(len(pos_repo.all()))
 
                 if result.stop_order_id and result.limit_order_id:
                     pos_repo.update_oco_ids(req.t212_ticker, result.stop_order_id, result.limit_order_id)
-
-                sl_price = fill_price * (1 - req.stop_loss_pct)
-                tp_price = fill_price * (1 + req.take_profit_pct)
 
                 yaml_ov = settings.model_overrides.get(req.run_name, ModelOverride())
                 per_model_ret = yaml_ov.retirement
@@ -1054,9 +1076,17 @@ async def run(settings: Settings) -> None:
         for _pos in _oco_pos_repo.all_with_oco():
             if not (_pos.stop_order_id and _pos.limit_order_id):
                 continue
-            _sl = _pos.avg_entry * (1 - settings.defaults.stop_loss_pct)
-            _tp = _pos.avg_entry * (1 + settings.defaults.take_profit_pct)
-            _cd = timedelta(seconds=86400)
+            # Use stored entry-time prices; fall back to current defaults only if not persisted
+            _sl = _pos.sl_price if _pos.sl_price else _pos.avg_entry * (1 - settings.defaults.stop_loss_pct)
+            _tp = _pos.tp_price if _pos.tp_price else _pos.avg_entry * (1 + settings.defaults.take_profit_pct)
+            _cd_secs = _pos.cooldown_secs if _pos.cooldown_secs else 86400
+            _cd = timedelta(seconds=_cd_secs)
+            _model_id = _pos.model_id or ""
+            if not _model_id:
+                log.warning(
+                    "Re-attaching OCO for %s with no model_id — journal/retirement tracking unavailable",
+                    _pos.t212_ticker,
+                )
             _t = asyncio.create_task(monitor_oco(
                 t212=t212_holder[0],
                 t212_ticker=_pos.t212_ticker,
@@ -1068,14 +1098,19 @@ async def run(settings: Settings) -> None:
                 sl_price=_sl,
                 tp_price=_tp,
                 quantity=_pos.quantity,
-                model_id="",
+                model_id=_model_id,
                 entry_time=_pos.opened_at,
             ))
             _oco_tasks.add(_t)
-            _t.add_done_callback(_oco_tasks.discard)
+            _oco_task_by_ticker[_pos.t212_ticker] = _t
+            def _on_reattach_done(t, ticker=_pos.t212_ticker):
+                _oco_tasks.discard(t)
+                _oco_task_by_ticker.pop(ticker, None)
+            _t.add_done_callback(_on_reattach_done)
             log.info(
-                "Re-attached OCO monitor for %s (stop=%s limit=%s)",
+                "Re-attached OCO monitor for %s (stop=%s limit=%s model=%s sl=%.4f tp=%.4f cd=%ds)",
                 _pos.t212_ticker, _pos.stop_order_id, _pos.limit_order_id,
+                _model_id, _sl, _tp, _cd_secs,
             )
 
     # Build static t212_ticker overrides from overrides.yaml

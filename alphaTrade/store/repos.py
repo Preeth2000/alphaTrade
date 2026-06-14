@@ -44,6 +44,11 @@ class Position(SQLModel, table=True):
     cooldown_until_ts: Optional[datetime] = None
     stop_order_id: Optional[str] = None
     limit_order_id: Optional[str] = None
+    sl_price: Optional[float] = None
+    tp_price: Optional[float] = None
+    model_id: Optional[str] = None
+    interval: Optional[str] = None
+    cooldown_secs: Optional[int] = None
     user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), nullable=True, index=True))
 
 
@@ -185,12 +190,15 @@ class EquityRepo:
         self._s.commit()
 
     def today_open(self) -> float | None:
-        today = datetime.utcnow().date()
-        rows = list(self._s.exec(select(EquityCurve)).all())
-        for row in rows:
-            if row.ts.date() == today:
-                return row.equity
-        return None
+        midnight = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = (
+            select(EquityCurve)
+            .where(EquityCurve.ts >= midnight)
+            .order_by(EquityCurve.ts)
+            .limit(1)
+        )
+        row = self._s.exec(stmt).first()
+        return row.equity if row else None
 
     def since(self, since: datetime, limit: int = 500, user_id: Optional[str] = None) -> list[EquityCurve]:
         stmt = select(EquityCurve).where(EquityCurve.ts >= since).order_by(EquityCurve.ts).limit(limit)  # type: ignore[arg-type]

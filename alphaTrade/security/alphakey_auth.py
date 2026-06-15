@@ -52,10 +52,48 @@ _jwks_cache: dict[str, object] = {}   # {kid: public_key_object}
 _jwks_fetched_at: float = 0.0
 _JWKS_TTL = 600.0  # seconds — refresh cache every 10 minutes
 
+_TV_CACHE: dict[str, tuple[int, float]] = {}   # {user_id: (token_version, fetched_at)}
+_TV_TTL = 60.0  # seconds — stale tokens rejected within 1 minute of tv bump
+
 
 def _alphakey_url() -> str:
     url = os.environ.get("ALPHAKEY_URL", "http://alphakey-api:8000")
     return url.rstrip("/")
+
+
+def _alphakey_service_token() -> str:
+    return os.environ.get("ALPHAKEY_SERVICE_TOKEN", "")
+
+
+def _fetch_token_version(user_id: str) -> int | None:
+    """Fetch current token_version for user_id from alphaKey (with TTL cache).
+
+    Returns None when alphaKey is unreachable (caller should fail-open).
+    Returns the token_version int on success.
+    """
+    now = time.monotonic()
+    cached = _TV_CACHE.get(user_id)
+    if cached and (now - cached[1]) < _TV_TTL:
+        return cached[0]
+
+    token = _alphakey_service_token()
+    if not token:
+        logger.warning("alphakey_auth: ALPHAKEY_SERVICE_TOKEN not set — skipping tv check")
+        return None
+
+    try:
+        import httpx
+        url = f"{_alphakey_url()}/auth/internal/token-version/{user_id}"
+        resp = httpx.get(url, headers={"X-Service-Token": token}, timeout=3.0)
+        if resp.status_code == 404:
+            return None  # Unknown user — let other checks handle it
+        resp.raise_for_status()
+        tv = resp.json()["token_version"]
+        _TV_CACHE[user_id] = (tv, now)
+        return tv
+    except Exception as exc:
+        logger.warning("alphakey_auth: could not fetch token_version for %s: %s", user_id, exc)
+        return None
 
 
 def _fetch_jwks(force: bool = False) -> dict[str, object]:
@@ -157,7 +195,7 @@ def verify_token(token: str) -> Claims:
         raise AuthError(f"Token invalid: {exc}") from exc
 
     try:
-        return Claims(
+        claims = Claims(
             sub=payload["sub"],
             role=payload.get("role", "standard"),
             jti=payload["jti"],
@@ -168,6 +206,15 @@ def verify_token(token: str) -> Claims:
         )
     except KeyError as exc:
         raise AuthError(f"Token missing required claim: {exc}") from exc
+
+    # token_version (tv) offline-revocation backstop
+    current_tv = _fetch_token_version(claims.sub)
+    if current_tv is not None and claims.tv < current_tv:
+        raise AuthError(
+            f"Token revoked (version {claims.tv} < current {current_tv})"
+        )
+
+    return claims
 
 
 # ---------------------------------------------------------------------------

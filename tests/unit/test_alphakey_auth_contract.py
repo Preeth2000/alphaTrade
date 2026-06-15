@@ -208,3 +208,40 @@ def test_missing_sub_raises_auth_error(ec_keypair, kid):
     with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
         with pytest.raises(AuthError, match="missing required claim"):
             verify_token(token)
+
+
+# ---------------------------------------------------------------------------
+# Token-version (tv) backstop tests
+# ---------------------------------------------------------------------------
+
+def test_stale_tv_raises_auth_error(ec_keypair, kid):
+    """Token with tv=1 is rejected when current tv=3."""
+    private_key, public_key = ec_keypair
+    token, _ = _make_token(private_key, kid, tv=1)
+    mock_cache = _mock_jwks(public_key, kid)
+    with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
+        with patch("alphaTrade.security.alphakey_auth._fetch_token_version", return_value=3):
+            with pytest.raises(AuthError, match="revoked"):
+                verify_token(token)
+
+
+def test_matching_tv_passes(ec_keypair, kid):
+    """Token with tv=2 is accepted when current tv=2."""
+    private_key, public_key = ec_keypair
+    token, _ = _make_token(private_key, kid, tv=2)
+    mock_cache = _mock_jwks(public_key, kid)
+    with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
+        with patch("alphaTrade.security.alphakey_auth._fetch_token_version", return_value=2):
+            claims = verify_token(token)
+    assert claims.tv == 2
+
+
+def test_unreachable_alphakey_tv_check_fails_open(ec_keypair, kid):
+    """When alphaKey is unreachable (_fetch_token_version returns None), token still passes."""
+    private_key, public_key = ec_keypair
+    token, _ = _make_token(private_key, kid, tv=1)
+    mock_cache = _mock_jwks(public_key, kid)
+    with patch("alphaTrade.security.alphakey_auth._fetch_jwks", return_value=mock_cache):
+        with patch("alphaTrade.security.alphakey_auth._fetch_token_version", return_value=None):
+            claims = verify_token(token)
+    assert claims.tv == 1

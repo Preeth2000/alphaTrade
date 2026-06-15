@@ -53,7 +53,17 @@ _jwks_fetched_at: float = 0.0
 _JWKS_TTL = 600.0  # seconds — refresh cache every 10 minutes
 
 _TV_CACHE: dict[str, tuple[int, float]] = {}   # {user_id: (token_version, fetched_at)}
-_TV_TTL = 60.0  # seconds — stale tokens rejected within 1 minute of tv bump
+_TV_CACHE_MAX = 1000  # max entries; oldest evicted on overflow
+_TV_TTL = 60.0  # seconds — revoked tokens may be accepted for up to 60s after tv bump
+
+
+def _tv_cache_put(user_id: str, tv: int, now: float) -> None:
+    """Insert into _TV_CACHE, evicting oldest entry if at capacity."""
+    if len(_TV_CACHE) >= _TV_CACHE_MAX and user_id not in _TV_CACHE:
+        # Remove the oldest entry (smallest fetched_at)
+        oldest = min(_TV_CACHE, key=lambda k: _TV_CACHE[k][1])
+        del _TV_CACHE[oldest]
+    _TV_CACHE[user_id] = (tv, now)
 
 
 def _alphakey_url() -> str:
@@ -89,7 +99,7 @@ def _fetch_token_version(user_id: str) -> int | None:
             return None  # Unknown user — let other checks handle it
         resp.raise_for_status()
         tv = resp.json()["token_version"]
-        _TV_CACHE[user_id] = (tv, now)
+        _tv_cache_put(user_id, tv, now)
         return tv
     except Exception as exc:
         logger.warning("alphakey_auth: could not fetch token_version for %s: %s", user_id, exc)
@@ -210,9 +220,7 @@ def verify_token(token: str) -> Claims:
     # token_version (tv) offline-revocation backstop
     current_tv = _fetch_token_version(claims.sub)
     if current_tv is not None and claims.tv < current_tv:
-        raise AuthError(
-            f"Token revoked (version {claims.tv} < current {current_tv})"
-        )
+        raise AuthError("Token revoked (token_version mismatch)")
 
     return claims
 

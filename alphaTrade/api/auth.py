@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import os
 from fastapi import Header, HTTPException, Request
 
@@ -7,7 +8,7 @@ import alphaTrade.security.alphakey_auth as _alphakey_auth
 
 def make_api_key_dep():
     def require_api_key(x_api_key: str = Header(default="")) -> None:
-        active_key = os.environ.get("alphaTrade_API_KEY", "")
+        active_key = os.environ.get("ALPHATRADE_API_KEY", "")
         if not active_key:
             if os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() != "true":
                 raise HTTPException(status_code=401, detail="Authentication required")
@@ -22,7 +23,7 @@ def _api_key_allows(x_api_key: str) -> bool:
 
     Fails closed when no key is configured unless ALPHATRADE_INSECURE_NO_AUTH=true (local dev only).
     """
-    active_key = os.environ.get("alphaTrade_API_KEY", "")
+    active_key = os.environ.get("ALPHATRADE_API_KEY", "")
     if not active_key:
         return os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() == "true"
     return x_api_key == active_key
@@ -47,7 +48,7 @@ def make_jwt_dep(settings):
         x_api_key: str = Header(default=""),
     ) -> None:
         if getattr(settings, "auth_mode", "legacy") == "legacy":
-            active_key = os.environ.get("alphaTrade_API_KEY", "")
+            active_key = os.environ.get("ALPHATRADE_API_KEY", "")
             if not active_key:
                 if os.environ.get("ALPHATRADE_INSECURE_NO_AUTH", "").lower() != "true":
                     raise HTTPException(status_code=401, detail="Authentication required")
@@ -60,7 +61,9 @@ def make_jwt_dep(settings):
         if authorization.startswith("Bearer "):
             token = authorization[7:]
             try:
-                claims = _alphakey_auth.verify_token(token)
+                # verify_token does blocking I/O (JWKS + token-version HTTP fetches);
+                # dispatch to a thread pool so we don't block the event loop.
+                claims = await asyncio.to_thread(_alphakey_auth.verify_token, token)
             except _alphakey_auth.AuthError as exc:
                 raise HTTPException(status_code=401, detail=str(exc))
 

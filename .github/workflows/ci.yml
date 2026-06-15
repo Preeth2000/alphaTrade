@@ -114,3 +114,30 @@ jobs:
         with:
           files: coverage.xml
           fail_ci_if_error: false
+
+  # -----------------------------------------------------------------------
+  # Trigger alphaTest cross-service regression gate on PRs
+  # -----------------------------------------------------------------------
+  notify-alphatest:
+    name: Trigger alphaTest pr-gate
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Dispatch alphatest-pr-gate
+        env:
+          TOKEN: ${{ secrets.ALPHATEST_DISPATCH_TOKEN }}
+        run: |
+          curl -s --fail-with-body -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/Preeth2000/alphaTest/dispatches \
+            -d "{
+              \"event_type\": \"alphatest-pr-gate\",
+              \"client_payload\": {
+                \"repo\": \"${{ github.repository }}\",
+                \"sha\":  \"${{ github.event.pull_request.head.sha }}\",
+                \"pr\":   \"${{ github.event.pull_request.number }}\"
+              }
+            }"

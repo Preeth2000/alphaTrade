@@ -20,7 +20,7 @@ def _make_app(tmp_path, api_key_env: str = ""):
 
 
 def test_no_key_configured_blocks_by_default(tmp_path, monkeypatch):
-    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHATRADE_API_KEY", raising=False)
     monkeypatch.delenv("ALPHATRADE_INSECURE_NO_AUTH", raising=False)
     client, _ = _make_app(tmp_path)
     resp = client.get("/test")
@@ -28,7 +28,7 @@ def test_no_key_configured_blocks_by_default(tmp_path, monkeypatch):
 
 
 def test_no_key_configured_allows_with_insecure_flag(tmp_path, monkeypatch):
-    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHATRADE_API_KEY", raising=False)
     monkeypatch.setenv("ALPHATRADE_INSECURE_NO_AUTH", "true")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test")
@@ -36,14 +36,14 @@ def test_no_key_configured_allows_with_insecure_flag(tmp_path, monkeypatch):
 
 
 def test_wrong_key_returns_403(tmp_path, monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
 
 
 def test_correct_key_returns_200(tmp_path, monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client, _ = _make_app(tmp_path)
     resp = client.get("/test", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200

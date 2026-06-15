@@ -85,7 +85,7 @@ async def test_stream_returns_text_event_stream(tmp_path):
 
 
 def test_stream_auth_rejects_bad_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _client(_engine(tmp_path))
     resp = client.get("/api/v1/stream?key=wrong")
     assert resp.status_code == 403
@@ -94,7 +94,7 @@ def test_stream_auth_rejects_bad_key(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_auth_no_key_configured_allows_all(tmp_path, monkeypatch):
     from alphaTrade.api.routers.stream import make_router
-    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHATRADE_API_KEY", raising=False)
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)
     stream_route = next(r for r in router.routes if r.path == "/stream")
@@ -107,7 +107,7 @@ async def test_stream_auth_no_key_configured_allows_all(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_auth_correct_key_passes(tmp_path, monkeypatch):
     from alphaTrade.api.routers.stream import make_router
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     engine = _engine(tmp_path)
     router = make_router(engine, lambda: None)
     stream_route = next(r for r in router.routes if r.path == "/stream")

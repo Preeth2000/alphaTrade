@@ -219,6 +219,7 @@ class Settings(BaseSettings):
     webhook_level: str = "WARNING"
     log_file: Optional[Path] = Path("./alphaTrade.log")
     api_port: int = 8081
+    auth_mode: str = "legacy"  # "jwt" | "legacy" — set AUTH_MODE=jwt for alphaKey JWT enforcement
     redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()
     model_sync: ModelSyncConfig = ModelSyncConfig()

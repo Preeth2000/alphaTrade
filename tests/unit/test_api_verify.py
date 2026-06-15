@@ -88,7 +88,7 @@ def test_t212_network_error_returns_invalid():
 
 @respx.mock
 def test_t212_requires_api_key(monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _make_client()
     resp = client.post("/api/v1/verify/t212", json={
         "account": "demo", "api_key": "t212key", "secret_key": "t212secret"
@@ -158,7 +158,7 @@ def test_polygon_no_rate_limit_header():
 
 @respx.mock
 def test_polygon_requires_api_key(monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _make_client()
     resp = client.post("/api/v1/verify/polygon", json={"api_key": "poly-key"},
                        headers={"X-API-Key": "wrong"})
@@ -168,7 +168,7 @@ def test_polygon_requires_api_key(monkeypatch):
 # --- alphaTrade API key ---
 
 def test_alphatrade_key_no_key_configured_returns_valid(monkeypatch):
-    monkeypatch.delenv("alphaTrade_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHATRADE_API_KEY", raising=False)
     client = _make_client()
     resp = client.post("/api/v1/verify/alphatrade-key")
     assert resp.status_code == 200
@@ -176,7 +176,7 @@ def test_alphatrade_key_no_key_configured_returns_valid(monkeypatch):
 
 
 def test_alphatrade_key_correct_key_returns_valid(monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _make_client()
     resp = client.post("/api/v1/verify/alphatrade-key", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200
@@ -184,14 +184,14 @@ def test_alphatrade_key_correct_key_returns_valid(monkeypatch):
 
 
 def test_alphatrade_key_wrong_key_returns_403(monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _make_client()
     resp = client.post("/api/v1/verify/alphatrade-key", headers={"X-API-Key": "wrong"})
     assert resp.status_code == 403
 
 
 def test_alphatrade_key_missing_header_returns_403(monkeypatch):
-    monkeypatch.setenv("alphaTrade_API_KEY", "secret")
+    monkeypatch.setenv("ALPHATRADE_API_KEY", "secret")
     client = _make_client()
     resp = client.post("/api/v1/verify/alphatrade-key")
     assert resp.status_code == 403

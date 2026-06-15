@@ -33,7 +33,7 @@ from alphaTrade.broker.orders import make_client_order_id
 from alphaTrade.broker.t212_client import T212Client
 from alphaTrade.broker.throttle import EndpointThrottle
 from alphaTrade.config import Settings
-from alphaTrade.consensus.softmax_avg import consensus_by_ticker
+from alphaTrade.consensus.softmax_avg import check_model_gate, consensus_by_ticker
 from alphaTrade.data.provider import DataProvider
 from alphaTrade.notify import webhook as wh
 from alphaTrade.notify.alerting import AlertManager, AlertLevel
@@ -558,8 +558,37 @@ def make_tick(
             health_state.provider_data_error = _last_fetch_error
         # If neither: no fetches attempted this tick (no models) — leave existing value.
 
+        # Apply per-model consensus gates before fusion.
+        # If a model has per-model overrides for consensus_min_confidence or
+        # consensus_min_margin, test its logit vector individually.  If it fails
+        # the gate, exclude its contribution from the ticker consensus (i.e. treat
+        # that model as HOLD for this tick) without affecting other models.
+        filtered_ticker_logits: dict[str, list] = defaultdict(list)
+        for ticker, _manifests in ticker_manifests.items():
+            for manifest, logit_vec in zip(_manifests, ticker_logits[ticker]):
+                _ov = db_overrides.get(manifest.run_name)
+                pm_confidence = (
+                    _ov.consensus_min_confidence
+                    if (_ov is not None and _ov.consensus_min_confidence is not None)
+                    else 0.0
+                )
+                pm_margin = (
+                    _ov.consensus_min_margin
+                    if (_ov is not None and _ov.consensus_min_margin is not None)
+                    else 0.0
+                )
+                if (pm_confidence > 0.0 or pm_margin > 0.0) and not check_model_gate(
+                    logit_vec, pm_confidence, pm_margin
+                ):
+                    log.debug(
+                        "Per-model gate excluded %s from consensus (confidence=%.3f, margin=%.3f)",
+                        manifest.run_name, pm_confidence, pm_margin,
+                    )
+                    continue
+                filtered_ticker_logits[ticker].append(logit_vec)
+
         signals = consensus_by_ticker(
-            ticker_logits,
+            filtered_ticker_logits,
             min_confidence=settings.risk.consensus_min_confidence,
             min_margin=settings.risk.consensus_min_margin,
         )

@@ -694,6 +694,9 @@ class ModelOverrideRecord(SQLModel, table=True):
     backtest_disabled: Optional[bool] = None
     backtest_cron: Optional[str] = None
     backtest_lookback_days: Optional[int] = None
+    # Per-model consensus gate overrides (null = use global BotSettings value, 0 = disabled)
+    consensus_min_confidence: Optional[float] = None
+    consensus_min_margin: Optional[float] = None
     # Controls appearance in Global Public Library.
     # "public" + at least one active deployment → visible to all users.
     visibility: str = Field(default="private")

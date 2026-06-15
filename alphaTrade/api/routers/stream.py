@@ -18,7 +18,7 @@ def make_router(engine: Engine, api_key_dep: Callable) -> APIRouter:
         from alphaTrade.store.repos import BotSettingsRepo
         with Session(engine) as s:
             db_s = BotSettingsRepo(s).get()
-        active_key = (getattr(db_s, "alphaTrade_api_key", "") if db_s else "") or os.environ.get("alphaTrade_API_KEY", "")
+        active_key = (getattr(db_s, "alphaTrade_api_key", "") if db_s else "") or os.environ.get("ALPHATRADE_API_KEY", "")
         if not active_key:
             return
         if key != active_key:

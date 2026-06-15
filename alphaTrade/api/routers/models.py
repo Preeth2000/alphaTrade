@@ -36,6 +36,8 @@ class ModelOverrideUpdate(BaseModel):
     safe_mode: Optional[bool] = None
     dangerously_allow_pyramid: Optional[bool] = None
     visibility: Optional[str] = None  # "public" | "private"
+    consensus_min_confidence: Optional[float] = None  # per-model gate; null = use global, 0 = disabled
+    consensus_min_margin: Optional[float] = None      # per-model gate; null = use global, 0 = disabled
 
 
 class ModelOverrideResponse(BaseModel):
@@ -52,6 +54,8 @@ class ModelOverrideResponse(BaseModel):
     updated_at: Optional[datetime] = None
     resolved_ticker: Optional[str] = None
     """Effective broker ticker the tick loop will use. None = resolves at tick time via yaml/cache/API."""
+    consensus_min_confidence: Optional[float] = None  # per-model gate; null = use global, 0 = disabled
+    consensus_min_margin: Optional[float] = None      # per-model gate; null = use global, 0 = disabled
 
 
 class ModelSummary(BaseModel):
@@ -101,6 +105,8 @@ def _to_override_response(record: ModelOverrideRecord, session: Session) -> Mode
         visibility=record.visibility,
         updated_at=record.updated_at,
         resolved_ticker=_resolve_ticker(session, record.run_name, record.broker_ticker),
+        consensus_min_confidence=record.consensus_min_confidence,
+        consensus_min_margin=record.consensus_min_margin,
     )
 
 

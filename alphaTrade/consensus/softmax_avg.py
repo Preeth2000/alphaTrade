@@ -44,6 +44,23 @@ def consensus(
     return CLASS_NAMES[idx]
 
 
+def check_model_gate(logits: np.ndarray, min_confidence: float, min_margin: float) -> bool:
+    """Return True if this model's individual logit vector passes confidence + margin gates.
+
+    Used to apply per-model override gates before multi-model softmax fusion.
+    A return of False means this model's contribution should be excluded from the ticker
+    consensus (equivalent to a HOLD vote from that model).
+    """
+    probs = _softmax(logits.ravel())
+    sorted_probs = np.sort(probs)[::-1]
+    if min_confidence > 0.0 and float(sorted_probs[0]) < min_confidence:
+        return False
+    if min_margin > 0.0 and len(sorted_probs) >= 2:
+        if float(sorted_probs[0] - sorted_probs[1]) < min_margin:
+            return False
+    return True
+
+
 def consensus_by_ticker(
     ticker_logits: dict[str, list[np.ndarray]],
     min_confidence: float = 0.0,

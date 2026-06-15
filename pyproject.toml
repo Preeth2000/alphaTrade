@@ -22,6 +22,7 @@ dependencies = [
     "apscheduler>=3.10",
     "exchange-calendars>=4.5",
     "pyyaml>=6.0",
+    "PyJWT>=2.8",
     "prometheus-client>=0.20",
     "typer>=0.12",
     "rich>=13.0",

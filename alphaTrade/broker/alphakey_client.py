@@ -53,25 +53,21 @@ def _service_token() -> str:
 )
 def _fetch_secrets_from_api(
     user_id: str,
-    provider: Optional[str] = None,
-    account: Optional[str] = None,
 ) -> dict[tuple[str, str, str], str]:
-    """Fetch secrets from alphaKey /auth/internal/secrets/{user_id}."""
+    """Fetch all secrets for user_id from alphaKey /auth/internal/secrets/{user_id}.
+
+    Always fetches all providers so a t212-first call doesn't poison the cache
+    and cause subsequent polygon lookups to return empty.
+    """
     token = _service_token()
     if not token:
         raise AlphaKeyError("ALPHAKEY_SERVICE_TOKEN not set — cannot fetch secrets")
 
     url = f"{_alphakey_url()}/auth/internal/secrets/{user_id}"
-    params: dict[str, str] = {}
-    if provider:
-        params["provider"] = provider
-    if account:
-        params["account"] = account
 
     try:
         resp = httpx.get(
             url,
-            params=params,
             headers={"X-Service-Token": token},
             timeout=5.0,
         )
@@ -100,19 +96,18 @@ def get_secrets(
     Raises AlphaKeyError on failure.
     """
     cached = _cache.get(user_id)
-    if cached and cached.is_fresh():
-        # Filter if provider/account requested
-        if provider or account:
-            return {
-                k: v for k, v in cached.secrets.items()
-                if (not provider or k[0] == provider)
-                and (not account or k[1] == account)
-            }
-        return cached.secrets
+    if not (cached and cached.is_fresh()):
+        secrets = _fetch_secrets_from_api(user_id)
+        _cache[user_id] = _CacheEntry(secrets=secrets)
+        cached = _cache[user_id]
 
-    secrets = _fetch_secrets_from_api(user_id, provider=provider, account=account)
-    _cache[user_id] = _CacheEntry(secrets=secrets)
-    return secrets
+    if provider or account:
+        return {
+            k: v for k, v in cached.secrets.items()
+            if (not provider or k[0] == provider)
+            and (not account or k[1] == account)
+        }
+    return cached.secrets
 
 
 def get_secret(

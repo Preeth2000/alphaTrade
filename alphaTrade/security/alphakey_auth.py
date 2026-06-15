@@ -201,7 +201,10 @@ def verify_token(token: str) -> Claims:
         )
     except _jwt.ExpiredSignatureError as exc:
         raise AuthError("Token has expired") from exc
-    except _jwt.InvalidTokenError as exc:
+    except _jwt.PyJWTError as exc:
+        # Catches InvalidTokenError (bad sig, audience, issuer, …) AND
+        # InvalidKeyError (key/algorithm mismatch) which is a PyJWTError sibling,
+        # not a subclass of InvalidTokenError — leaving it uncaught produces HTTP 500.
         raise AuthError(f"Token invalid: {exc}") from exc
 
     try:

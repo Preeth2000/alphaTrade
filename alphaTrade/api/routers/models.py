@@ -504,6 +504,7 @@ def make_router(
         req_uid = getattr(request.state, "user_id", None)
         adopted = ModelAdoptionRepo(session).adopted_models(req_uid) if req_uid else []
         rows = ModelDeploymentRepo(session).latest_per_model(user_id=_req_user(request), adopted_names=adopted)
+        privileged = getattr(request.state, "role", None) in ("developer", "admin")
         return [
             ModelDeploymentResponse(
                 run_name=r.run_name,
@@ -511,7 +512,7 @@ def make_router(
                 promoted_at=r.promoted_at,
                 activated_at=r.activated_at,
                 failed_at=r.failed_at,
-                failure_msg=r.failure_msg,
+                failure_msg=r.failure_msg if privileged else None,
             )
             for r in rows
         ]

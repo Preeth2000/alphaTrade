@@ -117,3 +117,27 @@ Scheduler (bar-close per model interval)
 pytest tests/unit -v
 pytest tests/integration -v   # e2e test requires alphaGen artifact at ../alphaGen/artifacts/
 ```
+
+### Contract tests (Pact)
+
+alphaTrade is a **consumer** of alphaKey (JWT verification) and a **provider** for alphaLink (kill-switch and model promote/demote).
+
+**Consumer contracts** — verify alphaTrade's calls to alphaKey match the expected API shape:
+
+```bash
+pytest tests/contract/test_alphakey_pact.py -v
+```
+
+**Provider verification** — verify alphaTrade satisfies alphaLink's recorded contract:
+
+```bash
+PACT_VERIFICATION_MODE=true pytest tests/integration/test_pact_provider_verification.py -v -s
+```
+
+The provider verification test starts a live `uvicorn` server with:
+- `AUTH_MODE=jwt` (real JWT signature checks, no live alphaKey needed — local EC keypair used)
+- `REDIS__ENABLED=false`
+- `MlflowClient` patched to the shared fake registry (`tests/support/fake_mlflow.py`)
+- The gated `/internal/pact-state` endpoint mounted for Pact state setup
+
+**`PACT_VERIFICATION_MODE` must be `false` (the default) outside of Pact verification runs.** The gated endpoint can flip the kill switch and manipulate MLflow state.

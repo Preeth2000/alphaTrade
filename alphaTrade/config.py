@@ -220,6 +220,10 @@ class Settings(BaseSettings):
     log_file: Optional[Path] = Path("./alphaTrade.log")
     api_port: int = 8081
     auth_mode: str = "legacy"  # "jwt" | "legacy" — set AUTH_MODE=jwt for alphaKey JWT enforcement
+    # When true, mounts a gated /internal/pact-state endpoint that seeds/clears
+    # in-memory state for Pact provider verification. Must be false (the
+    # default) everywhere except the pact-verify CI job.
+    pact_verification_mode: bool = False
     redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()
     model_sync: ModelSyncConfig = ModelSyncConfig()

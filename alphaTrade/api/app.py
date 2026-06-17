@@ -66,6 +66,10 @@ def create_app(engine: Engine, health_state: HealthState, registry=None, backtes
     if settings is not None:
         app.include_router(retirement.make_router(session_dep, api_key_dep, settings), prefix="/api/v1")
 
+    if settings is not None and getattr(settings, "pact_verification_mode", False):
+        from alphaTrade.api.routers.pact_state import router as pact_state_router
+        app.include_router(pact_state_router)
+
     return app
 
 
